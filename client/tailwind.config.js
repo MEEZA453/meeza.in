@@ -12,7 +12,7 @@ export default {
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
-  		colors: {
+  		colors: {	
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -54,7 +54,13 @@ export default {
   				'5': 'hsl(var(--chart-5))'
   			}
   		}
-  	}
+  	},
+	
+  },
+  variants: {
+    extend: {
+      translate: ['group-hover'],
+    },
   },
   plugins: [require("tailwindcss-animate")],
 }

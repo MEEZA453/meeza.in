@@ -1,83 +1,35 @@
-import Highlight from './pages/highlight/highlight.jsx'
-import Lenis from 'lenis' 
-import {useEffect  } from 'react' 
-import LocomotiveScroll from 'locomotive-scroll';
-import Product from './pages/product/product.jsx'
-import posterStarlight from "./assets/images/posters/starlightpsot.jpg";
-import starlight from "./assets/images/posters/STARLIGHT.jpg";
-import abundance from "./assets/images/posters/abandance.jpg";
-import faded from "./assets/images/posters/glory.jpg";
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Provider } from 'react-redux'; // Import Provider
+import store from './store/store.js'; // Import the Redux store
+import Highlight from './pages/highlight/highlight.jsx';
+import Product from './pages/product/product.jsx';
+import Signup from './pages/signup/signup.jsx';
+import Login from './pages/login/login.jsx';
+import ProductAll from './pages/productall/productall.jsx';
+import Admin from './pages/admin/adminAddProduct.jsx'
+import TestCode from './pages/testcode/testcode.jsx'
 
 function App() {
-
-  // useEffect(() => {
-  //   const scroll = new LocomotiveScroll({
-  //     el: document.querySelector('[data-scroll-container]'),
-  //     smooth: true,
-  //     multiplier: 1, // Adjust for responsiveness
-  //     damping: 0.1,     
-  //     lerp : 0.1 
-  //   });
-  //   return () => scroll.destroy();
-  // }, []);
-
-
-  const highlightsDeta = [
-    {
-      name: "#@&%*#^ ",
-      id: 1,
-      desc: "this is a limited edition",
-      price: 25,
-      rating: 3,
-      img1: starlight,
-      img2: posterStarlight,
-    },
-    {
-      name: "abundance",
-      id: 2,
-      desc: "surrelism is a surrelism",
-      price: 23,
-      rating: 2,
-      img1: abundance,
-      img2: faded,
-    },
-    {
-      name: "THE WEEKND",
-      id: 3,
-      desc: "this is a limited edition",
-      price: 25,
-      rating: 5,
-      img1: starlight,
-      img2: posterStarlight,
-    },
-    {
-      name: "BOUNDLESS",
-      id: 4,
-      desc: "surrelism is a surrelism",
-      price: 23,
-      rating: 2,
-      img1: abundance,
-      img2: faded,
-    }, 
-    {
-      name: "STAR BOY",
-      id: 5,
-      desc: "surrelism is a surrelism",
-      price: 23,
-      rating: 2,
-      img1: abundance,
-      img2: faded,
-    }
-  ];
   return (
-    <>
-  <div  data-scroll-container className = ''>
+    <Provider store={store}>
+      <Router>
+        <div data-scroll-container>
+          <Routes>
+            <Route path="/" element={<Highlight />} />
+            <Route path="/product" element={<Product />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/products" element={<ProductAll />} />
+            <Route path="/admin" element={<Admin/>} />
+            <Route path= "/test-code" element= {<TestCode/>}/>
 
-    {/* <Highlight/> */}
-    <Product highlighstDeta = {highlightsDeta}/>
-  </div>
-    </>
-  )
+          </Routes>
+        </div>
+      </Router>
+    </Provider>
+  );
 }
 
-export default App
+export default App;
+

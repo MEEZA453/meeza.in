@@ -4,7 +4,14 @@ import posterStarlight from "../../assets/images/posters/starlightpsot.jpg";
 import starlight from "../../assets/images/posters/STARLIGHT.jpg";
 import profile1 from '../../assets/images/customerprofilepics/profile1.webp'
 import profile2 from '../../assets/images/customerprofilepics/profile2.jpg'
-import profile3 from '../../assets/images/customerprofilepics/profile3.jpg'
+import profile3 from '../../assets/images/customerprofilepics/profile3.jpg' ; 
+import abundance from '../../assets/images/posters/abandance.jpg' ;
+import dreaming from '../../assets/images/posters/dreaming.jpg' ;
+import { IoReturnDownForwardOutline } from "react-icons/io5";
+
+import glory from '../../assets/images/posters/glory.jpg' ;
+
+import wanted from '../../assets/images/posters/wanted.jpg' ;
 
 
 function product(highlightsDeta) {
@@ -12,7 +19,8 @@ function product(highlightsDeta) {
 
 
   const detailOfTheProduct =  [  
-{name : 'ABUNDANCE'  , 
+{name : 'ABUNDANCE'  ,
+ images : [{name : 'img1' , img : starlight} , {name : 'img2' , img : posterStarlight }] ,
   amount : 25,
    customerReviews : [
     {
@@ -51,7 +59,7 @@ function product(highlightsDeta) {
       name : 'Dimensions: 18 * 24 inches' , 
   
     }, {
-      name : 'detailsMaterial: Premium matte-finish paper for a modern, glare-free look.2' , 
+      name : 'detailsMaterial:s Premium matte-finish paper for a modern, glare-free look.2' , 
     },{
       name : 'Weight and coordinates add a scientific, exploratory vibe:' , 
       subPoints : ['Weight: 44,400 lb' , 'Coordinates: 76°09"N 65°10"W' , 'Date: 11/11/2024' ]
@@ -93,60 +101,31 @@ function product(highlightsDeta) {
   hastags : [{
     title : 'Releted Products' , 
     hastags : ['black' , 'night' , 'space']
-  }]
+  }] , 
+  otherInfo : {
+    cashOnDelivery : 'yes' , 
+    returnOnDelivery : 'no' 
+  }
+
 } , 
-
-
-
-//     {
-//       heading1 : {
-//         title : 'Highlight' , 
-//         details1 : '' , 
-//         details2 : '' , 
-
-//       },
-
-//       heading2 : {
-//         title : 'Details' , 
-//         details1 : ' Dimensions: 18 * 24 inches' , 
-//         details2 : {main : '* Material: Premium matte-finish paper for a modern, glare-free look.' ,}
-        
-//       }
-// ,
-//       heading3 : {
-//         title : 'Why This Poster ?' , 
-//         details1 : '' , 
-//         details2 : '' , 
-        
-//       },
-
-//       heading4 : {
-//         title : 'Perfect For :' , 
-//         details1 : '' , 
-//         details2 : '' , 
-        
-//       },
-//       heading5 : {
-//         title : 'Shipping and Delivery' , 
-//         details1 : '' , 
-//         details2 : '' , 
-        
-//       },
-//       heading6 : {
-//         title : 'Releted products' , 
-//        hastags : ['future' , 'minimal' , 'dark']
-        
-//       },
-//     }
 
   ]
 
   return (
     <div className=''><Navber/>
-    <div className="pictures flex -translate-y-[0.1vh] ">
-      <div className="imgcontainer w-[48.8vw] h-[35vw]  flex items-center justify-center border-r-0 border-t-0 border-[#8D8D8D] border-l-0  border-[1px]">  <img className='w-[15vw]' src={starlight} alt="" /></div>
-      <div className="imgcontainer w-[50vw] h-[35vw] flex items-center justify-center border-r-0 border-t-0  border-[#8D8D8D] border-[1px]">  <img  className='size-[15vw]'src={posterStarlight} alt="" /></div>
-
+    
+    <div className='images'>
+      {
+        detailOfTheProduct.map((images)=>{
+      return <div  className="pictures flex -translate-y-[0.1vh] " > {images.images.map((img , index)=>{
+        return  <div >
+<div className={`imgcontainer w-[48.8vw] h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[15vw]' src={img.img} alt="" /></div>
+        </div>
+      })}</div>
+        })
+      }
+     
+     
     </div>
 
 <div className="content flex">
@@ -209,27 +188,140 @@ function product(highlightsDeta) {
        </div>
        
        <div className = 'payment-section mt-10 px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
-       <div className = ' flex justify-between h-[20vh] w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
+       <div className = ' flex justify-between h-[15vh] w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
        
-       <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails)=>{
-      return  <div><img className = 'rounded-full w-[1.4vw] h-[1.4vw]' src={custmerDetails.profilePic} alt={custmerDetails.name}/>
+       <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
+        console.log(index)
+      return  <div><img className ={ ` ${index > 0 ? `-translate-x-${2*index}`: null}  rounded-full w-[1.4vw] h-[1.4vw] `}src={custmerDetails.profilePic} alt={custmerDetails.name}/>
       
       </div>
 
-       })}<h3 className='text-black'>+</h3></div>
+       })}</div>
 
       
        </div>
        <button className='rounded-full w-full border-black border-[2px] flex justify-center items-center'><h3 className='text-black py-3'>add to cart</h3></button>
-       <button className='rounded-full w-full mt-2 bg-[#151515] border-black border-[2px] flex justify-center items-center'><h3 className='text-black py-3'>add to cart</h3></button>
+       <button className='rounded-[7px] w-full mt-2 bg-[#151515] border-black border-[2px] flex justify-center items-center'><h3 className=' py-3 '>Buy Now</h3></button>
 
        </div>
+
+<div className="delivery-details w-full flex-col content-center h-[15vh] rounded-[10px] px-[1vw] py-[2vh] border-[1px] border-[#8d8d8d] mt-6">
+
+
+  {
+     detailOfTheProduct.map((detail)=>{
+      return <div>
+
+        <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
+<p>1/23/32</p></div>
+<div className="flex  justify-between mb-2 "><p>cash on Delivery:</p>
+<p>{detail.otherInfo.cashOnDelivery}</p></div>
+<div className="flex  justify-between mb-2 "><p>Return on delivery:</p>
+<p>{detail.otherInfo.returnOnDelivery}</p></div>
+      </div>
+     })
+  }
+
+
+
+</div>
+
        </div>
   })
 }
 
   </div>
 </div>
+
+
+<div className="releted-productds">
+<div className='w-full flex items-center py-3 px-3  border-x-0 border-[1px]  border-[#8d8d8d]'>
+  <h1>More Designes</h1></div>
+   
+
+    <div className='flex border-[#8D8D8D] border-y-[1px] '>
+
+    <div className="parent group w-1/4 h-[20vw] border-[#8D8D8D] border-r-[1px] flex place-content-center py-8 relative">
+  <div className="flex justify-between w-[98%] absolute bottom-1">  
+    <div className='flex items-center duration-300 group-hover:-translate-y-5'>
+    <p className="text-white uppercase ">
+      ABUNDANCE
+    </p><div className='bg-[#d9d9d9] ml-1 opacity-0 group-hover:opacity-100 duration-300  h-[0.7vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[0.7vw] tracking-tighter px-1  '>$25</h4 ></div></div>
+    <p>#001</p>
+  </div>
+  <div className="absolute group-hover:opacity-100 duration-300 opacity-0 flex bottom-1 left-1">
+  <IoReturnDownForwardOutline  color='white' size={20}/>
+    
+    <p>#surrelism</p>
+  <p>#minimal</p>
+  <p>#top</p>
+  <p></p></div>
+  <img className="object-contain duration-300 group-hover:-translate-y-4" src={abundance} alt="" />
+</div>
+
+<div className="parent group w-1/4 h-[20vw] border-[#8D8D8D] border-r-[1px] flex place-content-center py-8 relative">
+  <div className="flex justify-between w-[98%] absolute bottom-1">  
+    <div className='flex items-center duration-300 group-hover:-translate-y-5'>
+    <p className="text-white uppercase ">
+      A FADED GLORY
+    </p><div className='bg-[#d9d9d9] ml-1 opacity-0 group-hover:opacity-100 duration-300  h-[0.7vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[0.7vw] tracking-tighter px-1  '>$25</h4 ></div></div>
+    <p>#001</p>
+  </div>
+  <div className="absolute group-hover:opacity-100 duration-300 opacity-0 flex bottom-1 left-1">
+  <IoReturnDownForwardOutline  color='white' size={20}/>
+    
+    <p>#surrelism</p>
+  <p>#minimal</p>
+  <p>#top</p>
+  <p></p></div>
+  <img className="object-contain duration-300 group-hover:-translate-y-4" src={glory} alt="" />
+</div>
+
+<div className="parent group w-1/4 h-[20vw] border-[#8D8D8D] border-r-[1px] flex place-content-center py-8 relative">
+  <div className="flex justify-between w-[98%] absolute bottom-1">  
+    <div className='flex items-center duration-300 group-hover:-translate-y-5'>
+    <p className="text-white uppercase ">
+      wanted
+    </p><div className='bg-[#d9d9d9] ml-1 opacity-0 group-hover:opacity-100 duration-300  h-[0.7vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[0.7vw] tracking-tighter px-1  '>$25</h4 ></div></div>
+    <p>#001</p>
+  </div>
+  <div className="absolute group-hover:opacity-100 duration-300 opacity-0 flex bottom-1 left-1">
+  <IoReturnDownForwardOutline  color='white' size={20}/>
+    
+    <p>#surrelism</p>
+  <p>#minimal</p>
+  <p>#top</p>
+  <p></p></div>
+  <img className="object-contain duration-300 group-hover:-translate-y-4" src={wanted} alt="" />
+</div>
+
+<div className="parent group w-1/4 h-[20vw] border-[#8D8D8D] border-r-[1px] flex place-content-center py-8 relative">
+  <div className="flex justify-between w-[98%] absolute bottom-1">  
+    <div className='flex items-center duration-300 group-hover:-translate-y-5'>
+    <p className="text-white uppercase ">
+      dreaming
+    </p><div className='bg-[#d9d9d9] ml-1 opacity-0 group-hover:opacity-100 duration-300  h-[0.7vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[0.7vw] tracking-tighter px-1  '>$25</h4 ></div></div>
+    <p>#001</p>
+  </div>
+  <div className="absolute group-hover:opacity-100 duration-300 opacity-0 flex bottom-1 left-1">
+  <IoReturnDownForwardOutline  color='white' size={20}/>
+    
+    <p>#surrelism</p>
+  <p>#minimal</p>
+  <p>#top</p>
+  <p></p></div>
+  <img className="object-contain duration-300 group-hover:-translate-y-4" src={dreaming} alt="" />
+</div>
+    
+    
+    
+    
+    </div>
+
+
+
+
+ </div>
 
     </div>
   )

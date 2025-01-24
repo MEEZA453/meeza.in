@@ -9,6 +9,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
   import abundance from "../../assets/images/posters/abandance.jpg";
   import faded from "../../assets/images/posters/glory.jpg";
 import HyperText from "../../components/ui/hyper-text.jsx";
+import video from '../../assets/videos/videoplayback.mp4'
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -121,7 +122,10 @@ function Highlight() {
   return (
     <div className="main">
 
-      <div className="absolute w-full h-[700vh]">
+     
+
+      <div className="absolute w-full h-[1000vh]">
+<div className=" sticky top-0  z-0"><div className="w-[100vw] h-[100vh] absolute opacity-80  bg-black"></div><video autoPlay muted loop className="w-full h-fit "  src={video}></video></div>
         {highlightsDeta.map((highlight) => (
           <div
             key={highlight.id}
@@ -152,7 +156,7 @@ function Highlight() {
           <HighlightMenu />
 
           <div className="  items-center overflow-hidden absolute h-[4.5vh] w-[18vw] top-[49vh] left-[44vw]">
-            <div className="heading">
+            <div className="heading z-40">
 
          
             {highlightsDeta.map((deta)=>{
@@ -175,7 +179,7 @@ function Highlight() {
               ? renderedHighlight.name.toUpperCase()
               : "@#!&*^%"}
           </h1> */}
-          <div className="absolute bottom-16 right-10">
+          <div className="absolute z-50 bottom-16 right-10">
             {renderedHighlight && (
               <CardOftheHighlight details={renderedHighlight} />
             )}
