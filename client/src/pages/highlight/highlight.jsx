@@ -125,7 +125,7 @@ function Highlight() {
      
 
       <div className="absolute w-full h-[1000vh]">
-<div className=" sticky top-0  z-0"><div className="w-[100vw] h-[100vh] absolute opacity-80  bg-black"></div><video autoPlay muted loop className="w-full h-fit "  src={video}></video></div>
+{/* <div className=" sticky top-0  z-0"><div className="w-[100vw] h-[100vh] absolute opacity-80  bg-black"></div><video autoPlay muted loop className="w-full h-fit "  src={video}></video></div> */}
         {highlightsDeta.map((highlight) => (
           <div
             key={highlight.id}

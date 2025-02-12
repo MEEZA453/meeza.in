@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { RxCross2 } from "react-icons/rx";
 
-function TagInput() {
+function TagInput({hastags , setHastags}) {
   const [inputTag, setInputTag] = useState('');
-  const [hastags, setHastags] = useState(['dark', 'aesthetic']);
 
   // Add hashtags
   const addHasTags = () => {
@@ -28,8 +27,8 @@ function TagInput() {
           value={inputTag}
           className="bg-transparent py-[3px] rounded border border-[#424242]"
         />
-        <button
-          className="bg-white text-black"
+        <button type = 'button'
+          className="bg-white  ml-2 px-1 rounded text-black"
           onClick={addHasTags}
         >
           ADD

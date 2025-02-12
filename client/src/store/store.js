@@ -1,5 +1,8 @@
 // src/store.js
 import { configureStore, createSlice } from '@reduxjs/toolkit';
+import { createStore, applyMiddleware } from "redux";
+import {thunk} from "redux-thunk";
+import {reducers} from '../store/reducers/index.js'
 
 // Create a slice for products
 const productsSlice = createSlice({
@@ -14,10 +17,7 @@ const productsSlice = createSlice({
 export const { setProducts } = productsSlice.actions;
 
 // Create the store
-const store = configureStore({
-  reducer: {
-    products: productsSlice.reducer,
-  },
-});
+const store = createStore(reducers, applyMiddleware(thunk));
+
 
 export default store;

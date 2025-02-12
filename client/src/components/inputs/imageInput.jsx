@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 
-function ImageInput() {
-  const [selectedImage, setSelectedImage] = useState([]);
-
+function ImageInput({ selectedImage, setSelectedImage }) {
   const handleChange = (e) => {
-    const files = Array.from(e.target.files); // Convert FileList to array
-    setSelectedImage(files); // Store the files in state
-    console.log(files); // Logs the array of selected files
+    const files = Array.from(e.target.files); // Convert FileList to an array
+    const fileNames = files.map((file) => file.name); // Extract only names
+    setSelectedImage(fileNames);
+    console.log(fileNames);
   };
 
   return (
@@ -19,19 +18,17 @@ function ImageInput() {
           accept="image/*"
           multiple
           type="file"
-          onChange={handleChange} // Only handle change, no value binding
-          name=""
-          placeholder="Choose File"
+          onChange={handleChange}
           className="w-32"
         />
-        <div className = 'flex'>
-          {selectedImage.map((image, index) => (
+        <div className="flex">
+          {Array.from(document.querySelector('input[type="file"]')?.files || []).map((file, index) => (
             <img
               key={index}
               className="size-32 bg-cover"
-              src={URL.createObjectURL(image)} // Create a blob URL to preview
+              src={URL.createObjectURL(file)} // Create a blob URL for preview
               alt={`selectedImage-${index}`}
-              style={{ width: '100px', height: '100px', objectFit: 'cover' }} // Optional styling
+              style={{ width: '100px', height: '100px', objectFit: 'cover' }}
             />
           ))}
         </div>

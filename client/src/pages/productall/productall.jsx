@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import profile1 from '../../assets/images/customerprofilepics/profile1.webp'
 import profile2 from '../../assets/images/customerprofilepics/profile2.jpg'
 import profile3 from '../../assets/images/customerprofilepics/profile3.jpg' ;   
@@ -8,7 +8,8 @@ import starlight from "../../assets/images/posters/STARLIGHT.jpg";
 import abundance from '../../assets/images/posters/abandance.jpg' ;
 import dreaming from '../../assets/images/posters/dreaming.jpg' ; 
 import Navber from '../../components/navber/highlightnavber.jsx'
-
+import {useDispatch, useSelector} from 'react-redux'
+import {getDesign} from '../../store/actions/design.js'
 function productall() {
 
  const detailOfTheProduct =  [  
@@ -443,6 +444,13 @@ function productall() {
  } 
   ]
 
+  const dispatch = useDispatch()
+  useEffect(()=>{
+    dispatch(getDesign())
+  } , [dispatch])
+
+  const designs = useSelector((state)=>state.design)
+  console.log(designs)
   return (
     <div className=''> 
     <div className="*:">
