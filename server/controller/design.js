@@ -1,3 +1,4 @@
+import multer from 'multer';
 import Product from '../models/designs.js'
 
 export const getDesign = async( req , res)=>{
@@ -11,41 +12,67 @@ export const getDesign = async( req , res)=>{
 export const deleteDesign = async( req , res)=>{
     
 }
-export const postDesign = async( req , res)=>{
-    console.log('reached to the postDesign')
-    try {
-        const {
-          name,
-          amount,   
-          headline,
-          image,
-          sections,
-          hastags,
-          // relatedProducts,
-          expectedDeliveryDate,
-          cashOnDelivery,
-          returnOnDelivery,
-        } = req.body;
-    
-        // Create new product
-        const product = new Product({
-          name,
-          amount,
-          headline,
-          image,
-          sections,
-          hastags,
-          // relatedProducts,
-          expectedDeliveryDate,
-          cashOnDelivery,
-          returnOnDelivery,
-        });
-    
-        await product.save();
-        console.log(product)
-        console.log('product added successfully')
-        res.status(201).json({ success: true, product });
-      } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-      }
-}
+
+
+// Configure Multer for file uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "uploads/"); // Store files in 'uploads' folder
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "-" + file.originalname); // Unique filenames
+    }
+});
+
+const upload = multer({ storage }).array('image', 5); // Allow up to 5 images
+
+export const postDesign = async (req, res) => {
+    console.log('Reached postDesign route');
+
+    // Use Multer to handle file upload
+    upload(req, res, async (err) => {
+        if (err) {
+            console.error("Multer error:", err);
+            return res.status(400).json({ success: false, message: "Image upload failed" });
+        }
+
+        try {
+            const {
+                name,
+                amount,
+                headline,
+                sections,
+                hastags,
+                expectedDeliveryDate,
+                cashOnDelivery,
+                returnOnDelivery
+            } = req.body;
+            const parsedSections = sections ? JSON.parse(sections) : [];
+const parsedHastags = hastags ? JSON.parse(hastags) : [];
+
+
+            // Get image paths
+            const imagePaths = req.files ? req.files.map(file => `/uploads/${file.filename}`) : ['noths'];
+
+            // Create new product
+            const product = new Product({
+                name,
+                amount,
+                headline,
+                image: imagePaths,
+                sections: parsedSections, // ✅ Use parsed array
+                hastags: parsedHastags,   // ✅ Use parsed array
+                expectedDeliveryDate,
+                cashOnDelivery,
+                returnOnDelivery,
+            });
+
+            await product.save();
+            console.log("Product added successfully:", product);
+            res.status(201).json({ success: true, product });
+        } catch (error) {
+            console.error("Error:", error.message);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    });
+};
