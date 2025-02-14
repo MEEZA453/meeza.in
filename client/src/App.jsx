@@ -46,7 +46,7 @@ function App() {
         <div data-scroll-container>
           <Routes>
             <Route path="/" element={<Highlight />} />
-            <Route path="/product" element={<Product />} />
+            <Route path="/:designname" element={<Product />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/login" element={<Login />} />
             <Route path="/products" element={<ProductAll />} />

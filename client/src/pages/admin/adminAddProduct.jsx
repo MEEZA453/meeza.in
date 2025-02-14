@@ -40,18 +40,31 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
 
   const formSubmit = (event) => {
     event.preventDefault();
-    const designData = {
-      name,
-      headline,
-      amount,
-      image,
-      sections,
-      hastags,
-      cashOnDelivery,
-      returnOnDelivery,
-      expectedDeliveryDate,
-    };
-    dispatch(postDesign(designData));
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("headline", headline);
+    formData.append("amount", amount);
+    formData.append("cashOnDelivery", cashOnDelivery);
+    formData.append("returnOnDelivery", returnOnDelivery);
+    formData.append("expectedDeliveryDate", expectedDeliveryDate);
+
+    // Append images properly
+    if (image.length > 0) {
+      image.forEach((file) => {
+        formData.append("image", file);
+      });
+    } else {
+      console.warn("No images selected!");
+    }
+
+    // Append JSON string data
+    formData.append("sections", JSON.stringify(sections));
+    formData.append("hastags", JSON.stringify(hastags));
+
+    console.log("FormData before submitting:", Object.fromEntries(formData)); // Debugging
+
+    dispatch(postDesign(formData));
   };
 
   return (

@@ -12,11 +12,12 @@ import { IoReturnDownForwardOutline } from "react-icons/io5";
 import glory from '../../assets/images/posters/glory.jpg' ;
 
 import wanted from '../../assets/images/posters/wanted.jpg' ;
+import { useLocation } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 
 function product(highlightsDeta) {
-
-
+const {designname} = useParams()
 
   const detailOfTheProduct =  [  
 {name : 'ABUNDANCE'  ,
@@ -110,32 +111,64 @@ function product(highlightsDeta) {
 } , 
 
   ]
+  console.log(detailOfTheProduct)
+
+  const location = useLocation();
+const productDeta = [location.state?.data];
+console.log(productDeta)
 
   return (
     <div className=''><Navber/>
+{
+  productDeta.map((deta)=>{
+    return <div>
+      
+ 
     
     <div className='images'>
-      {
-        detailOfTheProduct.map((images)=>{
-      return <div  className="pictures flex -translate-y-[0.1vh] " > {images.images.map((img , index)=>{
+       <div  className="pictures flex -translate-y-[0.1vh] " > {deta.image.map((img , index)=>{
+        console.log(img)
         return  <div >
-<div className={`imgcontainer w-[48.8vw] h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[15vw]' src={img.img} alt="" /></div>
+<div className={`imgcontainer w-[48.8vw] h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[15vw]' src={`http://localhost:8080${img}`} alt="" /></div>
         </div>
       })}</div>
-        })
-      }
      
      
     </div>
+    <h1 className='mb-3 mt-5 '>  {deta.headline}</h1>
 
 <div className="content flex">
 
   <div className='w-[70%]  h-[85vh] border-r-0 border-t-0 border-[#8D8D8D] border-l-0  border-[1px] px-[1.1vw] py-[1.5vw] '>
 
+{
+  deta.sections.map((section)=>{
+    return <div>
+    
+      {[section].map((contents)=>{
+        return <div> <h3 className='mb-10'>{contents.title} </h3>
+        {
+          contents.content.map((details)=>{
+            return <div> <p> • {details}</p></div>
+          })
+        }
+        </div>
+      })}
+      
+    </div>
+  })
+}
 
-    {
+ <div>
+      <h3>Releted Products</h3>
+      <div className='hastags mt-4'>{deta.hastags.map((tags)=>{
+        return <a className='mr-1' href="">#{tags}</a>
+      })}</div>
+    </div>
+
+    {/* {
       detailOfTheProduct.map((productDetails  , index)=>{ 
-        return <div><h3 className='mb-10'>{productDetails.heading} </h3>
+        return <div>
         {productDetails.details.map((detail , index )=>{
 
           return <div className='heading1 w-[30vw] mb-4'>
@@ -171,34 +204,31 @@ function product(highlightsDeta) {
 
       })
     }
-
+ */}
 
 
 
   </div>
   <div className='w-[30%]  h-[85vh]   border-r-0 border-t-0  border-[#8D8D8D] border-[1px]'>
 
-{
-  detailOfTheProduct.map((detail)=>{
-    return <div className="mt-6 ml-4" >
+ <div className="mt-6 ml-4" >
       
        <div className="flex items-center gap-2">
-       <h3 className=''>{detail.name}</h3>
-       <div className='bg-[#d9d9d9] h-[1.4vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[1.2vw] tracking-tighter px-1  '>$ {detail.amount}</h4 ></div>
+       <h3 className=''>{deta.name}</h3>
+       <div className='bg-[#d9d9d9] h-[1.4vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[1.2vw] tracking-tighter px-1  '>$ {deta.amount}</h4 ></div>
        </div>
        
        <div className = 'payment-section mt-10 px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
        <div className = ' flex justify-between h-[15vh] w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
        
-       <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
+       {/* <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
         console.log(index)
       return  <div><img className ={ ` ${index > 0 ? `-translate-x-${2*index}`: null}  rounded-full w-[1.4vw] h-[1.4vw] `}src={custmerDetails.profilePic} alt={custmerDetails.name}/>
       
       </div>
 
-       })}</div>
+       })}</div> */}
 
-      
        </div>
        <button className='rounded-full w-full border-black border-[2px] flex justify-center items-center'><h3 className='text-black py-3'>add to cart</h3></button>
        <button className='rounded-[7px] w-full mt-2 bg-[#151515] border-black border-[2px] flex justify-center items-center'><h3 className=' py-3 '>Buy Now</h3></button>
@@ -207,29 +237,21 @@ function product(highlightsDeta) {
 
 <div className="delivery-details w-full flex-col content-center h-[15vh] rounded-[10px] px-[1vw] py-[2vh] border-[1px] border-[#8d8d8d] mt-6">
 
-
-  {
-     detailOfTheProduct.map((detail)=>{
-      return <div>
+ <div>
 
         <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
-<p>1/23/32</p></div>
+<p>{deta.expectedDeliveryDate}</p></div>
 <div className="flex  justify-between mb-2 "><p>cash on Delivery:</p>
-<p>{detail.otherInfo.cashOnDelivery}</p></div>
+<p>{deta.cashOnDelivery ? "yes" : "no"}</p></div>
 <div className="flex  justify-between mb-2 "><p>Return on delivery:</p>
-<p>{detail.otherInfo.returnOnDelivery}</p></div>
+<p>{deta.returnOnDelivery ? "yes" : "no"}</p></div>
       </div>
-     })
-  }
-
+  
 
 
 </div>
 
        </div>
-  })
-}
-
   </div>
 </div>
 
@@ -322,9 +344,15 @@ function product(highlightsDeta) {
 
 
  </div>
-
+ </div>
+  })
+}
     </div>
+    
   )
 }
+
+
+
 
 export default product
