@@ -20,6 +20,7 @@ import { createOrder } from '../../store/actions/design.js';
 import { postCart } from '../../store/actions/cart.js';
 import cart from '../../store/reducers/cart.js';
 import ProductAll from '../productall/productall.jsx';
+import ImageCaro from '../../components/imageCaro/imageCaro.jsx'
 
 
 function product(highlightsDeta) {
@@ -63,6 +64,10 @@ const handleBuyNow = (data) => {
   );
 };
 
+
+useEffect (()=>{
+window.scrollTo(0 , 0)
+},[])
 const handleSubmit = async (event)=>{
   event.preventDefault()
   const url = await dispatch(createOrder(items))
@@ -99,12 +104,7 @@ const handleCart = async (data) => {
  
     
     <div className='images'>
-       <div  className="pictures flex -translate-y-[0.1vh] " > {deta.image.map((img , index)=>{
-        console.log(img)
-        return  <div >
-<div className={`imgcontainer w-[100vw] h-[80vw] lg:h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[40vw] lg:w-[20vw]' src={img} alt="" /></div>
-        </div>
-      })}</div>
+       <div  className="pictures -translate-y-[0.1vh] " ><ImageCaro images = {deta.image}/></div>
      
      
     </div>
@@ -184,7 +184,7 @@ const handleCart = async (data) => {
   </div>
   {window.innerWidth < 640 ? <div className="delivery-details w-full flex-col items-center justify-between lg:h-[12vh] rounded-[10px] lg:px-[1vw] lg:py-[2vh] py-3 px-2 border-[1px] border-[#8d8d8d] mt-3 lg:mt-6">
 
-<div>
+<div className=''>
 
        <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
 <p>{deta.expectedDeliveryDate}</p></div>
@@ -338,7 +338,13 @@ const handleCart = async (data) => {
  </div>
   })
 }
-{/* <ProductAll/> */}
+<div className='mt-4'>
+<h2 className='font-[inter-regular]  tracking-tight text-[6vw] border-t-[1px]  pl-3 py-1 border-[#8D8D8D]'>Releted Products </h2>
+<div className='border-t-[1px]  border-[#8D8D8D]'>
+
+<ProductAll/>
+</div>
+</div>
     </div>
     
   )

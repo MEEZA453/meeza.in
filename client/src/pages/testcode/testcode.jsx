@@ -1,53 +1,52 @@
-import React from 'react'
-import {useState} from 'react'
+import { useState } from "react";
+import { useSprings, animated } from "@react-spring/web";
+import { useDrag } from "@use-gesture/react";
+import image1 from "../../assets/images/posters/freedom.webp";
+import image2 from "../../assets/images/posters/freedom.webp";
 
+const images = [image1, image2 , image1];
 
-function testcode() {
-  const [images, setImages] = useState([]); // State to store selected images
+const DraggableCarousel = () => {
+  const [index, setIndex] = useState(0);
 
-  const handleImageChange = (event) => {
-    // Convert FileList to Array
-    const files = Array.from(event.target.files);
+  // Animation for image positions
+  const [springs, api] = useSprings(images.length, (i) => ({
+    x: i * window.innerWidth,
+  }));
 
-    // Update the state with selected files
-    setImages(files);
-    console.log(files)
-  };
+  const bind = useDrag(({ active, movement: [mx], direction: [xDir], velocity, cancel }) => {
+    if (!active) {
+      let newIndex = index;
 
-  const handleUpload = () => {
-    console.log("Uploading images:", images);
-    // You can handle the upload logic here (e.g., send images to a server)
-  };
+      if (velocity > 0.2) {
+        newIndex = index + (xDir > 0 ? -1 : 1);
+      }
+
+      newIndex = Math.max(0, Math.min(newIndex, images.length - 1));
+      setIndex(newIndex);
+
+      api.start((i) => ({
+        x: (i - newIndex) * window.innerWidth,
+      }));
+    } else {
+      api.start((i) => ({
+        x: (i - index) * window.innerWidth + mx,
+      }));
+    }
+  });
 
   return (
-    <div>
-      <h2>Upload Multiple Images</h2>
-      <input
-        type="file"
-        multiple
-        accept="image/*" // Accept only images
-        onChange={handleImageChange}
-      />
-      <div>
-        <h3>Selected Images:</h3>
-        {images.length === 0 ? (
-          <p>No images selected</p>
-        ) : (
-          images.map((image, index) => (
-            <div key={index}>
-              <p>{image.name}</p>
-              <img
-                src={URL.createObjectURL(image)}
-                alt={`preview-${index}`}
-                style={{ width: "100px", height: "100px", objectFit: "cover" }}
-              />
-            </div>
-          ))
-        )}
-      </div>
-      <button onClick={handleUpload}>Upload</button>
+    <div className="overflow-hidden w-full h-screen relative">
+      {springs.map((style, i) => (
+        <animated.div
+          key={i}
+          {...bind()}
+          className="absolute w-full h-full bg-cover bg-center"
+          style={{ ...style, backgroundImage: `url(${images[i]})` }}
+        />
+      ))}
     </div>
   );
-}
+};
 
-export default testcode
+export default DraggableCarousel;

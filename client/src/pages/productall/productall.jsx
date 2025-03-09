@@ -82,6 +82,7 @@ function ProductAll() {
 
   const goToProduct = (preDetails) => {
     navigate(`/products${preDetails.name}`, { state: { data: preDetails } });
+    window.scrollTo(0 , 0)
   };
 
   // const getImageUrl = (image) => (image ? `${BASE_URL}${image}` : abundance);
@@ -89,7 +90,7 @@ function ProductAll() {
   return (
     <div className=''>
       <div className="z-[999] sticky top-0">
-        <ShopNavber />
+        {/* <ShopNavber /> */}
       </div>
       <div className="lg:grid lg:grid-cols-4 grid grid-cols-2 gap-0">
         {designs.length === 0 && loading ? (

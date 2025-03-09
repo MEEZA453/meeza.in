@@ -7,7 +7,7 @@ import Highlight from './pages/highlight/highlight.jsx';
 import Product from './pages/product/product.jsx';
 import Signup from './pages/signup/signup.jsx';
 import Login from './pages/login/login.jsx';
-import ProductAll from './pages/productall/productall.jsx';
+import Products from './pages/productall/products.jsx';
 import Admin from './pages/admin/adminAddProduct.jsx';
 import TestCode from './pages/testcode/testcode.jsx';
 import RazorPayCheckout from './pages/payment/razorPayCheckout.jsx'
@@ -37,9 +37,9 @@ const pageTransition = { type: "tween", ease: "linear", duration: .8 };
             <Route path="/:designname" element={<Product />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/products" element={<ProductAll />} />
+            <Route path="/products" element={<Products />} />
             <Route path="/admin" element={<Admin />} />
-            {/* <Route path="/test-code" element={<TestCode />} /> */}
+            <Route path="/test-code" element={<TestCode />} />
             <Route path="/payment" element={<RazorPayCheckout />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/payment-fail" element={<PaymentFail />} />
