@@ -1,5 +1,5 @@
 import React from 'react'
-import Navber from '../../components/navber/highlightnavber.jsx' ; 
+import ShopNavber from '../../components/navber/shopnavber.jsx' ; 
 import posterStarlight from "../../assets/images/posters/starlightpsot.jpg";
 import starlight from "../../assets/images/posters/STARLIGHT.jpg";
 import profile1 from '../../assets/images/customerprofilepics/profile1.webp'
@@ -7,121 +7,94 @@ import profile2 from '../../assets/images/customerprofilepics/profile2.jpg'
 import profile3 from '../../assets/images/customerprofilepics/profile3.jpg' ; 
 import abundance from '../../assets/images/posters/abandance.jpg' ;
 import dreaming from '../../assets/images/posters/dreaming.jpg' ;
-import { IoReturnDownForwardOutline } from "react-icons/io5";
+import { IoReturnDownForwardOutline, IoTimeSharp } from "react-icons/io5";
 
 import glory from '../../assets/images/posters/glory.jpg' ;
 
 import wanted from '../../assets/images/posters/wanted.jpg' ;
 import { useLocation } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
+import {useState , useEffect} from 'react' 
+import { useDispatch } from 'react-redux';
+import { createOrder } from '../../store/actions/design.js';
+import { postCart } from '../../store/actions/cart.js';
+import cart from '../../store/reducers/cart.js';
+import ProductAll from '../productall/productall.jsx';
 
 
 function product(highlightsDeta) {
+
+
 const {designname} = useParams()
-
-  const detailOfTheProduct =  [  
-{name : 'ABUNDANCE'  ,
- images : [{name : 'img1' , img : starlight} , {name : 'img2' , img : posterStarlight }] ,
-  amount : 25,
-   customerReviews : [
-    {
-      name : 'The weeknd' , 
-      profilePic : profile1 ,
-      desc : 'i love this product', 
-      rating : 5 ,  
-    }, 
-    {
-      name : 'Ariyana Grande' , 
-      profilePic : profile2 ,
-      desc : 'the quality of this poster is dope ', 
-      rating : 3 ,  
-    } , 
-    {
-      name : 'John Wisper' , 
-      profilePic : profile3 ,
-      desc : 'dont buy it ', 
-      rating : 2 ,  
-    }
-   ] , 
-  heading : 'Step into the cosmos with this stunning poster, Starlight Journey .' ,
-  details : [  {
-    title : 'Highlight' , 
-    points : [
-      {
-      name : ' "Next stop: Nebula Station" text adds a futuristic, sci-fi touch.' , 
-    }, {
-      name : '   Inspiring quote: "Look out for shimmering clouds and swirling cosmic dust."' , 
-    },]
-
-  } , {
-    title : 'Details' , 
-    points : [
-      {
-      name : 'Dimensions: 18 * 24 inches' , 
-  
-    }, {
-      name : 'detailsMaterial:s Premium matte-finish paper for a modern, glare-free look.2' , 
-    },{
-      name : 'Weight and coordinates add a scientific, exploratory vibe:' , 
-      subPoints : ['Weight: 44,400 lb' , 'Coordinates: 76°09"N 65°10"W' , 'Date: 11/11/2024' ]
-    }]
-
-  } ,{
-    title : 'Why This Poster?' , 
-    points : [
-      {
-      name : "Whether you're decorating a workspace, living area, or bedroom, this artwork speaks of curiosity, adventure, and the beauty of the stars. It’s more than just a poster—it’s a journey into the cosmos." , 
-  
-    },]
-
-  } ,{
-    title : 'Perfect For  : ' , 
-    points : [
-      {
-      name : "Space and science lovers ,Sci-fi fans , Modern and minimalistic home decor themes" , 
-  
-    },]
-
-  } , {
-    title : 'Shipping and Delivery' , 
-    points : [
-      {
-      name : "Available worldwide with secure packaging to ensure your poster arrives in pristine condition.Add this cosmic masterpiece to your collection today and let your walls tell a story of exploration and wonder!" , 
-  
-    },]
-
-  } , {
-    title : 'Releted catagories ' , 
-      points : [
-        {
-      name : "Available worldwide with secure packaging to ensure your poster arrives in pristine condition.Add this cosmic masterpiece to your collection today and let your walls tell a story of exploration and wonder!" , 
-  
-    },]
-
-  }], 
-  hastags : [{
-    title : 'Releted Products' , 
-    hastags : ['black' , 'night' , 'space']
-  }] , 
-  otherInfo : {
-    cashOnDelivery : 'yes' , 
-    returnOnDelivery : 'no' 
-  }
-
-} , 
-
-  ]
-  console.log(detailOfTheProduct)
 
   const location = useLocation();
 const productDeta = [location.state?.data];
 console.log(productDeta)
 
+
+const [items, setItems] = useState(() => [{
+  name: '',
+  amount: 10,
+  quantity: 1,
+  image: '',
+}]);
+
+
+const [cartDetails , setCartDetails ] = useState({
+  name : '' , 
+  amount : 0 , 
+  quantity : 1 ,
+  desc : '25 inches',
+  img : ''
+})
+
+console.log(cartDetails)
+
+const dispatch  = useDispatch()
+const handleBuyNow = (data) => {
+  setItems((items) =>  // 'items' correctly represents the current state array
+    items.map((el) => ({
+      ...el,  
+      name: data.name,
+      quantity: 1,  
+      amount: data.amount,  
+      image: data.image[0],  
+    }))
+  );
+};
+
+const handleSubmit = async (event)=>{
+  event.preventDefault()
+  const url = await dispatch(createOrder(items))
+if(url){
+  window.location.href = url
+}
+}
+
+const handleCart = async (data) => {
+  console.log(data.name, data.amount, data.image[0]);
+
+  const updatedCartDetails = {
+    name: data.name,
+    amount: data.amount,
+    img: data.image[0],
+    quantity : 1 , 
+    desc: data.headline,
+  };
+
+  setCartDetails(updatedCartDetails); // Update state
+
+  dispatch(postCart(updatedCartDetails)); // Dispatch immediately with updated data
+};
+
+
+
+
   return (
-    <div className=''><Navber/>
+    <div className=' w-[100vw]'><ShopNavber cartData = {cartDetails}/>
 {
   productDeta.map((deta)=>{
-    return <div>
+    return <div className='w-[100vw]'>
       
  
     
@@ -129,27 +102,27 @@ console.log(productDeta)
        <div  className="pictures flex -translate-y-[0.1vh] " > {deta.image.map((img , index)=>{
         console.log(img)
         return  <div >
-<div className={`imgcontainer w-[48.8vw] h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[15vw]' src={`http://localhost:8080${img}`} alt="" /></div>
+<div className={`imgcontainer w-[100vw] h-[80vw] lg:h-[35vw] ${index < 1 ? "border-r-0 border-t-0 border-l-0 w-[48.8vw]": "border-t-0 border-r-0 w-[50vw]"}  flex items-center justify-center  border-[#8D8D8D]   border-[1px]`}>  <img className='w-[40vw] lg:w-[20vw]' src={img} alt="" /></div>
         </div>
       })}</div>
      
      
     </div>
-    <h1 className='mb-3 mt-5 '>  {deta.headline}</h1>
+    {/* <h1 className='mb-3 mt-5 '>  {deta.headline}</h1> */}
 
-<div className="content flex">
+<div className="content w-[100vw] flex lg:flex-row max-sm:flex-col-reverse">
 
-  <div className='w-[70%]  h-[85vh] border-r-0 border-t-0 border-[#8D8D8D] border-l-0  border-[1px] px-[1.1vw] py-[1.5vw] '>
-
+<div className = "px-2">
+  <div className='lg:w-[70%] w-[95%] lg:h-[85vh] border-r-0 border-t-0 border-[#8D8D8D] border-l-0  px-[1.1vw] py-[1.5vw] '>
 {
   deta.sections.map((section)=>{
     return <div>
     
       {[section].map((contents)=>{
-        return <div> <h3 className='mb-10'>{contents.title} </h3>
+        return <div className='mb-2'> <h3 className='mb-2'>{contents.title} </h3>
         {
           contents.content.map((details)=>{
-            return <div> <p> • {details}</p></div>
+            return <div className=' mt-1'> <p className=''> • {details}</p></div>
           })
         }
         </div>
@@ -161,7 +134,7 @@ console.log(productDeta)
 
  <div>
       <h3>Releted Products</h3>
-      <div className='hastags mt-4'>{deta.hastags.map((tags)=>{
+      <div className='hastags mt-2'>{deta.hastags.map((tags)=>{
         return <a className='mr-1' href="">#{tags}</a>
       })}</div>
     </div>
@@ -209,17 +182,34 @@ console.log(productDeta)
 
 
   </div>
-  <div className='w-[30%]  h-[85vh]   border-r-0 border-t-0  border-[#8D8D8D] border-[1px]'>
+  {window.innerWidth < 640 ? <div className="delivery-details w-full flex-col items-center justify-between lg:h-[12vh] rounded-[10px] lg:px-[1vw] lg:py-[2vh] py-3 px-2 border-[1px] border-[#8d8d8d] mt-3 lg:mt-6">
 
- <div className="mt-6 ml-4" >
+<div>
+
+       <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
+<p>{deta.expectedDeliveryDate}</p></div>
+<div className="flex  justify-between mb-2 "><p>cash on Delivery:</p>
+<p>{deta.cashOnDelivery ? "yes" : "no"}</p></div>
+<div className="flex  justify-between mb-2 "><p>Return on delivery:</p>
+<p>{deta.returnOnDelivery ? "yes" : "no"}</p></div>
+     </div>
+ 
+
+
+</div> : null}
+
+  </div>
+  <div className='lg:w-[29%] w-full  lg:h-[85vh]     lg:border-r-0 lg:border-t-0  border-[#8D8D8D] lg:border-[1px]'>
+
+ <div className="lg:mt-6 lg:ml-4 mx-2 my-4" >
       
        <div className="flex items-center gap-2">
-       <h3 className=''>{deta.name}</h3>
-       <div className='bg-[#d9d9d9] h-[1.4vw] rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-medium] text-[1.2vw] tracking-tighter px-1  '>$ {deta.amount}</h4 ></div>
+       <h3 className='capitalize'>{deta.name}</h3>
+       <div className='bg-[#d9d9d9] h-[18px] lg:h-[1.4vw]  rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-bold]  lg:text-[1.4vw] text-[3.9vw] tracking-tighter px-1  '>${deta.amount}</h4 ></div>
        </div>
        
-       <div className = 'payment-section mt-10 px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
-       <div className = ' flex justify-between h-[15vh] w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
+       <div className = 'payment-section lg:mt-10 mt-5  px-1 lg:px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
+       <div className = ' flex justify-between h-[10vh] lg:h-[15vh] lg:w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
        
        {/* <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
         console.log(index)
@@ -230,12 +220,13 @@ console.log(productDeta)
        })}</div> */}
 
        </div>
-       <button className='rounded-full w-full border-black border-[2px] flex justify-center items-center'><h3 className='text-black py-3'>add to cart</h3></button>
-       <button className='rounded-[7px] w-full mt-2 bg-[#151515] border-black border-[2px] flex justify-center items-center'><h3 className=' py-3 '>Buy Now</h3></button>
-
+       <button onClick ={()=>{handleCart(deta)}} className='rounded-full w-full border-black border-[2px] flex justify-center items-center'><h3 className='text-black py-2'>add to cart</h3></button>
+       <form onSubmit={handleSubmit}>
+       <button onClick = { ()=>{handleBuyNow(deta)}} className='rounded-[7px] w-full mt-1 bg-[#151515] border-black border-[1px] flex justify-center items-center'><h3 className=' py-2 '>Buy Now</h3></button>
+       </form>
        </div>
 
-<div className="delivery-details w-full flex-col content-center h-[15vh] rounded-[10px] px-[1vw] py-[2vh] border-[1px] border-[#8d8d8d] mt-6">
+{window.innerWidth > 640 ? <div className="delivery-details w-full flex-col items-center justify-between lg:h-[12vh] rounded-[10px] lg:px-[1vw] lg:py-[2vh] py-3 px-2 border-[1px] border-[#8d8d8d] mt-3 lg:mt-6">
 
  <div>
 
@@ -249,14 +240,14 @@ console.log(productDeta)
   
 
 
-</div>
+</div> : null}
 
        </div>
   </div>
 </div>
 
 
-<div className="releted-productds">
+{/* <div className="releted-productds">
 <div className='w-full flex items-center py-3 px-3  border-x-0 border-[1px]  border-[#8d8d8d]'>
   <h1>More Designes</h1></div>
    
@@ -343,10 +334,11 @@ console.log(productDeta)
 
 
 
- </div>
+ </div> */}
  </div>
   })
 }
+{/* <ProductAll/> */}
     </div>
     
   )

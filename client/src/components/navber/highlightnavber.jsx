@@ -35,7 +35,7 @@ function HighlightNavbar() {
   ];  
 
   return (
-    <div className="flex justify-between relative">
+    <div className="flex  bg-transparent justify-between relative">
       {sections.map((section) => (
         <div
           key={section.id}

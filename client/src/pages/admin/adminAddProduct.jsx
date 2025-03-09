@@ -52,7 +52,7 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
     // Append images properly
     if (image.length > 0) {
       image.forEach((file) => {
-        formData.append("image", file);
+        formData.append("images", file);
       });
     } else {
       console.warn("No images selected!");

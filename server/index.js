@@ -6,6 +6,8 @@ import path from 'path';
 import multer from 'multer';
 import designRoute from './routes/postDesign.js';
 import highlightDesignRoute from './routes/postHighlightDesign.js';
+import paymentRoute from './routes/payment.js'
+import cartRoute from './routes/cart.js'
 
 // Define the server port
 const PORT = env.PORT || 8080;
@@ -43,6 +45,8 @@ app.post('/upload', upload.single('image'), (req, res) => {
 // Routes
 app.use('/', designRoute);
 app.use('/highlight', highlightDesignRoute);
+app.use('/payment' , paymentRoute )
+app.use('/cart' , cartRoute)
 
 // Connect to DB and start server
 connectDB();

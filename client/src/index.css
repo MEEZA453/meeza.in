@@ -124,29 +124,30 @@
     }
 
 h1 {
-    font-size: 8vw;
+    font-size: 2vw;
+    line-height: -20px;
     font-family : hass-regular;
     letter-spacing: -0.1vw;
-    line-height : 6vh
+    line-height : 3vh
 }
 h3{
   font-family  : inter-regular ; 
-  font-size : 1.7vw;
+  font-size : 5vw;
 letter-spacing: -0.050vw;
 line-height: 0.8;
 }
 h5{
-  font-family : neue-bold ;
-  font-size : 15px ;
+  font-family : inter-regular ;
+  font-size : 13px ;
   line-height: 0.8vw;
 
 
 }
 p{
 font-family : inter-medium;
-font-size : 15px ; 
+font-size : 13px ; 
 color : #8f8f8f ; 
-line-height: 0.9vw;
+line-height: 1.1;
 
 }
 a{
@@ -198,7 +199,7 @@ color : white ;
 }
 h5{
   font-family : hass-regular ;
-  font-size : 13px ;
+  font-size : 16px ;
   line-height: 0.8vw;
 
 
