@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import gsap from "gsap";
 import Cart from "../cart/cart.jsx";
 import {useNavigate} from 'react-router-dom'
+import { useSelector } from "react-redux";
 
 function ShopNavber(cartDetails) {
   console.log(cartDetails)
@@ -9,16 +10,15 @@ function ShopNavber(cartDetails) {
 const navigate = useNavigate()
   const cartArr = [] ; 
   cartArr.push(cartDetails)
-  console.log(cartArr)
   const [lineAnimation, setLineAnimation] = useState({
     line1: false,
     line2: false,
     line3: false,
     line4: false,
   });
-
   const [isCartOpen, setIsCartOpen] = useState(false);
-
+  
+  const cartLength = useSelector((state) => state.cart);
   // Reusable GSAP Animation Function
   const animateLine = (lineClass, isActive) => {
     gsap.to(`.${lineClass}`, {
@@ -40,7 +40,7 @@ const navigate = useNavigate()
     { id: "line1", title: "Home" , navigate : ()=> {navigate('/')}   },
     { id: "line2", title: "shop" , navigate : ()=> {navigate('/products')} },
     { id: "line3", title: "Account" },
-    { id: "line4", title: "cart" },
+    { id: "line4", title: `[ ${cartLength.length} ]` },
   ];
 
   return (
@@ -62,7 +62,7 @@ const navigate = useNavigate()
             }}
             className="flex justify-between cursor-pointer"
           >
-            <h5 onClick={section.navigate} className={`mb-3 capitalize ${index == 3 ? 'ml-[15vw]':null}  ${index == 2 ? 'ml-[5vw]':null}`}>{section.title}</h5>
+            <h5 onClick={section.navigate} className={`mb-3 capitalize ${index == 3 ? 'ml-[13vw]':null}  ${index == 2 ? 'ml-[5vw]':null}`}>{section.title}</h5>
           </div>
           {/* Static line */}
           <svg
