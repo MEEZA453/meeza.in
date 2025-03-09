@@ -39,7 +39,7 @@ const navigate = useNavigate()
   const sections = [
     { id: "line1", title: "Home" , navigate : ()=> {navigate('/')}   },
     { id: "line2", title: "shop" , navigate : ()=> {navigate('/products')} },
-    { id: "line3", title: "about" },
+    { id: "line3", title: "Account" },
     { id: "line4", title: "cart" },
   ];
 
