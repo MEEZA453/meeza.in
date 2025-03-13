@@ -10,34 +10,61 @@ function AdminAddProduct() {
   let [name, setName] = useState("");
   let [headline, setHeadline] = useState("");
   let [amount, setAmount] = useState("");
+  const [error , setError] = useState('please fill the content')
 
   const [sections, setSections] = useState([
-    { title: "Section-1", content: ["content-1", "content-2"] },
-    { title: "Section-2", content: [] },
+    { title: "", content: ["", ""] },
   ]);
 const [hastags, setHastags] = useState(['dark', 'aesthetic']);
 
 
-  let [cashOnDelivery, setCashOnDelivery] = useState("");
-  let [returnOnDelivery, setReturnOnDelivery] = useState("");
-  let [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  // let [cashOnDelivery, setCashOnDelivery] = useState("");
+  // let [returnOnDelivery, setReturnOnDelivery] = useState("");
+  // let [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [image, setSelectedImage] = useState([]);
 
   const addSections = () => {
     setSections([
       ...sections,
-      { title: `Section-${sections.length + 1}`, content: [] },
+      { title: ``, content: [] },
     ]);
   };
+
+
 
   const addContent = (sectionIndex) => {
     const updatedSections = [...sections];
     updatedSections[sectionIndex].content.push(
-      `content-${updatedSections[sectionIndex].content.length + 1}`
+      ``
     );
     setSections(updatedSections);
   };
 
+const deleteContent = (sectionIndex , contentIndex)=>{
+  setSections((prev) => 
+    prev.map((section, i) => {
+      if (i === sectionIndex) {
+
+        const newContent = section.content.filter((_, idx) => idx !== contentIndex);
+        console.log(newContent)
+        return { ...section, content: newContent }; // return updated section
+      }
+      return section; // return other sections unchanged
+    })
+  );
+}
+
+const deleteSection = ()=>{
+  console.log('section deleted')
+  
+setSections((section)=>{
+  if(section.length > 1){
+
+    return section.slice(0 , -1)
+  } 
+  return section
+})
+}
   const formSubmit = (event) => {
     event.preventDefault();
 
@@ -45,9 +72,9 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
     formData.append("name", name);
     formData.append("headline", headline);
     formData.append("amount", amount);
-    formData.append("cashOnDelivery", cashOnDelivery);
-    formData.append("returnOnDelivery", returnOnDelivery);
-    formData.append("expectedDeliveryDate", expectedDeliveryDate);
+    // formData.append("cashOnDelivery", cashOnDelivery);
+    // formData.append("returnOnDelivery", returnOnDelivery);
+    // formData.append("expectedDeliveryDate", expectedDeliveryDate);
 
     // Append images properly
     if (image.length > 0) {
@@ -69,45 +96,49 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
 
   return (
     <div>
-      <h1 className="mb-20">Admin panel</h1>
+      <h1 className="mb-20 mt-5">Admin panel</h1>
 
       <form onSubmit={formSubmit}>
+        <div className="flex gap-1">
+
         <input
           type="text"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[15vw]"
-        />
-
-        <ImageInput selectedImage={image} setSelectedImage={setSelectedImage} />
-
-        <input
+          className="bg-transparent w-[70%] py-[3px] border-[#424242] px-1 mb-2 border rounded lg:w-[15vw]"
+          />
+         <input
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount $"
-          className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[4vw]"
-        />
+          placeholder="$"
+          className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border  rounded  w-[15vw] lg:w-[4vw]"
+          />
+          </div>
 
-        <input
+
+        <ImageInput selectedImage={image} setSelectedImage={setSelectedImage} />
+
+       
+        <textarea rows={2} cols = {2}
           type="text"
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
           placeholder="Headline"
-          className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[15vw]"
+          className=" bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[70%] lg:w-[15vw]"
         />
 
-        <div className="other-information mt-20 mb-32">
-          <h3 className="mb-8">Section Information:</h3>
+        <div className="other-information lg:mt-20 lg:mb-32">
+          <h3 className="lg:mb-8 mb-2">Section Info:</h3>
 
           {sections.map((section, sectionIndex) => (
-            <div key={sectionIndex} className="w-full border border-[#424242] p-3">
+            <div key={sectionIndex} className="w-full lg:mb-7 pt-3 lg:p-3">
               <input
                 type="text"
                 placeholder="Title"
-                className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[15vw]"
+                className="bg-transparent w-full py-[3px] border-[#424242]  px-1 mb-2 border rounded lg:w-[15vw]"
                 value={section.title}
                 onChange={(e) => {
                   const updatedSections = [...sections];
@@ -116,46 +147,62 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
                 }}
               />
 
-              {section.content.map((cont, contentIndex) => (
-                <input
+              {section.content.map((cont, contentIndex , contArr) => (
+                <div className="flex">
+
+                <textarea
                   key={contentIndex}
                   type="text"
                   placeholder="Content"
-                  className="bg-transparent py-[3px] border-[#424242] px-1 mb-2 border rounded w-[15vw]"
+                  className="bg-transparent w-full py-[3px] border-[#424242] px-1 lg:mb-2 border rounded lg:w-[15vw]"
                   value={cont}
                   onChange={(e) => {
                     const updatedSections = [...sections];
                     updatedSections[sectionIndex].content[contentIndex] = e.target.value;
                     setSections(updatedSections);
                   }}
-                />
+                  />
+                  <button className="bg-white mr-2 ml-2 text-black mt-5 rounded p-1 font-[inter-regular]" type="button" onClick={()=>{deleteContent(sectionIndex , contentIndex)}}>del</button>
+
+                  </div>
               ))}
+<div className = 'flex w-full justify-between'>
+  <p className="text-red-500">please fill the {'contern'}</p>
 
               <button
                 type="button"
                 onClick={() => addContent(sectionIndex)}
-                className="bg-white text-black font-[inter-regular] p-1 ml-2 mt-4 rounded"
-              >
+                className="bg-white mt-3  text-black font-[inter-regular] p-1 ml-2  lg:mt-4 rounded"
+                >
                 Add Content
               </button>
+                </div>
             </div>
           ))}
+<div className="flex w-full mb-10 justify-start">
 
+          <button
+            type="button"
+            onClick={deleteSection}
+            className="bg-white mr-2 text-black mt-5 rounded p-1 font-[inter-regular]"
+            >
+            delete Section
+          </button>
           <button
             type="button"
             onClick={addSections}
             className="bg-white text-black mt-5 rounded p-1 font-[inter-regular]"
-          >
+            >
             Add Section
           </button>
+            </div>
         </div>
 
         <div>
-          <h3 className="mb-10">Related Product</h3>
           <TagInput  hastags = {hastags} setHastags = {setHastags}/>
         </div>
 
-        <div>
+        {/* <div>
           <h3 className="mb-12 mt-12">Other Information:</h3>
           <div className="flex mr-2 items-center">
             <div>Expected Delivery Date:</div>
@@ -214,11 +261,11 @@ const [hastags, setHastags] = useState(['dark', 'aesthetic']);
               No
             </label>
           </div>
-        </div>
+        </div> */}
 
         <button
           type="submit"
-          className="addproduct bg-white text-black mt-5 rounded p-1 font-[inter-regular]"
+          className="addproduc t bg-white text-black mt-32  ml-1  rounded p-1 font-[inter-regular]"
         >
           Add Product
         </button>

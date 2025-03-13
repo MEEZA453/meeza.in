@@ -28,10 +28,10 @@ function TagInput({hastags , setHastags}) {
           className="bg-transparent py-[3px] rounded border border-[#424242]"
         />
         <button type = 'button'
-          className="bg-white  ml-2 px-1 rounded text-black"
+          className="bg-white text-[4.5vw] w-[6.5vw] h-[6.5vw] ml-2 px-1 rounded text-black"
           onClick={addHasTags}
         >
-          ADD
+        +
         </button>
       </div>
 

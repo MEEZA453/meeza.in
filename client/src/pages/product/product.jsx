@@ -187,7 +187,7 @@ const handleCart = async (data) => {
 <div className=''>
 
        <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
-<p>{deta.expectedDeliveryDate}</p></div>
+<p>coming soon</p></div>
 <div className="flex  justify-between mb-2 "><p>cash on Delivery:</p>
 <p>{deta.cashOnDelivery ? "yes" : "no"}</p></div>
 <div className="flex  justify-between mb-2 "><p>Return on delivery:</p>
@@ -231,11 +231,11 @@ const handleCart = async (data) => {
  <div>
 
         <div className="flex  justify-between mb-2 "><p>Expected Delivery Date:</p>
-<p>{deta.expectedDeliveryDate}</p></div>
+<p>23/02/2025</p></div>
 <div className="flex  justify-between mb-2 "><p>cash on Delivery:</p>
-<p>{deta.cashOnDelivery ? "yes" : "no"}</p></div>
+<p>no</p></div>
 <div className="flex  justify-between mb-2 "><p>Return on delivery:</p>
-<p>{deta.returnOnDelivery ? "yes" : "no"}</p></div>
+<p>no</p></div>
       </div>
   
 

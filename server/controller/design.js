@@ -78,9 +78,9 @@ export const postDesign = async (req, res) => {
                 headline,
                 sections,
                 hastags,
-                expectedDeliveryDate,
-                cashOnDelivery,
-                returnOnDelivery
+                // expectedDeliveryDate,
+                // cashOnDelivery,
+                // returnOnDelivery
             } = req.body;
 
             // Parse JSON fields
@@ -98,9 +98,9 @@ export const postDesign = async (req, res) => {
                 image: imagePaths,  // Store Cloudinary URLs
                 sections: parsedSections,
                 hastags: parsedHastags,
-                expectedDeliveryDate,
-                cashOnDelivery,
-                returnOnDelivery,
+                // expectedDeliveryDate,
+                // cashOnDelivery,
+                // returnOnDelivery,
             });
 
             await product.save();

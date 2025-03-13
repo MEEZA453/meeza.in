@@ -8,8 +8,8 @@ function ImageInput({ selectedImage, setSelectedImage }) {
 
   return (
     <div>
-      <div className="w-[10vw] h-[5vw] border px-1 border-[#424242] mb-2 rounded">
-        <label htmlFor="myfile" className="px-1 opacity-75">Select a file</label>
+      <div className="lg:w-[10vw] p-3   w-[70%] lg:h-[5vw]  gap-2 border px-1 border-[#424242] mb-2 rounded">
+      
         <input
           id="myfile"
           name="image[]" // Name matches backend field
@@ -17,7 +17,7 @@ function ImageInput({ selectedImage, setSelectedImage }) {
           multiple
           type="file"
           onChange={handleChange}
-          className="w-32"
+          className="w-full lg:w-32"
         />
         <div className="flex">
           {selectedImage?.map((file, index) => (

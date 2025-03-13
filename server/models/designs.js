@@ -21,18 +21,18 @@ const productSchema = new mongoose.Schema(
       }],
     // relatedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }], // References other products
     hastags : [String],
-    expectedDeliveryDate: {
-      type: Date,
-      required: true,
-    },
-    cashOnDelivery: {
-      type: Boolean,
-      required: true,
-    },
-    returnOnDelivery: {
-      type: Boolean,
-      required: true,
-    },
+    // expectedDeliveryDate: {
+    //   type: Date,
+    //   required: true,
+    // },
+    // cashOnDelivery: {
+    //   type: Boolean,
+    //   required: true,
+    // },
+    // returnOnDelivery: {
+    //   type: Boolean,
+    //   required: true,
+    // },
   },
   { timestamps: true }
 );
