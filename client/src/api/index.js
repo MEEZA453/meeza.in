@@ -1,6 +1,6 @@
 import axios from 'axios' 
-// const url = 'https://meeza-in-8.onrender.com/' 
- const url  = 'http://localhost:8080/'
+const url = 'https://meeza-in-8.onrender.com/' 
+//  const url  = 'http://localhost:8080/'
 export const postDesign = (newPost)=> axios.post(`${url}post` , newPost)
 export const getDesign = (page = 1 , limit = 6)=> axios.get(`${url}allProducts` , page , limit )
 export const createOrder = (items)=> axios.post(`${url}payment/create-order` , items)
