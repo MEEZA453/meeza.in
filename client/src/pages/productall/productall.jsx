@@ -112,7 +112,7 @@ function ProductAll() {
                     <h4 className="text-black font-[inter-medium] text-[13px] lg:text-[0.7vw] tracking-tighter px-1">$25</h4>
                   </div>
                 </div>
-                <p className='group-hover:opacity-0'>#00{index}</p>
+                <p className='group-hover:opacity-0'>#0{index}</p>
               </div>
               <div className="absolute bottom-1 left-1 flex opacity-0 group-hover:opacity-100 duration-300">
                 <IoReturnDownForwardOutline color="white" size={20} />
