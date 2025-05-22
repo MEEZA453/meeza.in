@@ -237,19 +237,20 @@ function SelectedWorks({isBlur , setIsBlur}) {
   };
 
   return (
-    <div className="bg-black selected-works">
+    <div className="  selected-works">
       <div className="">
 
       
-      <div className="w-full  lg:text-[10px] flex justify-between border-b-[1px] border-[#6c6c6c]  pb-2 mb-1 px-1">
-        <div className="flex  gap-6 lg:gap-56">
+      <div className="w-full  lg:text-[10px] flex justify-between border-b-[1px] border-[#484848]  pb-2 mb-1 px-1">
+        <div className="flex opacity-50  gap-6 lg:gap-56">
           <h5>no:</h5>
           <h5>Designer:</h5>
 
         </div>
-        <div className="flex gap-6 lg:gap-56">
-          <h5>Title:</h5>
-        <h5>Year:</h5>
+        <div className="flex gap-6 opacity-50  lg:gap-56">
+          <h5>name:
+          </h5>
+        <h5>:year</h5>
         </div>
       </div>
 
@@ -257,8 +258,8 @@ function SelectedWorks({isBlur , setIsBlur}) {
   <div
     onClick={() => onClickAnimation(index , work)}
     key={index}
-    className={` py-1 animation-${index} relative w-full flex justify-between  ${
-      work.isOpen ? "bg-[#e0e0e0] text-[#00000022]" : ""
+    className={` py-[5px] border-b border-[#484848] animation-${index} relative w-full flex justify-between items-center ${
+      work.isOpen ? "bg-[#ffffff] text-black" : ""
     } px-1`}
   >
     {work.isOpen && (

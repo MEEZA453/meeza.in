@@ -34,15 +34,15 @@ const imageRef  = useRef(null)
 
     ])
   return (
-    <div>
+    <div className=''>
 
-        <div className='absolute top-0 w-screen z-50 flex justify-center items-center h-screen bg-black opacity-75'></div>
+        <div className='absolute top-0 w-screen e z-50 flex justify-center items-center h-screen bg-black opacity-75'></div>
 
 
 <div className='overflow-hidden relative w-screen'>
 
 
-        <div ref={imageRef} className='images flex  bg-zinc-50 w-[300vw] h-screen *:'>
+        <div ref={imageRef} className='images flex  bg-zinc-50 w-[300vw] h-screen'>
 <div className=' flex absolute gap-1 bottom-2 right-1/2'>
     <div className='rounded-full h-[5px] w-[5px] bg-black'></div>
     <div className='rounded-full h-[5px] w-[5px] bg-black'></div>

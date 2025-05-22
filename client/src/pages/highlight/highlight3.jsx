@@ -82,7 +82,7 @@ const textAnimation =()=>{
 
 
   return (
-    <div className='  '>
+    <div className='w-screen overflow-hidden'>
 
 
         <div className="sticky top-0">
@@ -95,7 +95,7 @@ const textAnimation =()=>{
 
         </div>
        
-            <div className='bg-black relative w-screen z-[9999] whole-container'>
+            <div className='bg-black relative   z-[9999] whole-container'>
                   <div className='flex flex-col items-center justify-center'>
 
 
@@ -124,8 +124,8 @@ const textAnimation =()=>{
 
         </div>  
 
-<div className="flex lg:translate-x-[15vw] mt-8 gap-[70vw]"><h5>2024</h5><h5> >SONGOKU </h5></div>
-<h3 className='w-[90%] lg:w-[35vw] leading-5 lg:leading-7 mt-20 lg:translate-x-[15vw]'> “ This  is a poster which i have made for highlight hero section and it has the version of color white , blue and yellow  the texture of this poster is good. “</h3>
+<div className="flex lg:translate-x-[15vw] mt-8 gap-[65vw]"><h5>2024</h5><h5> >SONGOKU </h5></div>
+{/* <h3 className='w-[90%] lg:w-[35vw] leading-5 lg:leading-7 mt-20 lg:translate-x-[15vw]'> “ This  is a poster which i have made for highlight hero section and it has the version of color white , blue and yellow  the texture of this poster is good. “</h3> */}
         </div>
 
 
@@ -152,7 +152,7 @@ const textAnimation =()=>{
         <SelectedWorks/>
 
         <div className='w-screen  h-[50vh] lg:h-screen  flex items-center justify-center relative'>
-           {window.innerWidth > 640 ? <div className=' text-[20vw] font-[inter-medium] tracking-tighter absolute top-0 opacity-10 '>devbymeeza</div>: null } 
+        
             <div className='flex flex-col items-center justify-center'>
                 <h1 className=' tracking-normal max-sm:text-[10vw] max-sm:leading-8'>meeza .in</h1>
                 <h3 className='lg:text-[17px] text-[15px] mt-1 lg:mt-2'>A crative enclyclopedia of Designs</h3>
