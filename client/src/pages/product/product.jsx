@@ -203,13 +203,13 @@ const handleCart = async (data) => {
 
  <div className="lg:mt-6 lg:ml-4 mx-2 my-4" >
       
-       <div className="flex items-center gap-2">
-       <h3 className='capitalize'>{deta.name}</h3>
-       <div className='bg-[#d9d9d9] h-[18px] lg:h-[1.4vw]  rounded-[2px] flex items-center justify-center'><h4  className  = 'text-black font-[inter-bold]  lg:text-[1.4vw] text-[3.9vw] tracking-tighter px-1  '>${deta.amount}</h4 ></div>
-       </div>
+  
        
        <div className = 'payment-section lg:mt-10 mt-5  px-1 lg:px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
-       <div className = ' flex justify-between h-[10vh] lg:h-[15vh] lg:w-[28vw]  '> <div><h3 className='text-black font-[inter-medium] tracking-tighter'>50+ Happy Customer</h3></div>
+       <div className = ' flex justify-between h-[8vh] lg:h-[15vh] lg:w-[28vw]  '> <div>     <div className="flex items-center gap-1">
+       <h3 className='capitalize font-[inter-medium] tracking-tight text-black'>{deta.name}</h3>
+       <div className='bg-[#202020] h-[18px] lg:h-[1.4vw]  rounded-[2px] flex items-center justify-center'><h4  className  = 'text-[#3d9d9d9] font-[inter-medium]  lg:text-[1.4vw] text-[3.7vw] tracking-tight px-1  '>${deta.amount}</h4 ></div>
+       </div></div>
        
        {/* <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
         console.log(index)
