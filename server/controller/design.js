@@ -25,11 +25,11 @@ export const getDesign = async( req , res)=>{
 export const deleteDesign = async (req, res) => {
   console.log('reach to deleteDesign')
   const { id } = req.params;
-console.log(id)
+
   try {
     // Step 1: Find the product by ID
     const product = await Product.findById(id);
-    console.log(product)
+  
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
