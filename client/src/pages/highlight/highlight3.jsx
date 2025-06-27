@@ -124,7 +124,7 @@ const textAnimation =()=>{
 
         </div>  
 
-<div className="flex lg:translate-x-[15vw] mt-8 gap-[65vw]"><h5>2024</h5><h5> >SONGOKU </h5></div>
+<div className="flex lg:translate-x-[15vw] mt-8 gap-[65vw]"><h5>2024</h5><h5>SONGOKU </h5></div>
 {/* <h3 className='w-[90%] lg:w-[35vw] leading-5 lg:leading-7 mt-20 lg:translate-x-[15vw]'> “ This  is a poster which i have made for highlight hero section and it has the version of color white , blue and yellow  the texture of this poster is good. “</h3> */}
         </div>
 
@@ -143,7 +143,7 @@ const textAnimation =()=>{
 
         </div>  
 
-<div className="flex translate-x-[5vw] lg:translate-x-[15vw] pb-3 mt-8 gap-[56vw]   lg:gap-[70vw]"><h5>2024</h5><h5> >Timeless Edition  </h5></div>
+<div className="flex translate-x-[5vw] lg:translate-x-[15vw] pb-3 mt-8 gap-[56vw]   lg:gap-[70vw]"><h5>2024</h5><h5> Timeless Edition  </h5></div>
 
         </div>
 <div className='mt-24'>
