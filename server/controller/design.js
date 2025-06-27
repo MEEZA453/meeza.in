@@ -22,11 +22,52 @@ export const getDesign = async( req , res)=>{
     
     };
     
+export const deleteDesign = async (req, res) => {
+  const { id } = req.params;
+console.log(id)
+  try {
+    // Step 1: Find the product by ID
+    const product = await Product.findById(id);
 
-export const deleteDesign = async( req , res)=>{
-    
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Step 2: Delete associated images from Cloudinary
+    if (product.image && product.image.length > 0) {
+      const deletePromises = product.image.map(async (url) => {
+        // Extract the public ID from the Cloudinary URL
+        const publicId = getCloudinaryPublicId(url);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      });
+      await Promise.all(deletePromises);
+    }
+
+    // Step 3: Delete the product from MongoDB
+    await Product.findByIdAndDelete(id);
+
+    res.status(200).json({ success: true, message: 'Product deleted successfully', id });
+  } catch (error) {
+    console.error("Delete design error:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// Helper function to extract Cloudinary public ID from URL
+function getCloudinaryPublicId(imageUrl) {
+  try {
+    const parts = imageUrl.split('/');
+    const fileName = parts[parts.length - 1]; // e.g., 1724402345533-filename.png
+    const publicId = fileName.substring(0, fileName.lastIndexOf('.')); // remove .png or .jpg
+    const folder = parts.slice(parts.indexOf("uploads")).slice(0, -1).join('/'); // e.g., uploads/folder
+    return `${folder}/${publicId}`; // full public ID for Cloudinary
+  } catch (err) {
+    console.error("Failed to parse Cloudinary public_id from URL:", imageUrl);
+    return null;
+  }
 }
-
 
 
 // Configure Cloudinary
@@ -113,53 +154,3 @@ export const postDesign = async (req, res) => {
     });
 };
 
-// export const postDesign = async (req, res) => {
-//     console.log('Reached postDesign route');
-
-//     // Use Multer to handle file upload
-//     upload(req, res, async (err) => {
-//         if (err) {
-//             console.error("Multer error:", err);
-//             return res.status(400).json({ success: false, message: "Image upload failed" });
-//         }
-
-//         try {
-//             const {
-//                 name,
-//                 amount,
-//                 headline,
-//                 sections,
-//                 hastags,
-//                 expectedDeliveryDate,
-//                 cashOnDelivery,
-//                 returnOnDelivery
-//             } = req.body;
-//             const parsedSections = sections ? JSON.parse(sections) : [];
-// const parsedHastags = hastags ? JSON.parse(hastags) : [];
-
-
-//             // Get image paths
-//             const imagePaths = req.files ? req.files.map(file => `/uploads/${file.filename}`) : ['noths'];
-
-//             // Create new product
-//             const product = new Product({
-//                 name,
-//                 amount,
-//                 headline,
-//                 image: imagePaths,
-//                 sections: parsedSections, // ✅ Use parsed array
-//                 hastags: parsedHastags,   // ✅ Use parsed array
-//                 expectedDeliveryDate,
-//                 cashOnDelivery,
-//                 returnOnDelivery,
-//             });
-
-//             await product.save();
-//             console.log("Product added successfully:", product);
-//             res.status(201).json({ success: true, product });
-//         } catch (error) {
-//             console.error("Error:", error.message);
-//             res.status(500).json({ success: false, message: error.message });
-//         }
-//     });
-// };

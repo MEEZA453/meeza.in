@@ -18,6 +18,16 @@ export const postDesign = (post) => async (dispatch) => {
       console.log('error in action : ', err.message)
     }
   }
+  export const deleteDesign = (id) => async (dispatch) => {
+  try {
+    console.log(id)
+    await api.deleteDesign(id); // Send DELETE request
+    dispatch({ type: 'DELETE_PRODUCT', payload: id }); // Optionally update the Redux state
+  } catch (err) {
+    console.log('Error deleting product:', err.message);
+  }
+};
+
 export const createOrder = (items) => async (dispatch) => {
   try {
     console.log('creating order...', items);

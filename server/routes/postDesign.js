@@ -4,6 +4,6 @@ const router = express.Router()
 
 router.get('/allproducts' ,getDesign ) ;
 router.post('/post' , postDesign) ;
-router.delete('/delete' , deleteDesign) ;
+router.delete('/delete/:id', deleteDesign); ;
 
 export default router

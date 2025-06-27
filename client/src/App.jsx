@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import store from './store/store.js'
 import Lenis from '@studio-freight/lenis';
-import Highlight from './pages/highlight/highlight.jsx';
+import Highlight from './pages/highlight/highlight3.jsx';
 import Product from './pages/product/product.jsx';
 import Signup from './pages/signup/signup.jsx';
 import Login from './pages/login/login.jsx';
@@ -30,8 +30,8 @@ const pageTransition = { type: "tween", ease: "linear", duration: .8 };
         {/* Lenis will manage scrolling for this container */}
         <div data-scroll-container>
           <Routes>
-            <Route path="/" element={<Highlight3 />} />
-            {/* <Route path="/highlight3" element={<Highlight3 />} /> */}
+            <Route path="/" element={<Highlight />} />
+    
 
             
             <Route path="/:designname" element={<Product />} />
