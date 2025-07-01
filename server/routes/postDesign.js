@@ -3,7 +3,7 @@ import {getDesign , postDesign , deleteDesign , pingServer}  from '../controller
 const router = express.Router()
 
 router.get('/allproducts' ,getDesign ) ;
-app.get("/ping", pingServer);
+router.get("/ping", pingServer);
 
 router.post('/post' , postDesign) ;
 router.delete('/delete/:id', deleteDesign); ;
