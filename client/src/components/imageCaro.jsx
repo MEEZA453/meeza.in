@@ -1,5 +1,5 @@
 import React from 'react'
-import mockUp1 from '../assets/images/mockups/freedom mockup2.webp'
+import mockUp1 from '../assets/images/mockups/img1.webp'
 import mockUp2 from '../assets/images/mockups/mockup2.jpg'
 import mockUp3 from '../assets/images/mockups/mockup3.jpg'
 import {useState , useEffect ,useRef} from 'react'
@@ -36,7 +36,7 @@ const imageRef  = useRef(null)
   return (
     <div className=''>
 
-        <div className='absolute top-0 w-screen e z-50 flex justify-center items-center h-screen bg-black opacity-75'></div>
+        <div className='absolute top-0 w-screen e z-50 flex justify-center items-center h-screen bg-black opacity-50'></div>
 
 
 <div className='overflow-hidden relative w-screen'>

@@ -16,7 +16,7 @@ function AdminAddProduct() {
 
   // Fetch designs using getDesign
   useEffect(() => {
-    dispatch(getDesign(1)); // Fetch first page; extend if you want all pages
+    dispatch(getDesign(1)); // Fetch first page; extend if you awant all pages
   }, [dispatch]);
 
   const addSections = () => setSections([...sections, { title: "", content: [] }]);

@@ -109,10 +109,6 @@
 
 @layer base {
 
-  html{
-    scroll-behavior: smooth;
-    background-color: black;
-}
 
     body {
         background-color: black;
