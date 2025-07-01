@@ -6,6 +6,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+export const pingServer = (req, res) => {
+  console.log("Ping received at:", new Date().toISOString());
+  res.status(200).send("Server is awake!");
+};
 export const getDesign = async( req , res)=>{
 
     try {
