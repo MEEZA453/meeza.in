@@ -1,17 +1,9 @@
 import React from 'react'
 import ImageCaro from '../../components/imageCaro.jsx'
-import songoku from '../../assets/images/posters/songoku.webp'
-import songoku2 from '../../assets/images/posters/goku2.webp'
-import songoku3 from '../../assets/images/posters/goku3.jpg'
-import sec11 from '../../assets/images/posters/raven.webp'
-import sec12 from '../../assets/images/posters/raven.webp'
-
-import sec01 from '../../assets/images/posters/sec01.webp'
-import sec02 from '../../assets/images/posters/sec02.webp'
-import sec03 from '../../assets/images/posters/highlight2.webp'
-
-
-
+import abundance from '../../assets/images/posters/abundance.webp'
+import freedom from '../../assets/images/posters/freedom.webp'
+import nostalogia from '../../assets/images/posters/nostalogia2x.jpg'
+import timeless from  '../../assets/images/posters/timeless.webp'
 import love from '../../assets/images/posters/valentine.webp'
 import SelectedWorks from '../../components/selectedWorks.jsx'
 import Highlight from '../../pages/highlight/highlight.jsx'
@@ -117,22 +109,22 @@ const textAnimation =()=>{
         <div className="imagesContainer -translate-x-[2vw]  lg:translate-x-[20vw] flex gap-2 lg:gap-5">
             <div className  = 'image1 rotate-[4deg] translate-x-[30vw]'>
                 <p className='mb-1'>v1</p>
-                <img className=' w-[30vw] lg:w-[20vw]' src={sec01} alt="" />
+                <img className=' w-[30vw] lg:w-[20vw]' src={abundance} alt="" />
             </div>
 
             <div className  = 'image2'>
                 <p className='mb-1'>v1</p>
-                <img className=' w-[30vw] lg:w-[20vw]'  src={sec02} alt="" />
+                <img className=' w-[30vw] lg:w-[20vw]'  src={freedom} alt="" />
             </div>
 
             <div className  = 'image3 -translate-x-[35vw] -rotate-[4deg] w-[30vw] lg:w-[20vw]'>
                 <p className='mb-1'>v1</p>  
-                <img  className=' ' src={sec03} alt="" />
+                <img  className=' ' src={nostalogia} alt="" />
             </div>
 
         </div>  
 
-<div className="flex lg:translate-x-[15vw] mt-8 gap-[65vw]"><h5>2024</h5><h5>SONGOKU </h5></div>
+<div className="flex lg:translate-x-[15vw] mt-8 gap-[65vw]"><h5>2024</h5><h5>Surrelism </h5></div>
 {/* <h3 className='w-[90%] lg:w-[35vw] leading-5 lg:leading-7 mt-20 lg:translate-x-[15vw]'> “ This  is a poster which i have made for highlight hero section and it has the version of color white , blue and yellow  the texture of this poster is good. “</h3> */}
         </div>
 
@@ -141,12 +133,12 @@ const textAnimation =()=>{
         <div className="imagesContainer   translate-x-[20vw] flex gap-5">
             <div className  = 'image4 translate-x-[15vw] -rotate-[3deg]'>
                 <p className='mb-1'>v1</p>
-                <img className= ' w-[30vw] lg:w-[20vw]'  src={sec11} alt="" />
+                <img className= ' w-[30vw] lg:w-[20vw]'  src={love} alt="" />
             </div>
 
             <div className  = 'image5 rotate-[5deg]  -translate-x-[20vw]'>
                 <p className='mb-1'>v1</p>  
-                <img  className='w-[30vw] lg:w-[20vw]' src={sec12} alt="" />
+                <img  className='w-[30vw] lg:w-[20vw]' src={timeless} alt="" />
             </div>
 
         </div>  

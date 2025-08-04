@@ -40,7 +40,6 @@
     "redux-thunk": "^3.1.0",
     "styled-components": "^6.1.15",
     "tailwind-merge": "^2.5.5",
-    "tailwindcss": "^3.4.15",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
@@ -49,13 +48,14 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9.13.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
-    "postcss": "^8.4.49",
+    "postcss": "^8.5.6",
+    "tailwindcss": "3.4.x",
     "vite": "^5.4.11"
   }
 }

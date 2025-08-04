@@ -92,7 +92,7 @@ function ProductAll() {
       <div className="z-[999] sticky top-0">
         {/* <ShopNavber /> */}
       </div>
-      <div className="lg:grid lg:grid-cols-4 grid grid-cols-2 gap-0">
+      <div className="lg:grid lg:grid-cols-6 grid grid-cols-2 gap-0">
         {designs.length === 0 && loading ? (
           <div className="h-screen w-screen flex justify-center items-center">
             <Loading />
@@ -102,12 +102,13 @@ function ProductAll() {
             <div
               key={preDetails.name}
               onClick={() => goToProduct(preDetails)}
-              className={`z-[100] group pb-2  border-[#8D8D8D] ${index % 2 === 0 ? "border-r-[1px]" : ""} border-b-[1px] relative flex flex-col items-center`}
+              className={`z-[100] group pb-2 
+                  border-[#515151] ${index % 2 === 0 ? "max-sm:border-r-[1px]" : ""} lg:border-r-[1px] lg:h-[21vw] border-b-[1px] relative flex flex-col items-center`}
             >
-              <img className="object-contain  z-10 size-[85%] mt-3 duration-300 group-hover:-translate-y-4" src={preDetails.image[0]} alt={preDetails.name} />
+              <img className="object-contain  z-10 lg:size-[75%] size-[85%] mt-3 lg:mt-12 duration-300 group-hover:-translate-y-4" src={preDetails.image[0]} alt={preDetails.name} />
               <div className="absolute bottom-1 pb-1 w-[98%] flex justify-between items-center">
                 <div className="flex items-center duration-300 group-hover:-translate-y-4">
-                  <p className="text-white uppercase ml-1">{preDetails.name}</p>
+                  <p className="text-white capitalize ml-1">{preDetails.name}</p>
                   <div className="bg-[#d9d9d9] ml-1 opacity-0 group-hover:opacity-100 duration-300 h-4  lg:h-[0.7vw] rounded-[2px] flex items-center justify-center">
                     <h4 className="text-black font-[inter-medium] text-[13px] lg:text-[0.7vw] tracking-tighter px-1">$25</h4>
                   </div>

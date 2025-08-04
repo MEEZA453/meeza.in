@@ -119,35 +119,20 @@ export const postDesign = async (req, res) => {
         }
 
         try {
-            const {
-                name,
-                amount,
-                headline,
-                sections,
-                hastags,
-                // expectedDeliveryDate,
-                // cashOnDelivery,
-                // returnOnDelivery
-            } = req.body;
+            const { name, amount, sections, hastags } = req.body;
 
-            // Parse JSON fields
             const parsedSections = sections ? JSON.parse(sections) : [];
             const parsedHastags = hastags ? JSON.parse(hastags) : [];
 
-            // Get Cloudinary image URLs
             const imagePaths = req.files ? req.files.map(file => file.path) : [];
 
-            // Create new product
             const product = new Product({
                 name,
                 amount,
-                headline,
-                image: imagePaths,  // Store Cloudinary URLs
+                image: imagePaths,
                 sections: parsedSections,
                 hastags: parsedHastags,
-                // expectedDeliveryDate,
-                // cashOnDelivery,
-                // returnOnDelivery,
+                postedBy: req.user.id, // store user ID from JWT
             });
 
             await product.save();

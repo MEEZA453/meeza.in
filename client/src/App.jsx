@@ -30,14 +30,14 @@ const pageTransition = { type: "tween", ease: "linear", duration: .8 };
         {/* Lenis will manage scrolling for this container */}
         <div data-scroll-container>
           <Routes>
-            {/* <Route path="/" element={<Highlight />} /> */}
+            <Route path="/" element={<Highlight />} />
     
 
             
             <Route path="/:designname" element={<Product />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Products />} />
+            <Route path="/products" element={<Products />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/test-code" element={<TestCode />} />
             <Route path="/payment" element={<RazorPayCheckout />} />

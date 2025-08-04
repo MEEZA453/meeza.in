@@ -44,7 +44,7 @@ const navigate = useNavigate()
   ];
 
   return (
-    <div className="flex bg-black   bg-opacity-30   justify-between relative">
+    <div className="flex bg-black   bg-opacity-80   justify-between relative">
       {sections.map((section, index) => (
         <div
           key={section.id}
@@ -66,17 +66,17 @@ const navigate = useNavigate()
           </div>
           {/* Static line */}
           <svg
-            className="w-[24vw]"
+            className="w-[24.5vw]"
             height="1"
             viewBox="0 0 470 1"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <line x1="0" y1="0.5" x2="470" y2="0.5" strokeWidth={0.5} stroke="white" />
+            <line x1="0" y1="0.5" x2="490" y2="0.5" strokeWidth={0.5} stroke="white" />
           </svg>
           {/* Animated line */}
           <svg
-            className="w-[24vw]"
+            className="w-[24.5vw]"
             height="1"
             viewBox="0 0 470 1"
             fill="none"

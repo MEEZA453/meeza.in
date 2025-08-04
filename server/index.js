@@ -8,7 +8,8 @@ import designRoute from './routes/postDesign.js';
 import highlightDesignRoute from './routes/postHighlightDesign.js';
 import paymentRoute from './routes/payment.js'
 import cartRoute from './routes/cart.js'
-
+import userRoute from './routes/user.js'
+import favRoute from './routes/favourait.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -44,6 +45,8 @@ app.post('/upload', upload.single('image'), (req, res) => {
 
 // Routes
 app.use('/', designRoute);
+app.use("/user", userRoute);
+app.use('/fav', favRoute)
 app.use('/highlight', highlightDesignRoute);
 app.use('/payment' , paymentRoute )
 app.use('/cart' , cartRoute)

@@ -208,7 +208,7 @@ const handleCart = async (data) => {
        <div className = 'payment-section lg:mt-10 mt-5  px-1 lg:px-2 py-4 rounded-[3px] bg-[#d9d9d9]'>
        <div className = ' flex justify-between h-[8vh] lg:h-[15vh] lg:w-[28vw]  '> <div>     <div className="flex items-center gap-1">
        <h3 className='capitalize font-[inter-medium] tracking-tight text-black'>{deta.name}</h3>
-       <div className='bg-[#202020] h-[18px] lg:h-[1.4vw]  rounded-[2px] flex items-center justify-center'><h4  className  = 'text-[#3d9d9d9] font-[inter-medium]  lg:text-[1.4vw] text-[3.7vw] tracking-tight px-1  '>${deta.amount}</h4 ></div>
+       <h4  className  = 'text-[#3d9d9d9]  bg-black px-1.5 py-1 tracking-tight  rounded '>${deta.amount}</h4 >
        </div></div>
        
        {/* <div className='customer-profiles flex'>{detail.customerReviews.map((custmerDetails , index)=>{
@@ -339,7 +339,7 @@ const handleCart = async (data) => {
   })
 }
 <div className='mt-4'>
-<h2 className='font-[inter-regular]  tracking-tight text-[6vw] border-t-[1px]  pl-3 py-1 border-[#8D8D8D]'>Releted Products </h2>
+<h2 className='  tracking-tight  border-t-[1px]  pl-3 py-1 lg:py-4 border-[#8D8D8D]'>Releted Products </h2>
 <div className='border-t-[1px]  border-[#8D8D8D]'>
 
 <ProductAll/>
