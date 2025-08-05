@@ -57,9 +57,15 @@ export const loginUser = async (req, res) => {
 };
 export const getProductsByUser = async (req, res) => {
   const { id } = req.params;
-
+console.log(id ,' reached to the get user product')
   try {
-    const products = await Product.find({ id: id }).populate("user");
+    const user = await User.findOne({ id }); // Find user by custom ID
+console.log(user)
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const products = await Product.find({ postedBy: user._id }).populate("postedBy");
     console.log(products)
     res.status(200).json(products);
   } catch (error) {
