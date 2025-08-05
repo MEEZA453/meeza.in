@@ -88,7 +88,6 @@ const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: "uploads", // Cloudinary folder
-        format: async (req, file) => "png", // Change format if needed
         public_id: (req, file) => Date.now() + "-" + file.originalname,
     },
 });
