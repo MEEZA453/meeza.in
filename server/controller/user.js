@@ -1,4 +1,5 @@
 import User from "../models/user.js";
+import Product from '../models/designs.js'
 import bcrypt from "bcryptjs";
 import { generateToken } from "../utils/generateToken.js";
 
@@ -52,5 +53,16 @@ export const loginUser = async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+export const getProductsByUser = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const products = await Product.find({ id: id }).populate("user");
+    console.log(products)
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch user's products", error });
   }
 };
