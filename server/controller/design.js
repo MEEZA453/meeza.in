@@ -119,10 +119,11 @@ export const postDesign = async (req, res) => {
         }
 
         try {
-            const { name, amount, sections, hastags } = req.body;
+            const { name, amount,driveLink ,  sections,  faq , hastags } = req.body;
 
             const parsedSections = sections ? JSON.parse(sections) : [];
             const parsedHastags = hastags ? JSON.parse(hastags) : [];
+            const parsedFaq = faq ? JSON.parse(faq) : [];
 
             const imagePaths = req.files ? req.files.map(file => file.path) : [];
 
@@ -130,7 +131,9 @@ export const postDesign = async (req, res) => {
                 name,
                 amount,
                 image: imagePaths,
+            driveLink ,
                 sections: parsedSections,
+                faq : parsedFaq,
                 hastags: parsedHastags,
                 postedBy: req.user.id, // store user ID from JWT
             });

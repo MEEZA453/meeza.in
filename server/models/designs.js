@@ -12,10 +12,13 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
     image: [],
+   driveLink : {type : String , required : true},
     amount: {
       type: Number,
       required: true,
     },
+
+    faq : [{question :{type : String } , answer : {type : String}}],
 
     sections: [
       {
