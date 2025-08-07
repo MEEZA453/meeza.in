@@ -28,12 +28,12 @@ export const googleLogin = async (req, res) => {
 
     if (!user) {
       user = await User.create({
-        id :sub,
+
         name,
         email,
         googleId: sub,
         profile: picture,
-        password: '', // Not needed for Google auth
+        password: '',
        
       });
     }
@@ -44,7 +44,8 @@ export const googleLogin = async (req, res) => {
       name: user.name,
       email: user.email,
       profile: user.profile,
-          
+      instagram : user.instagram,
+    bio : user.bio, 
       token: generateToken(user._id),
     });
     console.log('account created successfully')

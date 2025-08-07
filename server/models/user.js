@@ -9,8 +9,17 @@ const userSchema = new mongoose.Schema({
   },
   googleId: {
     type: String,
+    require : true,
     unique: true,
+    sparse: true, // allows it to be null initially
+
   },
+  favourites: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product", // or whatever model your favourites reference
+    }
+  ],
   profile: String,
   handle: {
     type: String,
@@ -18,6 +27,8 @@ const userSchema = new mongoose.Schema({
     sparse: true, // allows it to be null initially
   },
   password: String,
+  instagram : String,
+  bio : String
 });
 
 export default mongoose.model('User', userSchema);
