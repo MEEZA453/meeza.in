@@ -18,3 +18,20 @@ console.log('token is',token)
         res.status(401).json({ success: false, message: "Invalid Token" });
     }
 };
+export const verifyIsUser = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET); // use same secret as in `verifyToken`
+      req.user = decoded;
+    } catch (err) {
+      req.user = null; // Token invalid
+    }
+  } else {
+    req.user = null; // No token provided
+  }
+
+  next();
+};

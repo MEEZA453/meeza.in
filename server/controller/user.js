@@ -61,13 +61,13 @@ export const getProductsByUser = async (req, res) => {
 console.log(handle ,' reached to the get user product')
   try {
     const user = await User.findOne({ handle }); // Find user by custom ID
-console.log(user)
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     const products = await Product.find({ postedBy: user._id }).populate("postedBy");
-    console.log(products)
+
     res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch user's products", error });
@@ -83,7 +83,7 @@ export const setHandle = async (req, res) => {
 
   try {
     const user = await User.findById(userId);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -107,7 +107,7 @@ console.log('handle claimed')
 
 export const getUserByHandle = async (req, res) => {
   const { handle } = req.params;
- console.log(handle)
+
   try {
     if (!handle) {
       return res.status(400).json({ message: 'Handle is required' });
@@ -135,7 +135,7 @@ export const updateUserProfile = async (req, res) => {
     const { displayName, website, instagram, bio } = req.body;
 
     const user = await User.findById(userId);
-    console.log(user)
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
     // Replace old profile image if new one is uploaded
