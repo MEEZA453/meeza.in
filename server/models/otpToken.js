@@ -13,5 +13,5 @@ otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const OtpToken = mongoose.model('OtpToken', otpSchema);
 
-export default OtpToken;
+export default OtpToken ;
  
