@@ -1,5 +1,16 @@
 import express from "express";
-import { registerUser, loginUser , getProductsByUser , setHandle , updateUserProfile, getUserByHandle} from "../controller/user.js";
+import {
+  registerUser,
+  loginUser,
+  getProductsByUser,
+  setHandle,
+  updateUserProfile,
+  getUserByHandle,
+
+verifyOtp,
+  sendOtp
+} from "../controller/user.js";
+
 import { googleLogin } from "../controller/googleLogin.js";
 import { verifyToken } from '../middleweres/auth.js';
 import { upload } from "../config/cloudinery.js";
@@ -12,9 +23,19 @@ router.get('/getProductById/:handle', getProductsByUser);
 
 // Login existing user
 router.post("/login", loginUser);
-router.post ("/google-login" , googleLogin)
+router.post("/google-login", googleLogin);
+
+// Set user handle
 router.post("/handle", setHandle);
+
+// OTP routes
+router.post("/send-otp", sendOtp);  // send OTP to email
+router.post("/verify-otp", verifyOtp);  // verify OTP
+
+// Get user by handle
 router.get("/:handle", getUserByHandle);
 
+// Update user profile
 router.put('/:id/profile', verifyToken, upload.single('image'), updateUserProfile);
+
 export default router;
