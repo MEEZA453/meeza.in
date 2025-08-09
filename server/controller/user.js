@@ -1,6 +1,6 @@
 import User from "../models/user.js";
 
-import OtpToken from '../models/otpToken.js';
+import OtpToken from '../models/OtpToken.js';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import Product from '../models/designs.js'
