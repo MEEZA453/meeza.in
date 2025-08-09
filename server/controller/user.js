@@ -17,7 +17,7 @@ const OTP_TTL_MINUTES = 10;
 
 export const registerUser = async (req, res) => {
   console.log('reached to the register user')
-  const { name, id, password, profile } = req.body;
+  const { name , id, password, profile } = req.body;
 
   try {
     const existingUser = await User.findOne({ id });
