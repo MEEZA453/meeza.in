@@ -9,6 +9,7 @@ import highlightDesignRoute from './routes/postHighlightDesign.js';
 import paymentRoute from './routes/payment.js'
 import cartRoute from './routes/cart.js'
 import userRoute from './routes/user.js'
+import postRoute from './routes/post.js'
 import favRoute from './routes/favourait.js'
 // Define the server port
 const PORT = env.PORT || 8080;
@@ -45,6 +46,7 @@ app.post('/upload', upload.single('image'), (req, res) => {
 
 // Routes
 app.use('/', designRoute);
+app.use('/post',postRoute)
 app.use("/user", userRoute);
 app.use('/fav', favRoute)
 app.use('/highlight', highlightDesignRoute);

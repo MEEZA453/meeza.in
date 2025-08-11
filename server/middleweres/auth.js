@@ -1,7 +1,7 @@
 // middleware/auth.js
 import jwt from "jsonwebtoken";
 
-export const verifyToken = (req, res, next) => {
+export const     verifyToken = (req, res, next) => {
     console.log('reached to authentication')
     const token = req.headers.authorization?.split(" ")[1]; // Expecting "Bearer <token>"
 console.log('token is',token)
