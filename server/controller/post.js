@@ -76,16 +76,54 @@ export const getPostById = async (req, res) => {
   }
 };
 
+// ✅ Delete post by postId
+export const deletePost = async (req, res) => {
+  console.log('Deleting post...');
+  try {
+    const { id } = req.params;
+    const post = await Post.findById(id);
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // ✅ Allow only post creator or admin to delete
+    if (post.createdBy.toString() !== req.user.id && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Not authorized to delete this post" });
+    }
+
+    // ✅ Delete images from Cloudinary
+    if (post.images && post.images.length > 0) {
+      await Promise.all(
+        post.images.map(async (imageUrl) => {
+          const publicId = imageUrl.split("/").slice(-2).join("/").split(".")[0];
+          await cloudinary.uploader.destroy(publicId);
+        })
+      );
+    }
+
+    await Post.findByIdAndDelete(id);
+    console.log('Post deleted successfully');
+    res.json({ message: "Post deleted successfully" });
+
+  } catch (err) {
+    console.error("Post deletion failed:", err);
+    res.status(500).json({ message: err.message || "Internal server error" });
+  }
+};
+
+
 // ✅ Vote for a post (one per user, updates if exists)
 export const votePost = async (req, res) => {
     console.log('posting votes')
   try {
     const { creativity, aesthetics, composition, emotion } = req.body;
+    console.log(creativity , aesthetics, composition , emotion  )
     const post = await Post.findById(req.params.id)
+   
       .populate("votes.user", "name profile handle");
 
     if (!post) return res.status(404).json({ message: "Post not found" });
-
     const userId = req.user.id;
     const existingVote = post.votes.find(v => v.user._id.toString() === userId);
 
@@ -105,13 +143,14 @@ export const votePost = async (req, res) => {
     }
 
     await post.save();
-
+console.log(post)
 console.log('vote posted successfully')
     const updatedPost = await Post.findById(req.params.id)
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
 
     res.json(updatedPost);
+    console.log(updatedPost)
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
