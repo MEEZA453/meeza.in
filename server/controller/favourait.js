@@ -10,7 +10,7 @@ console.log(userId)
 
     if (!user.favourites.includes(designId)) {
       user.favourites.push(designId);
-      console.log(user)
+
       await user.save();
     }
 console.log('added to fav')
@@ -55,16 +55,14 @@ export const getFavoritesByHandle = async (req, res) => {
     const requestedHandle = req.params.handle;
     const requesterUserId = req.user?.id || null;
 
-    console.log('Reached getFavoritesByHandle for handle:', requestedHandle);
 
     const targetUser = await User.findOne({ handle: requestedHandle }).populate('favourites');
-console.log(targetUser.favourites)
+
     if (!targetUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     const isUser = requesterUserId && targetUser._id.toString() === requesterUserId;
-console.log(isUser)
     return res.status(200).json({
       success: true,
       favourites: targetUser.favourites,

@@ -9,26 +9,39 @@ const userSchema = new mongoose.Schema({
   },
   googleId: {
     type: String,
-    require : true,
+    require: true,
     unique: true,
-    sparse: true, // allows it to be null initially
-
+    sparse: true,
   },
   favourites: [
     {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product", // or whatever model your favourites reference
+      ref: "Product",
     }
   ],
   profile: String,
   handle: {
     type: String,
     unique: true,
-    sparse: true, // allows it to be null initially
+    sparse: true,
   },
   password: String,
-  instagram : String,
-  bio : String
+  instagram: String,
+  bio: String,
+
+  // Follower / Following fields
+  followers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    }
+  ],
+  following: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    }
+  ]
 });
 
 export default mongoose.model('User', userSchema);

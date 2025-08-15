@@ -19,6 +19,7 @@ export const getDesign = async( req , res)=>{
         const skip = (page - 1) * limit;
         console.log('reached to the get design')
         const postedDesigns = await Product.find().skip(skip).limit(limit)
+        .populate("postedBy", "name profile handle")
         res.json(postedDesigns)
     } catch (error) {
         console.log('controller err:', error)
@@ -138,7 +139,7 @@ export const postDesign = async (req, res) => {
             });
 
             await product.save();
-            console.log("Product added successfully:", product);
+            console.log("Product added successfully:");
             res.status(201).json({ success: true, product });
         } catch (error) {
             console.error("Error:", error.message);

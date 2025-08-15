@@ -1,4 +1,5 @@
 import Post from "../models/post.js";
+ import User from "../models/user.js";
 import { cloudinary } from "../config/cloudinery.js";
 // ✅ Create a post
 export const createPost = async (req, res) => {
@@ -72,6 +73,35 @@ export const getPostById = async (req, res) => {
     res.json(post);
     console.log('got the post')
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+export const getPostsByHandle = async (req, res) => {
+  console.log('Getting posts by handle:', req.params.handle);
+
+  try {
+    // Step 1: Find the user by handle
+    const user = await User.findOne({ handle: req.params.handle });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Step 2: Find posts created by this user
+    const posts = await Post.find({ createdBy: user._id })
+      .populate("createdBy", "name profile handle")
+      .populate("votes.user", "name profile handle")
+      .sort({ createdAt: -1 });
+
+    if (!posts.length) {
+      return res.status(404).json({ message: "No posts found for this handle" });
+    }
+
+    res.json(posts);
+    console.log(`Got ${posts.length} post(s) for handle:`, req.params.handle);
+
+
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
