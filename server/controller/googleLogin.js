@@ -25,7 +25,7 @@ export const googleLogin = async (req, res) => {
 
     // 2. Check if user exists or create one
     let user = await User.findOne({ email });
-
+ let isAlreadyUser = true;
     if (!user) {
       user = await User.create({
 
@@ -47,6 +47,7 @@ export const googleLogin = async (req, res) => {
       instagram : user.instagram,
     bio : user.bio, 
       token: generateToken(user._id),
+      isAlreadyUser,
     });
     console.log('account created successfully')
   } catch (err) {

@@ -34,20 +34,6 @@ console.log('removed fav')
     res.status(500).json({ success: false, message: err.message });
   }
 };
-// export const getFavorites = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     console.log('reach to get fav🌶️')
-//     const user = await User.findById(userId).populate('favourites');
-//     res.status(200).json({ success: true, favourites: user.favourites });
-   
-//   } catch (err) {
-//     res.status(500).json({ success: false, message: err.message });
-//   }
-// };
-
-// backend/controllers/favController.js
-
 
 
 export const getFavoritesByHandle = async (req, res) => {
@@ -56,7 +42,13 @@ export const getFavoritesByHandle = async (req, res) => {
     const requesterUserId = req.user?.id || null;
 
 
-    const targetUser = await User.findOne({ handle: requestedHandle }).populate('favourites');
+    const targetUser = await User.findOne({ handle: requestedHandle })   .populate({
+        path: 'favourites',
+        populate: [
+          { path: 'createdBy', select: 'name profile handle' },
+          { path: 'votes.user', select: 'name profile handle' }
+        ]
+      });;
 
     if (!targetUser) {
       return res.status(404).json({ success: false, message: 'User not found' });

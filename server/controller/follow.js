@@ -2,6 +2,7 @@ import User from "../models/user.js";
 
 // Follow a user
 export const followUser = async (req, res) => {
+  console.log('got follow request')
   try {
     const userId = req.user.id; // the one doing the follow
     const targetId = req.params.id; // the one being followed
@@ -27,6 +28,7 @@ export const followUser = async (req, res) => {
 
     await user.save();
     await targetUser.save();
+  console.log('following')
 
     res.status(200).json({ message: "Followed successfully" });
   } catch (error) {
@@ -36,6 +38,8 @@ export const followUser = async (req, res) => {
 
 // Unfollow a user
 export const unfollowUser = async (req, res) => {
+  console.log('got unfollow request')
+  
   try {
     const userId = req.user.id;
     const targetId = req.params.id;
@@ -58,7 +62,7 @@ export const unfollowUser = async (req, res) => {
 
     await user.save();
     await targetUser.save();
-
+console.log('unfollower')
     res.status(200).json({ message: "Unfollowed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -79,6 +83,7 @@ export const getFollowers = async (req, res) => {
 
 // Get following
 export const getFollowing = async (req, res) => {
+  console.log('got get following req')
   try {
     const user = await User.findOne({ handle: req.params.handle }).populate("following", "name handle profile");
     if (!user) return res.status(404).json({ message: "User not found" });
