@@ -44,12 +44,13 @@ export const googleLogin = async (req, res) => {
       name: user.name,
       email: user.email,
       profile: user.profile,
+      handle : user.handle,
       instagram : user.instagram,
     bio : user.bio, 
       token: generateToken(user._id),
       isAlreadyUser,
     });
-    console.log('account created successfully')
+    console.log('account created successfully of', user.handle)
   } catch (err) {
     
     console.log('Google login error:', err.message);
