@@ -7,7 +7,7 @@ export const createPost = async (req, res) => {
   try {
     const { name, description, category, hashtags, voteFields } = req.body;
 
-    if (!name || !description || !category) {
+    if (!name || !category) {
       return res.status(400).json({ message: "Required fields missing" });
     }
 
@@ -57,6 +57,32 @@ export const getPosts = async (req, res) => {
   }
     console.log('got all posts.')
 
+};
+export const searchPosts = async (req, res) => {
+  try {
+    const { query } = req.query; // example: /search?query=design
+
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+
+    const posts = await Post.find({
+      $or: [
+        { name: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } },
+        { category: { $regex: query, $options: "i" } },
+        { hashtags: { $regex: query, $options: "i" } }, // if hashtags are strings
+      ],
+    })
+      .populate("createdBy", "name profile handle")
+      .populate("votes.user", "name profile handle")
+      .limit(20);
+
+    return res.status(200).json(posts);
+  } catch (error) {
+    console.error("Error in searchPosts:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
 };
 
 // ✅ Get single post by ID (with votes populated)

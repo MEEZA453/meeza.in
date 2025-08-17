@@ -8,7 +8,8 @@ import {
   getUserByHandle,
 
 verifyOtp,
-  sendOtp
+  sendOtp,
+  searchUsers
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -45,6 +46,7 @@ router.post("/unfollow/:id", verifyToken, unfollowUser);
 // Public followers/following list by handle
 router.get("/:handle/followers", getFollowers);
 router.get("/:handle/following", getFollowing);
+router.get("/search/users", verifyToken, searchUsers);
 
 
 export default router;

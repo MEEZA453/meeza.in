@@ -27,6 +27,42 @@ export const getDesign = async( req , res)=>{
     
     };
     
+    export const searchDesigns = async (req, res) => {
+  try {
+    const { query } = req.query; // example: /search?query=poster
+
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+
+    // optional pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const designs = await Product.find({
+      $or: [
+        { name: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } },
+        { category: { $regex: query, $options: "i" } },
+        { tags: { $regex: query, $options: "i" } }, // if your model has tags
+      ],
+    })
+      .populate("postedBy", "name profile handle")
+      .skip(skip)
+      .limit(limit);
+
+    return res.status(200).json({
+      page,
+      limit,
+      count: designs.length,
+      results: designs,
+    });
+  } catch (error) {
+    console.error("Error in searchDesigns:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 export const deleteDesign = async (req, res) => {
   console.log('reach to deleteDesign')
   const { id } = req.params;

@@ -7,7 +7,8 @@ import {
   votePost,
   getVotesForPost,
   deletePost,
-  getPostsByHandle
+  getPostsByHandle,
+  searchPosts
 } from "../controller/post.js";
 import {verifyToken} from '../middleweres/auth.js'
 
@@ -20,5 +21,6 @@ router.get('/postByHandle/:handle' , getPostsByHandle)              // Get post 
 router.post("/:id/vote", verifyToken, votePost);     // Vote on post
 router.get("/:id/votes", getVotesForPost);       // Get votes for a post
 router.delete("/deletePost/:id", verifyToken, deletePost);
+router.get("/search/posts", searchPosts);
 
 export default router;

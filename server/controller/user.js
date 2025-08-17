@@ -15,6 +15,66 @@ const JWT_SECRET = process.env.JWT_SECRET
 const OTP_TTL_MINUTES = 10;
 
 
+export const getUserByHandle = async (req, res) => {
+  console.log('got the user')
+  const { handle } = req.params;
+
+  try {
+    if (!handle) {
+      return res.status(400).json({ message: 'Handle is required' });
+    }
+
+
+    const user = await User.findOne({ handle });
+const requesterUserId = req.user?.id?.toString() || null;
+
+console.log(req.user)
+console.log('requested user is ' + requesterUserId)
+    const isUser = requesterUserId ? user._id.toString() === requesterUserId : false;
+
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log(user ,'is he user:', isUser)
+    return res.status(200).json({user , isUser});
+  } catch (error) {
+    console.error('Error in getUserByHandle:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+
+// In controller/user.js
+export const searchUsers = async (req, res) => {
+  try {
+    const { query } = req.query; // example: /search?query=mee
+
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+
+    // Case-insensitive regex search on handle or name
+    const users = await User.find({
+      $or: [
+        { handle: { $regex: query, $options: "i" } },
+        { name: { $regex: query, $options: "i" } },
+        { email: { $regex: query, $options: "i" } },
+      ],
+    })
+      .select("-password -__v") // hide sensitive fields
+      .limit(20); // limit results
+
+    return res.status(200).json(users);
+  } catch (error) {
+    console.error("Error in searchUsers:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
 export const registerUser = async (req, res) => {
   console.log('reached to the register user')
   const { name , id, password, profile } = req.body;
@@ -115,36 +175,6 @@ console.log('handle claimed')
   }
 };
 
-
-export const getUserByHandle = async (req, res) => {
-  console.log('got the user')
-  const { handle } = req.params;
-
-  try {
-    if (!handle) {
-      return res.status(400).json({ message: 'Handle is required' });
-    }
-
-
-    const user = await User.findOne({ handle });
-const requesterUserId = req.user?.id?.toString() || null;
-
-console.log(req.user)
-console.log('requested user is ' + requesterUserId)
-    const isUser = requesterUserId ? user._id.toString() === requesterUserId : false;
-
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    console.log(user ,'is he user:', isUser)
-    return res.status(200).json({user , isUser});
-  } catch (error) {
-    console.error('Error in getUserByHandle:', error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-};
 
 
 
