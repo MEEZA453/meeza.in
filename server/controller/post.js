@@ -42,6 +42,22 @@ export const createPost = async (req, res) => {
     res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
+export const getDefaultPosts = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10; // default = 10 posts
+
+    const posts = await Post.find()
+      .sort({ createdAt: -1 }) // newest first
+      .limit(limit)
+      .populate("createdBy", "name profile handle")
+      .populate("votes.user", "name profile handle");
+
+    res.status(200).json(posts);
+  } catch (error) {
+    console.error("Error fetching default posts:", error);
+    res.status(500).json({ message: "Server error while fetching default posts" });
+  }
+};
 
 // ✅ Get all posts (with votes & creator populated)
 export const getPosts = async (req, res) => {

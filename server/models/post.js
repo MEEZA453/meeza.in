@@ -6,7 +6,8 @@ const voteSchema = new mongoose.Schema({
   creativity: { type: Number, min: 0, max: 10 },
   aesthetics: { type: Number, min: 0, max: 10 },
   composition: { type: Number, min: 0, max: 10 },
-  emotion: { type: Number, min: 0, max: 10 }
+  emotion: { type: Number, min: 0, max: 10 },
+  totalVote :{type : Number} 
 }, { _id: false });
 
 const postSchema = new mongoose.Schema({

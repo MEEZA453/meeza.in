@@ -10,6 +10,33 @@ export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
 };
+
+export const getDefaultDesigns = async (req, res) => {
+  try {
+    // Read limit & page from query params, with defaults
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    console.log(`Fetching default designs | page: ${page}, limit: ${limit}`);
+
+    const designs = await Product.find({})
+      .sort({ createdAt: -1 }) // newest first
+      .skip(skip)
+      .limit(limit)
+      .populate("postedBy", "name profile handle");
+
+    res.status(200).json({
+      page,
+      limit,
+      count: designs.length,
+      results: designs,
+    });
+  } catch (error) {
+    console.error("Error fetching default designs:", error);
+    res.status(500).json({ message: "Server error while fetching default designs" });
+  }
+};
 export const getDesign = async( req , res)=>{
 
     try {

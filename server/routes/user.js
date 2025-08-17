@@ -9,7 +9,8 @@ import {
 
 verifyOtp,
   sendOtp,
-  searchUsers
+  searchUsers,
+  getDefaultUsers
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -35,7 +36,6 @@ router.post("/send-otp", sendOtp);  // send OTP to email
 router.post("/verify-otp", verifyOtp);  // verify OTP
 
 // Get user by handle
-router.get("/:handle", verifyToken, getUserByHandle);
 
 // Update user profile
 router.put('/:id/profile', verifyToken, upload.single('image'), updateUserProfile);
@@ -47,6 +47,7 @@ router.post("/unfollow/:id", verifyToken, unfollowUser);
 router.get("/:handle/followers", getFollowers);
 router.get("/:handle/following", getFollowing);
 router.get("/search/users", verifyToken, searchUsers);
-
+router.get("/defaultSearch", getDefaultUsers);
+router.get("/:handle", verifyToken, getUserByHandle);
 
 export default router;
