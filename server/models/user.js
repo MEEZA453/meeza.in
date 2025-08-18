@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema({
   },
   favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
   highlights: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
-  promotion: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+  promotions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
 
   profile: String,
   handle: { type: String, unique: true, sparse: true },
