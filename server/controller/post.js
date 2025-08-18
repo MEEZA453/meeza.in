@@ -65,6 +65,7 @@ export const getPosts = async (req, res) => {
 
   try {
     const posts = await Post.find()
+    .sort({ createdAt: -1 })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
     res.json(posts);
@@ -107,6 +108,7 @@ export const getPostById = async (req, res) => {
 
   try {
     const post = await Post.findById(req.params.id)
+    .sort({ createdAt: -1 })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
 
@@ -130,6 +132,7 @@ export const getPostsByHandle = async (req, res) => {
 
     // Step 2: Find posts created by this user
     const posts = await Post.find({ createdBy: user._id })
+    .sort({ createdAt: -1 })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle")
       .sort({ createdAt: -1 });
@@ -233,6 +236,7 @@ export const getVotesForPost = async (req, res) => {
     console.log('getting votes')
   try {
     const post = await Post.findById(req.params.id)
+    .sort({ createdAt: -1 })
       .populate("votes.user", "name profile handle");
 
     if (!post) return res.status(404).json({ message: "Post not found" });

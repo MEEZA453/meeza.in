@@ -91,55 +91,170 @@ export const searchUsers = async (req, res) => {
 };
 
 
+
+export const approveJury = async (req, res) => {
+  try {
+    const devUser = await User.findById(req.user.id);
+    if (!devUser?.isDev) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { userId, approve } = req.body; // approve = true / false
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (!user.juryApplied) {
+      return res.status(400).json({ success: false, message: "No pending jury application" });
+    }
+
+    if (approve) {
+      user.role = "jury";
+      user.juryApplied = false;
+      await user.save();
+      return res.status(200).json({ success: true, message: "User approved as jury", user });
+    } else {
+      user.juryApplied = false;
+      await user.save();
+      return res.status(200).json({ success: true, message: "Jury application rejected", user });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+
+
+export const applyJury = async (req, res) => {
+  try {
+    const userId = req.user.id; // authenticated user
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (user.isJury) {
+      return res.status(400).json({ success: false, message: "You are already a jury" });
+    }
+
+    if (user.juryApplied) {
+      return res.status(400).json({ success: false, message: "Jury application already pending" });
+    }
+
+    user.juryApplied = true;
+    await user.save();
+
+    res.status(200).json({ success: true, message: "Jury application submitted", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+
+
+const DEV_EMAILS = ["meejanursk@gmail.com", "raizen@gmail.com"]; // dev list
+
+// ================= REGISTER =================
 export const registerUser = async (req, res) => {
-  console.log('reached to the register user')
-  const { name , id, password, profile } = req.body;
+  console.log("Reached register user");
+
+  const { name, id, password, profile, email } = req.body;
 
   try {
-    const existingUser = await User.findOne({ id });
+    if (!email || !password || !name || !id) {
+      return res.status(400).json({ message: "All required fields must be provided" });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-const user = await User.create({
-  name,
-  id,
-  password: hashedPassword,
-  ...(profile && { profile }), // ✅ only add profile if it exists
-});
+    // Assign role
+    let role = "normal";
+    if (DEV_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail)) {
+      role = "dev";
+    }
+
+    // Create user
+    const user = await User.create({
+      name,
+      id,
+      email: normalizedEmail,
+      password: hashedPassword,
+      role,
+      ...(profile && { profile }), // only add profile if exists
+    });
 
     res.status(201).json({
       _id: user._id,
       name: user.name,
       id: user.id,
+      email: user.email,
+      role: user.role,
       token: generateToken(user._id),
     });
-console.log('user created success')
+
+    console.log("✅ User created successfully:", user.email, "Role:", user.role);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
 
+// ================= LOGIN =================
 export const loginUser = async (req, res) => {
-  const { id, password } = req.body;
+  const { idOrEmail, password } = req.body; // 🔑 allow login with either id or email
 
   try {
-    const user = await User.findOne({ id });
-
-    if (user && (await bcrypt.compare(password, user.password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        id: user.id,
-        token: generateToken(user._id),
-      });
-      console.log('login successfully')
-    } else {
-      res.status(401).json({ message: "Invalid ID or password" });
+    if (!idOrEmail || !password) {
+      return res.status(400).json({ message: "ID/Email and password are required" });
     }
+
+    const query = idOrEmail.includes("@")
+      ? { email: idOrEmail.toLowerCase() }
+      : { id: idOrEmail };
+
+    const user = await User.findOne(query);
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // 🔄 Auto-upgrade dev role if needed
+    if (DEV_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase()) && user.role !== "dev") {
+      user.role = "dev";
+      await user.save();
+      console.log("🔄 User upgraded to DEV:", user.email);
+    }
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      token: generateToken(user._id),
+    });
+
+    console.log("✅ Login successful:", user.email);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -293,65 +408,92 @@ console.log('resending the opt')
   return sendOtp(req, res);
 };
 
+
+
+
 // Verify OTP
 export const verifyOtp = async (req, res) => {
-  console.log('verifying')
+  console.log("verifying OTP...");
   try {
     const { email, otp } = req.body;
     if (!email || !otp) {
-      return res.status(400).json({ message: 'Email and OTP required' });
+      return res.status(400).json({ message: "Email and OTP required" });
     }
 
-    const tokenRecord = await OtpToken.findOne({ email });
+    const normalizedEmail = email.toLowerCase();
+
+    const tokenRecord = await OtpToken.findOne({ email: normalizedEmail });
     if (!tokenRecord) {
-      return res.status(400).json({ message: 'No OTP request found or OTP expired' });
+      return res.status(400).json({ message: "No OTP request found or OTP expired" });
     }
 
-    // Optional: Attempt limit
+    // Attempt limit
     if (tokenRecord.attempts >= 5) {
-      return res.status(429).json({ message: 'Too many attempts. Please request a new OTP.' });
+      return res.status(429).json({ message: "Too many attempts. Please request a new OTP." });
     }
 
-    // Check OTP
+    // Validate OTP
     if (tokenRecord.otp !== otp) {
       tokenRecord.attempts += 1;
       await tokenRecord.save();
-      return res.status(400).json({ message: 'Invalid OTP' });
+      return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    // OTP correct → remove token record
-    await OtpToken.deleteOne({ email });
+    // OTP correct → cleanup
+    await OtpToken.deleteOne({ email: normalizedEmail });
 
     // Find or create user
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: normalizedEmail });
+    let isAlreadyUser = true;
+
     if (!user) {
+      isAlreadyUser = false;
+      let role = "normal";
+      if (DEV_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail)) {
+        role = "dev";
+      }
+
       user = await User.create({
-        email,
-        name: email.split('@')[0]
+        email: normalizedEmail,
+        name: normalizedEmail.split("@")[0],
+        role,
       });
+      console.log("✅ New user created:", user.email, "Role:", role);
+    } else {
+      // Existing user → auto-upgrade role if needed
+      if (DEV_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail) && user.role !== "dev") {
+        user.role = "dev";
+        await user.save();
+        console.log("🔄 Existing user upgraded to DEV:", user.email);
+      }
     }
 
     // Create JWT token
     const payload = {
       id: user._id,
       email: user.email,
-      name: user.name
+      name: user.name,
+      role: user.role,
     };
-    const tokenJwt = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    const tokenJwt = jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 
     const responseData = {
       _id: user._id,
       name: user.name,
       email: user.email,
+      profile : user.profile,
+      role: user.role,
       token: tokenJwt,
       handle: user.handle || null,
-      instagram: user.instagram || '',
-      bio: user.bio || ''
+      instagram: user.instagram || "",
+      bio: user.bio || "",
+      isAlreadyUser,
     };
-console.log('verified upt')
+
+    console.log("✅ OTP verified:", user.email, "| role:", user.role, "| existing:", isAlreadyUser);
     return res.status(200).json(responseData);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'OTP verification failed' });
+    console.error("❌ OTP verify error:", err);
+    return res.status(500).json({ message: "OTP verification failed" });
   }
 };

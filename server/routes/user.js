@@ -10,7 +10,9 @@ import {
 verifyOtp,
   sendOtp,
   searchUsers,
-  getDefaultUsers
+  getDefaultUsers,
+  applyJury,
+  approveJury
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -23,7 +25,10 @@ const router = express.Router();
 // Register new user
 router.post("/register", registerUser);
 router.get('/getProductById/:handle', getProductsByUser);
+router.post("/applyJury", verifyToken, applyJury);
 
+// Dev approves or rejects
+router.post("/approveJury", verifyToken, approveJury);
 // Login existing user
 router.post("/login", loginUser);
 router.post("/google-login", googleLogin);

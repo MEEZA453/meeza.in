@@ -46,6 +46,7 @@ export const getDesign = async( req , res)=>{
         const skip = (page - 1) * limit;
         console.log('reached to the get design')
         const postedDesigns = await Product.find().skip(skip).limit(limit)
+        .sort({ createdAt: -1 })
         .populate("postedBy", "name profile handle")
         res.json(postedDesigns)
     } catch (error) {

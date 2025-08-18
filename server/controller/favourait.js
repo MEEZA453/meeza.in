@@ -42,8 +42,11 @@ export const getFavoritesByHandle = async (req, res) => {
     const requesterUserId = req.user?.id || null;
 
 
-    const targetUser = await User.findOne({ handle: requestedHandle })   .populate({
+    const targetUser = await User.findOne({ handle: requestedHandle })
+    .sort({ createdAt: -1 })
+    .populate({
         path: 'favourites',
+        
         populate: [
           { path: 'createdBy', select: 'name profile handle' },
           { path: 'votes.user', select: 'name profile handle' }
