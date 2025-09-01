@@ -38,9 +38,7 @@ export const getUserByHandle = async (req, res) => {
         ? user._id.toString() === requesterUserId
         : false;
 
-    console.log(req.user);
-    console.log("requested user is " + requesterUserId);
-    console.log(user, "is he user:", isUser);
+
 
     return res.status(200).json({ user, isUser });
   } catch (error) {
@@ -155,7 +153,7 @@ export const applyJury = async (req, res) => {
 
 
 
-const DEV_EMAILS = ["meejanursk@gmail.com", "raizen@gmail.com"]; // dev list
+const DEV_EMAILS = ["meejanursk@gmail.com", "mzco.creative@gmail.com"]; // dev list
 
 // ================= REGISTER =================
 export const registerUser = async (req, res) => {

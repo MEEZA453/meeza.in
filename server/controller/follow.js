@@ -1,11 +1,11 @@
 import User from "../models/user.js";
-
+import Notification from '../models/notification.js'
 // Follow a user
 export const followUser = async (req, res) => {
-  console.log('got follow request')
+  console.log("got follow request");
   try {
-    const userId = req.user.id; // the one doing the follow
-    const targetId = req.params.id; // the one being followed
+    const userId = req.user.id;        // logged-in user
+    const targetId = req.params.id;    // user to follow
 
     if (userId === targetId) {
       return res.status(400).json({ message: "You cannot follow yourself" });
@@ -18,7 +18,6 @@ export const followUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check if already following
     if (user.following.includes(targetId)) {
       return res.status(400).json({ message: "Already following this user" });
     }
@@ -28,18 +27,24 @@ export const followUser = async (req, res) => {
 
     await user.save();
     await targetUser.save();
-  console.log('following')
 
+    // ✅ Create notification
+    await Notification.create({
+      recipient: targetId,
+      sender: userId,
+      type: "follow",
+      message: `@${user.handle} started following you`,
+    });
+
+    console.log("following");
     res.status(200).json({ message: "Followed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Unfollow a user
 export const unfollowUser = async (req, res) => {
-  console.log('got unfollow request')
-  
+  console.log("got unfollow request");
   try {
     const userId = req.user.id;
     const targetId = req.params.id;
@@ -55,14 +60,14 @@ export const unfollowUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Remove from following
+    // remove follow
     user.following = user.following.filter((id) => id.toString() !== targetId);
-    // Remove from followers
     targetUser.followers = targetUser.followers.filter((id) => id.toString() !== userId);
 
     await user.save();
     await targetUser.save();
-console.log('unfollower')
+
+    console.log("unfollowed");
     res.status(200).json({ message: "Unfollowed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });

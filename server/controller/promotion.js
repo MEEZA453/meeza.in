@@ -5,7 +5,7 @@ console.log('reached to add highlight')
   try {
     const userId = req.user.id;
     const { designId } = req.body;
-console.log(userId)
+
     const user = await User.findById(userId);
 
     if (!user.promotions.includes(designId)) {
@@ -55,7 +55,7 @@ export const getAllPromotion = async (req, res) => {
     // Flatten all highlights into one array
     const promotions = usersWithPromotions.flatMap(user => user.promotions);
 
-    console.log(promotions , ' promotion got successfully')
+
     return res.status(200).json({
       success: true,
       promotions,

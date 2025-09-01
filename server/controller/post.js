@@ -1,6 +1,8 @@
 import Post from "../models/post.js";
  import User from "../models/user.js";
 import { cloudinary } from "../config/cloudinery.js";
+import Notification from "../models/notification.js";
+
 // ✅ Create a post
 export const createPost = async (req, res) => {
   console.log('Creating post...');
@@ -187,20 +189,19 @@ export const deletePost = async (req, res) => {
   }
 };
 
-
-// ✅ Vote for a post (one per user, updates if exists)
 export const votePost = async (req, res) => {
-    console.log('posting votes')
+  console.log("posting votes");
   try {
     const { creativity, aesthetics, composition, emotion } = req.body;
-    console.log(creativity , aesthetics, composition , emotion  )
     const post = await Post.findById(req.params.id)
-   
       .populate("votes.user", "name profile handle");
 
     if (!post) return res.status(404).json({ message: "Post not found" });
+
     const userId = req.user.id;
-    const existingVote = post.votes.find(v => v.user._id.toString() === userId);
+    const existingVote = post.votes.find(
+      (v) => v.user._id.toString() === userId
+    );
 
     if (existingVote) {
       existingVote.creativity = creativity ?? existingVote.creativity;
@@ -213,19 +214,33 @@ export const votePost = async (req, res) => {
         creativity,
         aesthetics,
         composition,
-        emotion
+        emotion,
       });
     }
 
     await post.save();
-console.log(post)
-console.log('vote posted successfully')
+    console.log("vote posted successfully");
+
     const updatedPost = await Post.findById(req.params.id)
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
 
+    // ✅ Create notification (don’t notify if user voted own post)
+    if (String(updatedPost.createdBy._id) !== String(userId)) {
+      await Notification.create({
+        recipient: updatedPost.createdBy._id,
+        sender: userId,
+        type: "vote",
+        post: updatedPost._id,
+        message: `@${req.user.handle} voted your post`,
+        // store preview image (use first image from post)
+        image: updatedPost.images && updatedPost.images.length > 0
+          ? updatedPost.images[0]
+          : null,
+      });
+    }
+
     res.json(updatedPost);
-    console.log(updatedPost)
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

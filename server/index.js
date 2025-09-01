@@ -13,6 +13,7 @@ import postRoute from './routes/post.js'
 import favRoute from './routes/favourait.js'
 import highlightRoute from './routes/highlight.js'
 import promotionRoute from './routes/promotion.js'
+import notificationRoute from './routes/notification.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -52,6 +53,8 @@ app.use('/post',postRoute)
 app.use("/user", userRoute);
 app.use('/fav', favRoute);
 app.use('/highlight', highlightRoute)
+app.use('/notification', notificationRoute)
+
 
 app.use('/promotion', promotionRoute);
 app.use('/payment' , paymentRoute )
