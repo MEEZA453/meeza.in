@@ -12,7 +12,8 @@ verifyOtp,
   searchUsers,
   getDefaultUsers,
   applyJury,
-  approveJury
+  approveJury,
+  approveNormal
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -29,6 +30,7 @@ router.post("/applyJury", verifyToken, applyJury);
 
 // Dev approves or rejects
 router.post("/approveJury", verifyToken, approveJury);
+router.post("/approveNormal", verifyToken, approveNormal);
 // Login existing user
 router.post("/login", loginUser);
 router.post("/google-login", googleLogin);

@@ -88,6 +88,70 @@ export const searchUsers = async (req, res) => {
   }
 };
 
+export const approveNormal = async (req, res) => {
+  console.log("checking normal approval request");
+  try {
+    const devUser = await User.findById(req.user.id);
+    if (!devUser?.isDev) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { userId, approve } = req.body; // approve = true / false
+    console.log(approve, userId);
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    let responseMessage;
+
+    if (approve) {
+      // ✅ Approve: Make user normal
+      if (user.role === "normal") {
+        return res.status(400).json({
+          success: false,
+          message: "User is already a normal user",
+        });
+      }
+
+      user.role = "normal";
+      user.removeJuryApplied = false;
+      await user.save();
+console.log('switched to normal')
+      responseMessage = "User approved as normal";
+
+      await Notification.create({
+        recipient: user._id,
+        sender: req.user.id,
+        type: "jury_removed",
+        message: "Your request has been approved. You are now a normal user.",
+      });
+    } else {
+      // ❌ Reject: Keep user jury
+ 
+      user.removeJuryApplied = false;
+      await user.save();
+console.log('rejected')
+      responseMessage = "Normal user request rejected";
+
+      await Notification.create({
+        recipient: user._id,
+        sender: req.user.id,
+        type: "normal_request_rejected",
+        message: "Your request to become a normal user has been rejected.",
+      });
+    }
+
+    return res
+      .status(200)
+      .json({ success: true, message: responseMessage, user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 
 export const approveJury = async (req, res) => {
@@ -188,34 +252,53 @@ console.log('jury rejected')
 };
 
 export const applyJury = async (req, res) => {
-  console.log('reached to jury application')
+  console.log('reached to jury application');
   try {
-    const userId = req.user.id; // authenticated user
-    const { message } = req.body; // ✅ message from frontend textarea
+    const userId = req.user.id;
+    const { message } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    if (user.isJury) {
-      return res.status(400).json({ success: false, message: "You are already a jury" });
+    // ✅ Case 1: Already a Jury -> Request to step down
+    if (user.role === "jury") {
+      if (user.removeJuryApplied) {
+        return res.status(400).json({ success: false, message: "Request to remove jury already pending" });
+      }
+
+      console.log('jury requested to step down');
+      user.removeJuryApplied = true;
+      await user.save();
+
+      const devs = await User.find({ email: { $in: DEV_EMAILS.map(e => e.toLowerCase()) } });
+      for (let dev of devs) {
+        await Notification.create({
+          recipient: dev._id,
+          sender: userId,
+          type: "jury_removal_request",
+          message: message || "Request to step down as jury"
+        });
+      }
+
+      return res.status(200).json({ success: true, message: "Request to step down as jury submitted", user });
     }
 
+    // ✅ Case 2: Not a Jury yet -> Apply for Jury
     if (user.juryApplied) {
       return res.status(400).json({ success: false, message: "Jury application already pending" });
     }
-console.log('applied')
-    // Mark user as applied
+
+    console.log('applied for jury');
     user.juryApplied = true;
     await user.save();
 
-    // ✅ Notify all devs
     const devs = await User.find({ email: { $in: DEV_EMAILS.map(e => e.toLowerCase()) } });
     for (let dev of devs) {
       await Notification.create({
         recipient: dev._id,
         sender: userId,
         type: "jury_request",
-        message: message
+        message: message || "Request to become jury"
       });
     }
 
@@ -225,6 +308,7 @@ console.log('applied')
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 
 const DEV_EMAILS = ["meejanursk@gmail.com", "mzco.creative@gmail.com"]; // dev list
