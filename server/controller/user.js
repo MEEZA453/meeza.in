@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { generateToken } from "../utils/generateToken.js";
 import { cloudinary } from "../config/cloudinery.js";
 import { getCloudinaryPublicId } from "../utils/getCloudinaryPublicId.js";
-
+import Notification from  '../models/notification.js'
 
 
 const JWT_SECRET = process.env.JWT_SECRET 
@@ -91,6 +91,7 @@ export const searchUsers = async (req, res) => {
 
 
 export const approveJury = async (req, res) => {
+  console.log("checking jury request");
   try {
     const devUser = await User.findById(req.user.id);
     if (!devUser?.isDev) {
@@ -98,36 +99,99 @@ export const approveJury = async (req, res) => {
     }
 
     const { userId, approve } = req.body; // approve = true / false
+    console.log(approve, userId, "===");
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
-    if (!user.juryApplied) {
-      return res.status(400).json({ success: false, message: "No pending jury application" });
-    }
+    let responseMessage;
 
     if (approve) {
+      // ✅ Approve flow
+      if (user.role === "jury") {
+        return res.status(400).json({
+          success: false,
+          message: "User is already a jury",
+        });
+      }
+
+      if (!user.juryApplied && user.role !== "normal") {
+        return res.status(400).json({
+          success: false,
+          message: "No pending jury application",
+        });
+      }
+
       user.role = "jury";
       user.juryApplied = false;
       await user.save();
-      return res.status(200).json({ success: true, message: "User approved as jury", user });
+      console.log("approved");
+
+      responseMessage = "User approved as jury";
+
+      // ✅ Notify the applicant
+      await Notification.create({
+        recipient: user._id,
+        sender: req.user.id,
+        type: "jury_approved",
+        message: " Your jury application has been approved!",
+      });
     } else {
-      user.juryApplied = false;
-      await user.save();
-      return res.status(200).json({ success: true, message: "Jury application rejected", user });
+      // ❌ Reject flow
+      if (user.role === "jury") {
+        // demote back to normal
+        user.role = "normal";
+        user.juryApplied = false;
+        await user.save();
+        console.log('jury remobed')
+        responseMessage = "User demoted back to normal";
+
+        await Notification.create({
+          recipient: user._id,
+          sender: req.user.id,
+          type: "jury_removed",
+          message: " You're not jury anymore",
+        });
+      } else {
+        if (!user.juryApplied) {
+          return res.status(400).json({
+            success: false,
+            message: "No pending jury application",
+          });
+        }
+
+        user.juryApplied = false;
+        await user.save();
+        console.log("rejected");
+
+        responseMessage = "Jury application rejected";
+console.log('jury rejected')
+        await Notification.create({
+          recipient: user._id,
+          sender: req.user.id,
+          type: "jury_rejected",
+          message: "Your jury application has been rejected.",
+        });
+      }
     }
+
+    return res
+      .status(200)
+      .json({ success: true, message: responseMessage, user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-
-
-
 export const applyJury = async (req, res) => {
+  console.log('reached to jury application')
   try {
     const userId = req.user.id; // authenticated user
+    const { message } = req.body; // ✅ message from frontend textarea
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -139,9 +203,21 @@ export const applyJury = async (req, res) => {
     if (user.juryApplied) {
       return res.status(400).json({ success: false, message: "Jury application already pending" });
     }
-
+console.log('applied')
+    // Mark user as applied
     user.juryApplied = true;
     await user.save();
+
+    // ✅ Notify all devs
+    const devs = await User.find({ email: { $in: DEV_EMAILS.map(e => e.toLowerCase()) } });
+    for (let dev of devs) {
+      await Notification.create({
+        recipient: dev._id,
+        sender: userId,
+        type: "jury_request",
+        message: message
+      });
+    }
 
     res.status(200).json({ success: true, message: "Jury application submitted", user });
   } catch (err) {
@@ -149,8 +225,6 @@ export const applyJury = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
-
 
 
 const DEV_EMAILS = ["meejanursk@gmail.com", "mzco.creative@gmail.com"]; // dev list

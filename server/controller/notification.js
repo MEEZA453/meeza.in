@@ -2,8 +2,7 @@ import Notification from "../models/notification.js";
 
 // Get notifications
 export const getNotifications = async (req, res) => {
-  console.log('tried to get notification  ')
-  console.log(req.user)
+
   try {
     const notifications = await Notification.find({ recipient: req.user.id })
       .populate("sender", "handle profile")
@@ -19,8 +18,7 @@ export const getNotifications = async (req, res) => {
 
 // Mark all as read
 export const markAllAsRead = async (req, res) => {
-  console.log('try to mark the notification')
-  console.log(req.user._id)
+
   try {
     await Notification.updateMany(
       { recipient: req.user.id, isRead: false },

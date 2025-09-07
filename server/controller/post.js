@@ -36,7 +36,6 @@ export const createPost = async (req, res) => {
     });
 
     const savedPost = await post.save();
-    console.log(post)
     console.log('post created successfully')
     res.status(201).json(savedPost);
   } catch (err) {
