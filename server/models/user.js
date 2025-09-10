@@ -35,7 +35,16 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+removeJuryApplied: {
+  type: Boolean,
+  default: false
+},
 
+// Normal application pending
+normalApplied: {
+  type: Boolean,
+  default: false
+},
   // Followers / Following
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]

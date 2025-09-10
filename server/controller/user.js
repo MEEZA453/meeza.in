@@ -309,6 +309,41 @@ export const applyJury = async (req, res) => {
   }
 };
 
+export const applyNormal = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { message } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // Check if normal application is already pending
+    if (user.normalApplied) {
+      return res.status(400).json({ success: false, message: "Normal user application already pending" });
+    }
+
+    console.log('applied as normal user');
+    user.normalApplied = true;
+    await user.save();
+
+    // Notify devs
+    const devs = await User.find({ email: { $in: DEV_EMAILS.map(e => e.toLowerCase()) } });
+    for (let dev of devs) {
+      await Notification.create({
+        recipient: dev._id,
+        sender: userId,
+        type: "normal_request",
+        message: message || "Request to become normal user"
+      });
+    }
+
+    res.status(200).json({ success: true, message: "Normal user application submitted", user });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 
 const DEV_EMAILS = ["meejanursk@gmail.com", "mzco.creative@gmail.com"]; // dev list

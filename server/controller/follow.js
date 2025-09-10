@@ -76,6 +76,8 @@ export const unfollowUser = async (req, res) => {
 
 // Get followers
 export const getFollowers = async (req, res) => {
+  console.log('try to get followers')
+  console.log(req.params.handle)
   try {
     const user = await User.findOne({ handle: req.params.handle }).populate("followers", "name handle profile");
     if (!user) return res.status(404).json({ message: "User not found" });

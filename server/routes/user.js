@@ -13,7 +13,8 @@ verifyOtp,
   getDefaultUsers,
   applyJury,
   approveJury,
-  approveNormal
+  approveNormal,
+  applyNormal
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -27,6 +28,8 @@ const router = express.Router();
 router.post("/register", registerUser);
 router.get('/getProductById/:handle', getProductsByUser);
 router.post("/applyJury", verifyToken, applyJury);
+router.post("/applyNormal", verifyToken, applyNormal);
+
 
 // Dev approves or rejects
 router.post("/approveJury", verifyToken, approveJury);
