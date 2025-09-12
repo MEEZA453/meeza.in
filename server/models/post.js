@@ -1,4 +1,4 @@
-    // models/Post.js
+// models/Post.js
 import mongoose from "mongoose";
 
 const voteSchema = new mongoose.Schema({
@@ -7,7 +7,7 @@ const voteSchema = new mongoose.Schema({
   aesthetics: { type: Number, min: 0, max: 10 },
   composition: { type: Number, min: 0, max: 10 },
   emotion: { type: Number, min: 0, max: 10 },
-  totalVote :{type : Number} 
+  totalVote: { type: Number },
 }, { _id: false });
 
 const postSchema = new mongoose.Schema({
@@ -18,7 +18,10 @@ const postSchema = new mongoose.Schema({
   images: [],
   voteFields: [{ type: String, enum: ["creativity", "aesthetics", "composition", "emotion"] }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  votes: [voteSchema]
+  votes: [voteSchema],
+
+  // 🔗 New field: linked assets
+  assets: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }]
 }, { timestamps: true });
 
 export default mongoose.model("Post", postSchema);

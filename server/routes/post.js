@@ -9,12 +9,23 @@ import {
   deletePost,
   getPostsByHandle,
   searchPosts,
-  getDefaultPosts
+  getDefaultPosts,
+  getAssetsOfPost,
+  getPostsOfAsset,
+  detachAssetFromPost,
+  requestAttachAsset,
+  approveAssetAttachment
 } from "../controller/post.js";
 import {verifyToken} from '../middleweres/auth.js'
 
 const router = express.Router();
-
+router.post("/request-attach", verifyToken , requestAttachAsset);
+// Approve/reject request
+router.post("/approve-attach",verifyToken, approveAssetAttachment)
+// get all assets used in a post
+router.get("/:postId/assets", getAssetsOfPost);
+router.post("/detach", detachAssetFromPost);
+// get all posts where asset is used
 router.get("/search/posts", searchPosts);
 router.get("/defaultSearch", getDefaultPosts);
 router.post("/createPost", verifyToken, upload.array("images", 5), createPost);          // Create post

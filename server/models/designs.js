@@ -1,24 +1,19 @@
+// models/Product.js
 import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
     postedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Reference to the User model
+      ref: "User",
       required: true,
     },
-    name: {
-      type: String,
-      required: true,
-    },
+    name: { type: String, required: true },
     image: [],
-   driveLink : {type : String , required : true},
-    amount: {
-      type: Number,
-      required: true,
-    },
+    driveLink: { type: String, required: true },
+    amount: { type: Number, required: true },
 
-    faq : [{question :{type : String } , answer : {type : String}}],
+    faq: [{ question: { type: String }, answer: { type: String } }],
 
     sections: [
       {
@@ -26,7 +21,10 @@ const productSchema = new mongoose.Schema(
         content: { type: [String], required: true },
       },
     ],
-    hastags: [String],
+    hashtags: [String],
+
+    // 🔗 New field to track which posts this asset is used in
+    usedInPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
   },
   { timestamps: true }
 );

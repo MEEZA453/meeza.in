@@ -2,6 +2,176 @@ import Post from "../models/post.js";
  import User from "../models/user.js";
 import { cloudinary } from "../config/cloudinery.js";
 import Notification from "../models/notification.js";
+import Product from "../models/designs.js"
+
+
+// controllers/assetController.js
+
+
+// Attach asset to post
+export const requestAttachAsset = async (req, res) => {
+  console.log('request sending');
+  try {
+    const { postId, assetId, message } = req.body;
+    const userId = req.user.id;
+
+    console.log('User ID:', userId);
+
+    if (!userId) 
+     
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+ console.log('unauthorized')
+    const post = await Post.findById(postId);
+    const asset = await Product.findById(assetId);
+
+    if (!post || !asset) 
+      return res.status(404).json({ success: false, message: "Post or Asset not found" });
+
+    if (!asset.postedBy) 
+      return res.status(400).json({ success: false, message: "Asset creator not found" });
+
+    // 🔔 Pick first image from post and asset safely
+    const postImage = post.images?.[0] || "";
+    const assetImage = asset.image?.[0] || "";
+
+    console.log('Before creating notification', { postId, assetId, postImage, assetImage });
+
+    // 🔔 Send notification to asset creator with images
+    await Notification.create({
+      recipient: asset.postedBy,
+      sender: userId,
+      type: "asset_attach_request",
+      message: message || `User requested to attach your asset "${asset.name}" to post "${post.name}"`,
+      meta: { postId, assetId, postImage, assetImage }
+    });
+
+    console.log('request sent');
+    res.status(200).json({ success: true, message: "Request sent to asset creator" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const approveAssetAttachment = async (req, res) => {
+  console.log('approving')
+  try {
+    const { notificationId, approve } = req.body; // approve = true / false
+    const adminId = req.user.id;
+
+    const notification = await Notification.findById(notificationId);
+    if (!notification) return res.status(404).json({ success: false, message: "Notification not found" });
+
+    const { postId, assetId } = notification.meta;
+
+    const post = await Post.findById(postId);
+    const asset = await Product.findById(assetId);
+
+    if (!post || !asset) return res.status(404).json({ success: false, message: "Post or Asset not found" });
+
+    if (approve) {
+      // Attach asset
+      if (!post.assets.includes(assetId)) post.assets.push(assetId);
+      if (!asset.usedInPosts.includes(postId)) asset.usedInPosts.push(postId);
+
+      await post.save();
+      await asset.save();
+console.log('approved')
+      // ✅ Notify requester
+      await Notification.create({
+        recipient: notification.sender,
+        sender: adminId,
+        type: "asset_attach_approved",
+        message: `Your request to attach "${asset.name}" to post "${post.name}" has been approved!`
+      });
+
+      notification.status = "approved";
+      await notification.save();
+
+      res.status(200).json({ success: true, message: "Asset attached successfully" });
+    } else {
+      // Reject → just notify requester
+      await Notification.create({
+        recipient: notification.sender,
+        sender: adminId,
+        type: "asset_attach_rejected",
+        message: `Your request to attach "${asset.name}" to post "${post.name}" has been rejected.`
+      });
+
+      notification.status = "rejected";
+      await notification.save();
+
+      res.status(200).json({ success: true, message: "Asset attach request rejected" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// Detach asset from post
+export const detachAssetFromPost = async (req, res) => {
+  console.log('detaching..');
+  try {
+    const { postId, assetId } = req.body;
+    console.log(postId, assetId);
+
+    const post = await Post.findById(postId);
+    const asset = await Product.findById(assetId);
+
+    if (!post || !asset) {
+      return res.status(404).json({ success: false, message: "Post or Asset not found" });
+    }
+
+    // remove from post.assets
+    post.assets = post.assets.filter(a => a.toString() !== assetId.toString());
+    await post.save();
+
+    // ✅ optional: update asset.usedInPosts only if it exists
+    if (asset.usedInPosts && asset.usedInPosts.length) {
+      asset.usedInPosts = asset.usedInPosts.filter(p => p.toString() !== postId.toString());
+      await asset.save();
+    }
+
+    console.log('detached');
+    res.status(200).json({ success: true, assetId, message: "Asset detached successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+
+export const getPostsOfAsset = async (req, res) => {
+  console.log('gettting posts of assets ')
+  try {
+    const { assetId } = req.params;
+    const asset = await Product.findById(assetId).populate("usedInPosts");
+
+    if (!asset) return res.status(404).json({ success: false, message: "Asset not found" });
+
+    res.status(200).json({ success: true, posts: asset.usedInPosts });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+
+export const getAssetsOfPost = async (req, res) => {
+  console.log('getting assets of posts')
+  try {
+    const { postId } = req.params;
+    const post = await Post.findById(postId).populate("assets");
+
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    res.status(200).json({ success: true, assets: post.assets });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 
 // ✅ Create a post
 export const createPost = async (req, res) => {
