@@ -62,6 +62,7 @@ export const attachAssetToPost = async (req, res) => {
     const post = await Post.findById(postId);
     const asset = await Product.findById(assetId);
 
+
     console.log('Before detach:', { postAssets: post.assets, assetUsedInPosts: asset.usedInPosts });
 
     if (!post || !asset) {

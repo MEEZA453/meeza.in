@@ -14,12 +14,13 @@ import {
   getPostsOfAsset,
   detachAssetFromPost,
   requestAttachAsset,
-  approveAssetAttachment
+  approveAssetAttachment,
+  attachAssetToPost
 } from "../controller/post.js";
 import {verifyToken} from '../middleweres/auth.js'
 
 const router = express.Router();
-router.post("/attach", verifyToken , requestAttachAsset);
+router.post("/attach", verifyToken , attachAssetToPost);
 router.post("/request-attach", verifyToken , requestAttachAsset);
 // Approve/reject request
 router.post("/approve-attach",verifyToken, approveAssetAttachment)

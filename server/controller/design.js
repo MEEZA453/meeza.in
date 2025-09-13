@@ -20,11 +20,20 @@ export const getDefaultDesigns = async (req, res) => {
 
     console.log(`Fetching default designs | page: ${page}, limit: ${limit}`);
 
-    const designs = await Product.find({})
+    const userId = req.user?.id; // ✅ get from auth middleware
+
+    let designs = await Product.find({})
       .sort({ createdAt: -1 }) // newest first
       .skip(skip)
       .limit(limit)
-      .populate("postedBy", "name profile handle");
+      .populate("postedBy", "name profile handle")
+      .lean();
+
+    // ✅ Add isMyProduct flag
+    designs = designs.map((d) => ({
+      ...d,
+      isMyProduct: userId ? d.postedBy?._id.toString() === userId.toString() : false,
+    }));
 
     res.status(200).json({
       page,
@@ -37,6 +46,7 @@ export const getDefaultDesigns = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching default designs" });
   }
 };
+
 export const getDesign = async( req , res)=>{
 
     try {
@@ -55,30 +65,38 @@ export const getDesign = async( req , res)=>{
     
     };
     
-    export const searchDesigns = async (req, res) => {
+export const searchDesigns = async (req, res) => {
+  console.log('searching design');
   try {
-    const { query } = req.query; // example: /search?query=poster
-
+    const { query } = req.query;
+    const userId = req.user?.id; // ✅ get userId from token middleware
+console.log(userId)
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Search query is required" });
     }
 
-    // optional pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const designs = await Product.find({
+    let designs = await Product.find({
       $or: [
         { name: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
         { category: { $regex: query, $options: "i" } },
-        { tags: { $regex: query, $options: "i" } }, // if your model has tags
+        { tags: { $regex: query, $options: "i" } },
       ],
     })
       .populate("postedBy", "name profile handle")
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean(); // ✅ return plain objects (not mongoose docs)
+
+    // ✅ Add `isMyProduct` flag for each design
+    designs = designs.map((d) => ({
+      ...d,
+      isMyProduct: userId ? d.postedBy?._id.toString() === userId.toString() : false,
+    }));
 
     return res.status(200).json({
       page,
@@ -91,6 +109,7 @@ export const getDesign = async( req , res)=>{
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 export const deleteDesign = async (req, res) => {
   console.log('reach to deleteDesign')
   const { id } = req.params;

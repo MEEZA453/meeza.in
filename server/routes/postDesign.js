@@ -6,11 +6,11 @@ const router = express.Router()
 
 router.get('/allproducts' ,getDesign ) ;
 router.get("/ping", pingServer);
-router.get("/defaultSearch", getDefaultDesigns);
+router.get("/defaultSearch",  verifyToken , getDefaultDesigns);
 router.get("/asset/:assetId/posts", getPostsOfAsset);
 
 router.post('/post' ,verifyToken, postDesign) ;
 router.delete('/delete/:id', deleteDesign); 
-router.get("/search/designs", searchDesigns);
+router.get("/search/designs",verifyToken , searchDesigns);
 
 export default router
