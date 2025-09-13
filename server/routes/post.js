@@ -19,6 +19,7 @@ import {
 import {verifyToken} from '../middleweres/auth.js'
 
 const router = express.Router();
+router.post("/attach", verifyToken , requestAttachAsset);
 router.post("/request-attach", verifyToken , requestAttachAsset);
 // Approve/reject request
 router.post("/approve-attach",verifyToken, approveAssetAttachment)

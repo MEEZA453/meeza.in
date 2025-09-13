@@ -54,6 +54,37 @@ export const requestAttachAsset = async (req, res) => {
   }
 };
 
+export const attachAssetToPost = async (req, res) => {
+  console.log('attaching asset to post');
+  try {
+    const { postId, assetId } = req.body;
+
+    const post = await Post.findById(postId);
+    const asset = await Product.findById(assetId);
+
+    console.log('Before detach:', { postAssets: post.assets, assetUsedInPosts: asset.usedInPosts });
+
+    if (!post || !asset) {
+      return res.status(404).json({ success: false, message: "Post or Asset not found" });
+    }
+
+    if (!post.assets.includes(assetId)) {
+      post.assets.push(assetId);
+      await post.save();
+    }
+
+    if (!asset.usedInPosts.includes(postId)) {
+      asset.usedInPosts.push(postId);
+      await asset.save();
+    }
+
+    console.log('attached');
+    res.status(200).json({ success: true, asset, message: "Asset attached successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 export const approveAssetAttachment = async (req, res) => {
   console.log('approving')
   try {
@@ -147,7 +178,14 @@ export const getPostsOfAsset = async (req, res) => {
   console.log('gettting posts of assets ')
   try {
     const { assetId } = req.params;
-    const asset = await Product.findById(assetId).populate("usedInPosts");
+   const asset = await Product.findById(assetId).populate({
+  path: "usedInPosts",   // first populate posts
+  populate: {
+    path: "createdBy",   // then populate user inside each post
+    select: "name profile handle" // only pick these fields
+  }
+});
+
 
     if (!asset) return res.status(404).json({ success: false, message: "Asset not found" });
 
