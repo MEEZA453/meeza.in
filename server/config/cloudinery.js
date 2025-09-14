@@ -21,5 +21,16 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage });
+const getCloudinaryPublicId = (url) => {
+  try {
+    const parts = url.split("/");
+    const fileName = parts[parts.length - 1]; // e.g., abc123.jpg
+    const publicId = fileName.substring(0, fileName.lastIndexOf(".")); // abc123
+    return `posts/${publicId}`; // folder matches your upload folder
+  } catch (err) {
+    console.error("Error extracting Cloudinary publicId:", err);
+    return null;
+  }
+};
 
-export { cloudinary, upload };
+export { cloudinary, upload, getCloudinaryPublicId };

@@ -288,9 +288,11 @@ export const postDesign = async (req, res) => {
 };
 
 
+
 export const editDesign = async (req, res) => {
   console.log("Reached editDesign route");
 
+  // Handle file uploads with multer
   upload.array("images", 10)(req, res, async (err) => {
     if (err) {
       console.error("Multer error:", err);
@@ -300,8 +302,8 @@ export const editDesign = async (req, res) => {
     try {
       const { id } = req.params;
       const { name, amount, driveLink, sections, faq, hashtags, removeImages } = req.body;
-
-      // 1️⃣ Find product
+console.log(removeImages)
+      // 1️⃣ Find the product
       const product = await Product.findById(id);
       if (!product) {
         return res.status(404).json({ success: false, message: "Product not found" });
@@ -312,8 +314,18 @@ export const editDesign = async (req, res) => {
       const parsedFaq = faq ? JSON.parse(faq) : product.faq;
       const parsedHashtags = hashtags ? JSON.parse(hashtags) : product.hashtags;
 
-      // 3️⃣ Handle uploaded new images
-      const newImages = req.files ? req.files.map((file) => file.path) : [];
+      // 3️⃣ Handle newly uploaded images (upload to Cloudinary)
+      let newImages = [];
+      if (req.files && req.files.length > 0) {
+        newImages = await Promise.all(
+          req.files.map(async (file) => {
+            const result = await cloudinary.uploader.upload(file.path, {
+              folder: "designs",
+            });
+            return result.secure_url;
+          })
+        );
+      }
 
       // 4️⃣ Handle removing old images
       let updatedImages = [...product.image];
@@ -322,7 +334,7 @@ export const editDesign = async (req, res) => {
           const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
           for (const url of imagesToRemove) {
             try {
-              const publicId = getCloudinaryPublicId(url);
+          
               if (publicId) {
                 await cloudinary.uploader.destroy(publicId);
               }
@@ -336,7 +348,7 @@ export const editDesign = async (req, res) => {
         }
       }
 
-      // 5️⃣ Merge with newly uploaded images
+      // 5️⃣ Merge old images with newly uploaded images
       updatedImages = [...updatedImages, ...newImages];
 
       // 6️⃣ Update product fields
@@ -348,9 +360,10 @@ export const editDesign = async (req, res) => {
       product.hashtags = parsedHashtags;
       product.image = updatedImages;
 
+      // 7️⃣ Save updated product
       await product.save();
 
-      console.log("✅ Product updated successfully:", product._id);
+      console.log("✅ Product updated successfully:", product._id , );
       res.status(200).json({ success: true, product });
     } catch (error) {
       console.error("Edit design error:", error.message);

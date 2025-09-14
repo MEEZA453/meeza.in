@@ -1,6 +1,6 @@
 import Post from "../models/post.js";
  import User from "../models/user.js";
-import { cloudinary } from "../config/cloudinery.js";
+import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
 import Notification from "../models/notification.js";
 import Product from "../models/designs.js"
 
@@ -256,11 +256,15 @@ export const createPost = async (req, res) => {
     res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
+
+
 export const editPost = async (req, res) => {
   console.log("Editing post...");
   try {
     const { id } = req.params;
     const { name, description, category, hashtags, voteFields, removeImages } = req.body;
+
+    console.log("Images to remove:", removeImages);
 
     // 1️⃣ Find post
     const post = await Post.findById(id);
@@ -284,7 +288,7 @@ export const editPost = async (req, res) => {
     // 3️⃣ Handle removing old images
     let updatedImages = [...post.images];
     if (removeImages) {
-      const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
+      const imagesToRemove = JSON.parse(removeImages);
       for (const url of imagesToRemove) {
         const publicId = getCloudinaryPublicId(url);
         if (publicId) {
@@ -297,7 +301,7 @@ export const editPost = async (req, res) => {
     // 4️⃣ Merge old + new images
     updatedImages = [...updatedImages, ...newImages];
 
-    // 5️⃣ Update fields
+    // 5️⃣ Update post fields
     post.name = name || post.name;
     post.description = description || post.description;
     post.category = category || post.category;
@@ -305,13 +309,13 @@ export const editPost = async (req, res) => {
     post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
     post.images = updatedImages;
 
-    // 6️⃣ Save
+    // 6️⃣ Save updated post
     await post.save();
     console.log("Post updated successfully");
-    res.status(200).json({ success: true, post });
+    return res.status(200).json({ success: true, post });
   } catch (err) {
     console.error("Edit post failed:", err);
-    res.status(500).json({ success: false, message: err.message || "Internal server error" });
+    return res.status(500).json({ success: false, message: err.message || "Internal server error" });
   }
 };
 
