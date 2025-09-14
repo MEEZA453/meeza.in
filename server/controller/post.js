@@ -99,6 +99,8 @@ export const approveAssetAttachment = async (req, res) => {
 
     const post = await Post.findById(postId);
     const asset = await Product.findById(assetId);
+const postImage = post.images?.[0] || "";
+    const assetImage = asset.image?.[0] || "";
 
     if (!post || !asset) return res.status(404).json({ success: false, message: "Post or Asset not found" });
 
@@ -115,7 +117,8 @@ console.log('approved')
         recipient: notification.sender,
         sender: adminId,
         type: "asset_attach_approved",
-        message: `Your request to attach "${asset.name}" to post "${post.name}" has been approved!`
+        message: `Your request to attach "${asset.name}" to post "${post.name}" has been approved!`,
+              meta: { postId, assetId, postImage, assetImage }
       });
 
       notification.status = "approved";
@@ -127,8 +130,9 @@ console.log('approved')
       await Notification.create({
         recipient: notification.sender,
         sender: adminId,
-        type: "asset_attach_rejected",
-        message: `Your request to attach "${asset.name}" to post "${post.name}" has been rejected.`
+        type: "asset_attach_approved",
+        message: `Your request to attach "${asset.name}" to post "${post.name}" has been approved!`,
+              meta: { postId, assetId, postImage, assetImage }
       });
 
       notification.status = "rejected";
@@ -252,6 +256,65 @@ export const createPost = async (req, res) => {
     res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
+export const editPost = async (req, res) => {
+  console.log("Editing post...");
+  try {
+    const { id } = req.params;
+    const { name, description, category, hashtags, voteFields, removeImages } = req.body;
+
+    // 1️⃣ Find post
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    // 2️⃣ Handle uploaded new images
+    let newImages = [];
+    if (req.files && req.files.length > 0) {
+      newImages = await Promise.all(
+        req.files.map(async (file) => {
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: "posts",
+          });
+          return result.secure_url;
+        })
+      );
+    }
+
+    // 3️⃣ Handle removing old images
+    let updatedImages = [...post.images];
+    if (removeImages) {
+      const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
+      for (const url of imagesToRemove) {
+        const publicId = getCloudinaryPublicId(url);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+        updatedImages = updatedImages.filter((img) => img !== url);
+      }
+    }
+
+    // 4️⃣ Merge old + new images
+    updatedImages = [...updatedImages, ...newImages];
+
+    // 5️⃣ Update fields
+    post.name = name || post.name;
+    post.description = description || post.description;
+    post.category = category || post.category;
+    post.hashtags = hashtags ? JSON.parse(hashtags) : post.hashtags;
+    post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
+    post.images = updatedImages;
+
+    // 6️⃣ Save
+    await post.save();
+    console.log("Post updated successfully");
+    res.status(200).json({ success: true, post });
+  } catch (err) {
+    console.error("Edit post failed:", err);
+    res.status(500).json({ success: false, message: err.message || "Internal server error" });
+  }
+};
+
 export const getDefaultPosts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10; // default = 10 posts

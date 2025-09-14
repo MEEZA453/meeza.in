@@ -47,24 +47,89 @@ export const getDefaultDesigns = async (req, res) => {
   }
 };
 
-export const getDesign = async( req , res)=>{
+export const getDesign = async (req, res) => {
+  try {
+    const userId = req.user?.id; // from auth middleware
 
-    try {
-        const page = parseInt(req.query.page);
-        const limit = parseInt(req.query.limit) 
-        console.log(page , limit)
-        const skip = (page - 1) * limit;
-        console.log('reached to the get design')
-        const postedDesigns = await Product.find().skip(skip).limit(limit)
-        .sort({ createdAt: -1 })
-        .populate("postedBy", "name profile handle")
-        res.json(postedDesigns)
-    } catch (error) {
-        console.log('controller err:', error)
+    console.log("User from token:", userId);
+
+    let designs = await Product.find({})
+      .sort({ createdAt: -1 })
+      .populate("postedBy", "name profile handle")
+      .lean();
+
+    console.log("Fetched products:", designs.length);
+
+    // Add ownership flag
+    designs = designs.map((product) => ({
+      ...product,
+      isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+    }));
+
+    res.status(200).json({
+      count: designs.length,
+      results: designs,
+    });
+  } catch (error) {
+    console.error("Error in getDesign:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+
+// ✅ Get product by ID
+export const getDesignById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const product = await Product.findById(id)
+      .populate("postedBy", "name profile handle")
+      .lean();
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
-    
+
+    const productWithOwnership = {
+      ...product,
+      isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
     };
-    
+
+    res.status(200).json({ success: true, product: productWithOwnership });
+  } catch (error) {
+    console.error("Error in getDesignById:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ✅ Get product by HANDLE
+export const getDesignByHandle = async (req, res) => {
+  try {
+    const { handle } = req.params;
+    const userId = req.user?.id;
+
+    const product = await Product.findOne({ handle })
+      .populate("postedBy", "name profile handle")
+      .lean();
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    const productWithOwnership = {
+      ...product,
+      isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+    };
+
+    res.status(200).json({ success: true, product: productWithOwnership });
+  } catch (error) {
+    console.error("Error in getDesignByHandle:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+
 export const searchDesigns = async (req, res) => {
   console.log('searching design');
   try {
@@ -180,54 +245,116 @@ const upload = multer({ storage });
 
 export default upload;
 
-// // Configure Multer for file uploads
-// const storage = multer.diskStorage({
-//     destination: (req, file, cb) => {
-//         cb(null, "uploads/"); // Store files in 'uploads' folder
-//     },
-//     filename: (req, file, cb) => {
-//         cb(null, Date.now() + "-" + file.originalname); // Unique filenames
-//     }
-// });
 
-// const upload = multer({ storage }).array('image', 5); // Allow up to 5 images
 
 export const postDesign = async (req, res) => {
-    console.log("Reached postDesign route");
+  console.log("Reached postDesign route");
 
-    upload.array("images", 10)(req, res, async (err) => {
-        if (err) {
-            console.error("Multer error:", err);
-            return res.status(400).json({ success: false, message: "Image upload failed" });
-        }
+  upload.array("images", 10)(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error:", err);
+      return res.status(400).json({ success: false, message: "Image upload failed" });
+    }
 
-        try {
-            const { name, amount,driveLink ,  sections,  faq , hastags } = req.body;
+    try {
+      const { name, amount, driveLink, sections, faq, hashtags } = req.body;
 
-            const parsedSections = sections ? JSON.parse(sections) : [];
-            const parsedHastags = hastags ? JSON.parse(hastags) : [];
-            const parsedFaq = faq ? JSON.parse(faq) : [];
+      const parsedSections = sections ? JSON.parse(sections) : [];
+      const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
+      console.log(hashtags)
+      const parsedFaq = faq ? JSON.parse(faq) : [];
 
-            const imagePaths = req.files ? req.files.map(file => file.path) : [];
+      const imagePaths = req.files ? req.files.map((file) => file.path) : [];
 
-            const product = new Product({
-                name,
-                amount,
-                image: imagePaths,
-            driveLink ,
-                sections: parsedSections,
-                faq : parsedFaq,
-                hastags: parsedHastags,
-                postedBy: req.user.id, // store user ID from JWT
-            });
+      const product = new Product({
+        name,
+        amount,
+        image: imagePaths,
+        driveLink,
+        sections: parsedSections,
+        faq: parsedFaq,
+        hashtags: parsedHashtags, // ✅ correct spelling matches schema
+        postedBy: req.user.id,
+      });
 
-            await product.save();
-            console.log("Product added successfully:");
-            res.status(201).json({ success: true, product });
-        } catch (error) {
-            console.error("Error:", error.message);
-            res.status(500).json({ success: false, message: error.message });
-        }
-    });
+      await product.save();
+      console.log("Product added successfully:", product._id);
+      res.status(201).json({ success: true, product });
+    } catch (error) {
+      console.error("Error:", error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
 };
 
+
+export const editDesign = async (req, res) => {
+  console.log("Reached editDesign route");
+
+  upload.array("images", 10)(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error:", err);
+      return res.status(400).json({ success: false, message: "Image upload failed" });
+    }
+
+    try {
+      const { id } = req.params;
+      const { name, amount, driveLink, sections, faq, hashtags, removeImages } = req.body;
+
+      // 1️⃣ Find product
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json({ success: false, message: "Product not found" });
+      }
+
+      // 2️⃣ Parse JSON fields safely
+      const parsedSections = sections ? JSON.parse(sections) : product.sections;
+      const parsedFaq = faq ? JSON.parse(faq) : product.faq;
+      const parsedHashtags = hashtags ? JSON.parse(hashtags) : product.hashtags;
+
+      // 3️⃣ Handle uploaded new images
+      const newImages = req.files ? req.files.map((file) => file.path) : [];
+
+      // 4️⃣ Handle removing old images
+      let updatedImages = [...product.image];
+      if (removeImages) {
+        try {
+          const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
+          for (const url of imagesToRemove) {
+            try {
+              const publicId = getCloudinaryPublicId(url);
+              if (publicId) {
+                await cloudinary.uploader.destroy(publicId);
+              }
+            } catch (cloudErr) {
+              console.error("Cloudinary deletion failed for:", url, cloudErr.message);
+            }
+            updatedImages = updatedImages.filter((img) => img !== url);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing removeImages:", parseErr.message);
+        }
+      }
+
+      // 5️⃣ Merge with newly uploaded images
+      updatedImages = [...updatedImages, ...newImages];
+
+      // 6️⃣ Update product fields
+      product.name = name ?? product.name;
+      product.amount = amount ?? product.amount;
+      product.driveLink = driveLink ?? product.driveLink;
+      product.sections = parsedSections;
+      product.faq = parsedFaq;
+      product.hashtags = parsedHashtags;
+      product.image = updatedImages;
+
+      await product.save();
+
+      console.log("✅ Product updated successfully:", product._id);
+      res.status(200).json({ success: true, product });
+    } catch (error) {
+      console.error("Edit design error:", error.message);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+};

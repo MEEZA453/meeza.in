@@ -15,7 +15,8 @@ import {
   detachAssetFromPost,
   requestAttachAsset,
   approveAssetAttachment,
-  attachAssetToPost
+  attachAssetToPost,
+  editPost
 } from "../controller/post.js";
 import {verifyToken} from '../middleweres/auth.js'
 
@@ -30,7 +31,8 @@ router.post("/detach", detachAssetFromPost);
 // get all posts where asset is used
 router.get("/search/posts", searchPosts);
 router.get("/defaultSearch", getDefaultPosts);
-router.post("/createPost", verifyToken, upload.array("images", 5), createPost);          // Create post
+router.post("/createPost", verifyToken, upload.array("images", 5), createPost);    
+router.put("/editPost/:id", verifyToken, upload.array("images", 10), editPost);
 router.get("/", getPosts);                      // Get all posts
 router.get("/:id", getPostById);   
 router.get('/postByHandle/:handle' , getPostsByHandle)              // Get post by ID

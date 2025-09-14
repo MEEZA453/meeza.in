@@ -1,14 +1,18 @@
 import express from 'express'
-import {getDesign , postDesign , deleteDesign , pingServer, searchDesigns, getDefaultDesigns}  from '../controller/design.js'
+import {getDesign , postDesign , deleteDesign , pingServer, searchDesigns, getDefaultDesigns, editDesign, getDesignById, getDesignByHandle}  from '../controller/design.js'
 import { verifyToken } from '../middleweres/auth.js';
 import { getPostsOfAsset } from '../controller/post.js';
 const router = express.Router()
 
-router.get('/allproducts' ,getDesign ) ;
+router.get('/allproducts' , verifyToken, getDesign ) ;
 router.get("/ping", pingServer);
+router.put("/edit/:id", verifyToken, editDesign); 
 router.get("/defaultSearch",  verifyToken , getDefaultDesigns);
 router.get("/asset/:assetId/posts", getPostsOfAsset);
+router.get("/assetById/:id", verifyToken, getDesignById);
 
+// Get single product by HANDLE
+router.get("/assetByHandle/:handle", verifyToken, getDesignByHandle);
 router.post('/post' ,verifyToken, postDesign) ;
 router.delete('/delete/:id', deleteDesign); 
 router.get("/search/designs",verifyToken , searchDesigns);
