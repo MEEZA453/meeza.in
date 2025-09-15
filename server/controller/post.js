@@ -474,9 +474,9 @@ export const votePost = async (req, res) => {
     if (!post) return res.status(404).json({ message: "Post not found" });
 
     const userId = req.user.id;
-    const existingVote = post.votes.find(
-      (v) => v.user._id.toString() === userId
-    );
+  const existingVote = post.votes.find(
+  (v) => v.user && v.user._id.toString() === userId
+);
 
     if (existingVote) {
       existingVote.creativity = creativity ?? existingVote.creativity;
