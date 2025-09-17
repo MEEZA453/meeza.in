@@ -3,7 +3,8 @@ import Product from '../models/designs.js'
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multer from "multer";
 import dotenv from "dotenv";
-
+import { sanitizeProduct } from "../utils/sanitizeProduct.js";
+import Order from "../models/Order.js";
 dotenv.config();
 
 export const pingServer = (req, res) => {
@@ -61,10 +62,15 @@ export const getDesign = async (req, res) => {
     console.log("Fetched products:", designs.length);
 
     // Add ownership flag
-    designs = designs.map((product) => ({
-      ...product,
-      isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
-    }));
+  designs = designs.map((product) => {
+      const base = sanitizeProduct(product);
+
+      return {
+        ...base,
+        isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+      };
+    });
+
 
     res.status(200).json({
       count: designs.length,
@@ -90,12 +96,18 @@ export const getDesignById = async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
+ let unlocked = false;
+    if (userId) {
+      const order = await Order.findOne({ user: userId, product: id, status: { $in: ["free", "paid"] } });
+      unlocked = !!order;
+    }
 
-    const productWithOwnership = {
-      ...product,
+
+ const productWithOwnership = {
+      ...sanitizeProduct(product),
       isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+      unlocked,
     };
-
     res.status(200).json({ success: true, product: productWithOwnership });
   } catch (error) {
     console.error("Error in getDesignById:", error.message);
@@ -117,9 +129,10 @@ export const getDesignByHandle = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    const productWithOwnership = {
-      ...product,
+   const productWithOwnership = {
+      ...sanitizeProduct(product),
       isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+      unlocked,
     };
 
     res.status(200).json({ success: true, product: productWithOwnership });

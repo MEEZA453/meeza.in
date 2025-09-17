@@ -3,33 +3,17 @@ import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema(
   {
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      required: true
-    },
-    buyer: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
-    seller: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
-    amount: {
-      type: Number,
-      required: true
-    },
-    paymentIntentId: String, // Stripe Payment Intent ID
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    amount: { type: Number, default: 0 }, // 0 for free
     status: {
       type: String,
-      enum: ["pending", "paid", "failed"],
-      default: "pending"
-    }
+      enum: ["free", "paid", "pending", "failed"],
+      default: "free",
+    },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Order", orderSchema);
+const Order = mongoose.model("Order", orderSchema);
+export default Order;
