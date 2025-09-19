@@ -2,11 +2,13 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    buyer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    seller: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
-    orderId: { type: String, required: true },   // PayPal orderId
+    orderId: { type: String, required: true },
+    paymentId: String,
     amount: { type: Number, required: true },
-    currency: { type: String, default: "USD" },
+    currency: { type: String, default: "INR" },
     status: { type: String, enum: ["CREATED", "COMPLETED", "FAILED"], default: "CREATED" },
   },
   { timestamps: true }

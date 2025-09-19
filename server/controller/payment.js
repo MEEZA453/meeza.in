@@ -7,55 +7,115 @@ import Notification from "../models/notification.js";
 import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import paypal from "@paypal/checkout-server-sdk";
+import dotenv from "dotenv";
+import User from "../models/user.js";
+import WalletTransaction from "../models/wallet.js";
+import { error } from "console";
 // Razorpay Client
+dotenv.config();
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
-
-
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-export const createRazorpayOrder = async (req, res) => {
+
+
+// const razorpay = new Razorpay({
+//   key_id: process.env.RAZORPAY_KEY_ID,
+//   key_secret: process.env.RAZORPAY_KEY_SECRET,
+// });
+export const getWallet = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("balance razorpayAccountId");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Transactions with product info if CREDIT (sold product)
+    const transactions = await WalletTransaction.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const enrichedTransactions = await Promise.all(
+      transactions.map(async (tx) => {
+        if (tx.type === "CREDIT") {
+          const payment = await Payment.findOne({ paymentId: tx.reference }).populate("product");
+          return { ...tx, product: payment?.product || null };
+        }
+        return tx;
+      })
+    );
+
+    res.json({
+      success: true,
+      balance: user.balance,
+      razorpayAccountId: user.razorpayAccountId || null,
+      transactions: enrichedTransactions,
+    });
+  } catch (err) {
+    console.error("❌ getWallet error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch wallet" });
+  }
+};
+export const createOrder = async (req, res) => {
   try {
     const { productId } = req.body;
-    const userId = req.user.id;
+    const buyerId = req.user.id;
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+    console.log("🔹 createOrder called | buyer:", buyerId, " product:", productId);
+
+    const product = await Product.findById(productId).populate("postedBy");
+    if (!product) {
+      console.log("❌ Product not found");
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    console.log("✅ Product found:", product._id, " Seller:", product.postedBy._id);
 
     const options = {
-      amount: product.amount * 100, // amount in paisa
+      amount: product.amount * 100,
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
     };
 
+    console.log("📝 Creating Razorpay order with options:", options);
+
     const order = await razorpay.orders.create(options);
 
-    // Save in DB
+    console.log("✅ Razorpay order created:", order.id);
+
     await Payment.create({
-      user: userId,
+      buyer: buyerId,
+      seller: product.postedBy._id,
       product: productId,
       orderId: order.id,
       amount: product.amount,
       status: "CREATED",
-      method: "razorpay",
     });
 
-    res.json({ success: true, orderId: order.id, key: process.env.RAZORPAY_KEY_ID });
+    console.log("💾 Payment record created in DB");
+
+    res.json({
+      success: true,
+      orderId: order.id,
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: options.amount,
+      currency: options.currency,
+    });
   } catch (err) {
-    console.error("createRazorpayOrder error:", err.message);
-    res.status(500).json({ success: false, message: "Failed to create Razorpay order" });
+    console.log(err)
+    console.error("❌ createOrder error:", err);
+    res.status(500).json({ success: false, message: "Failed to create order" });
   }
 };
 
-// ✅ Capture Razorpay Payment
-export const captureRazorpayPayment = async (req, res) => {
+
+export const capturePayment = async (req, res) => {
   try {
     const { orderId, paymentId, signature, productId } = req.body;
-    const userId = req.user.id;
+    const buyerId = req.user.id;
 
-    // Verify signature
+    // 1️⃣ Verify payment signature
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(orderId + "|" + paymentId)
@@ -65,25 +125,38 @@ export const captureRazorpayPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
 
-    // Update payment status
-    await Payment.findOneAndUpdate(
+    // 2️⃣ Update Payment record
+    const payment = await Payment.findOneAndUpdate(
       { orderId },
       { status: "COMPLETED", paymentId },
       { new: true }
-    );
+    ).populate("seller product");
 
-    const product = await Product.findById(productId);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Payment not found" });
+    }
 
-    // Save in Orders collection
-    const order = new Order({
-      user: userId,
+    // 3️⃣ Credit seller balance
+    await User.findByIdAndUpdate(payment.seller._id, { $inc: { balance: payment.amount } });
+
+    // 4️⃣ Create WalletTransaction for seller (CREDIT)
+    await WalletTransaction.create({
+      user: payment.seller._id,
+      type: "CREDIT",
+      amount: payment.amount,
+      reference: paymentId,
+      status: "SUCCESS",
+    });
+
+    // 5️⃣ Create Order record
+    const order = await Order.create({
+      user: buyerId,
       product: productId,
-      amount: product.amount,
+      amount: payment.amount,
       status: "paid",
     });
-    await order.save();
 
-    // Send Email
+    // 6️⃣ Send email to buyer with download link
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
       port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
@@ -97,27 +170,126 @@ export const captureRazorpayPayment = async (req, res) => {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: req.user.email,
-      subject: `Your purchase: ${product.name}`,
+      subject: `Your purchase: ${payment.product.name}`,
       html: `
-        <h2>Thanks for purchasing ${product.name} 🎉</h2>
-        <p><a href="${product.driveLink}" target="_blank">Click here to download</a></p>
+        <h2>Thanks for purchasing ${payment.product.name} 🎉</h2>
+        <p><a href="${payment.product.driveLink}" target="_blank">Click here to download your asset</a></p>
       `,
     });
 
-    // Create Notification
+    // 7️⃣ Create Notifications
+    // To buyer
     await Notification.create({
-      recipient: userId,
-      type: "order_paid",
-      message: `${product.name} purchased successfully via Razorpay`,
-      image: product.image,
+      recipient: buyerId,
+      sender: payment.seller._id,
+      type: "order_created",
+      message: `You successfully purchased ${payment.product.name}`,
+      meta: { productId: payment.product._id },
+      image: payment.product.image?.[0] || "",
     });
 
-    res.json({ success: true, message: "Razorpay payment successful, email sent" });
+    // To seller
+    await Notification.create({
+      recipient: payment.seller._id,
+      sender: buyerId,
+      type: "product_sold",
+      message: `${req.user.name || "A user"} purchased your product ${payment.product.name}`,
+      meta: { productId: payment.product._id },
+      image: payment.product.image?.[0] || "",
+    });
+
+    res.json({
+      success: true,
+      message: "Payment captured successfully",
+      orderLink: payment.product.driveLink,
+      product: payment.product,
+    });
   } catch (err) {
-    console.error("captureRazorpayPayment error:", err.message);
-    res.status(500).json({ success: false, message: "Failed to capture Razorpay payment" });
+    console.error("❌ capturePayment error:", err);
+    res.status(500).json({ success: false, message: "Failed to capture payment" });
+  }
+}
+
+export const connectRazorpayAccount = async (req, res) => {
+  try {
+    const { razorpayAccountId } = req.body;
+    const userId = req.user.id;
+
+    console.log("🔹 connectRazorpayAccount called | user:", userId, " account:", razorpayAccountId);
+
+    const user = await User.findByIdAndUpdate(userId, { razorpayAccountId }, { new: true });
+
+    console.log("✅ Razorpay account connected for user:", user._id);
+
+    res.json({ success: true, message: "Razorpay account connected", user });
+  } catch (err) {
+    console.error("❌ connectRazorpayAccount error:", err);
+    res.status(500).json({ success: false, message: "Failed to connect account" });
   }
 };
+
+
+const razorpayX = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+export const withdrawBalance = async (req, res) => {
+  
+  try {
+    const user = await User.findById(req.user.id);
+
+    console.log("🔹 withdrawBalance called | user:", req.user.id, " balance:", user.balance);
+
+    if (!user.razorpayAccountId) {
+      console.log("❌ No Razorpay account connected");
+      return res.status(400).json({ success: false, message: "Connect Razorpay account first" });
+    }
+    if (user.balance <= 0) {
+      console.log("❌ No balance available for withdrawal");
+      return res.status(400).json({ success: false, message: "No balance to withdraw" });
+    }
+
+    console.log("📝 Creating payout via RazorpayX for user:", user._id);
+
+    const payout = await razorpayX.payouts.create({
+      account_number: process.env.RAZORPAYX_ACCOUNT_NUMBER,
+      fund_account: {
+        account_type: "rzp_account",
+        account: { id: user.razorpayAccountId },
+      },
+      amount: user.balance * 100,
+      currency: "INR",
+      mode: "IMPS",
+      purpose: "payout",
+      narration: "Earnings from MZCO",
+    });
+
+    console.log("✅ Payout created:", payout.id);
+
+    const amount = user.balance;
+    user.balance = 0;
+    await user.save();
+
+    console.log("💾 User balance reset to 0 after withdrawal");
+
+    await WalletTransaction.create({
+      user: user._id,
+      type: "DEBIT",
+      amount,
+      reference: payout.id,
+      status: "SUCCESS",
+    });
+
+    console.log("💾 WalletTransaction DEBIT saved for user:", user._id);
+
+    res.json({ success: true, message: "Withdrawal successful", payout });
+  } catch (err) {
+    console.error("❌ withdrawBalance error:", err);
+    res.status(500).json({ success: false, message: "Withdrawal failed" });
+  }
+};
+
 
 // PayPal Client
 function paypalClient() {
@@ -241,3 +413,171 @@ console.log('paypal order captured')
   }
 };
 // ✅ Create Razorpay Order
+// export const getRazorpayConnectUrl = (req, res) => {
+//   console.log('trying to connect')
+//   try {
+//     const clientId = process.env.RAZORPAY_KEY_ID; // from Razorpay Connect app
+//     const redirectUri = encodeURIComponent(process.env.RAZORPAY_REDIRECT_URI);
+// console.log(clientId , redirectUri)
+//     const url = `https://connect.razorpay.com/authorize?response_type=code&client_id=${clientId}&scope=account&redirect_uri=${redirectUri}`;
+// console.log('done')
+//     res.json({ success: true, url });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ success: false, message: "Failed to get Razorpay connect URL" });
+//   }
+// };
+
+// // Step 2: Callback after seller approves (exchange code for account info)
+// export const razorpayConnectCallback = async (req, res) => {
+//   try {
+//     const { code } = req.query; // Razorpay returns ?code=xxxx
+
+//     if (!code) return res.status(400).json({ success: false, message: "No code provided" });
+
+//     const clientId = process.env.RAZORPAY_CLIENT_ID;
+//     const clientSecret = process.env.RAZORPAY_CLIENT_SECRET;
+//     const redirectUri = process.env.RAZORPAY_REDIRECT_URI;
+
+//     // Exchange code for access token + account id
+//     const response = await axios.post(
+//       "https://connect.razorpay.com/merchant/oauth/token",
+//       new URLSearchParams({
+//         grant_type: "authorization_code",
+//         code: code ,
+//         client_id: clientId,
+//         client_secret: clientSecret,
+//         redirect_uri: redirectUri,
+//       }),
+//       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+//     );
+
+//     const { access_token, razorpay_account_id } = response.data;
+
+//     // Save razorpay_account_id in user model
+//     await User.findByIdAndUpdate(req.user.id, { razorpayAccountId: razorpay_account_id });
+
+//     res.json({ success: true, message: "Razorpay account connected", razorpay_account_id });
+//   } catch (err) {
+//     console.error("Razorpay Connect error:", err.response?.data || err.message);
+//     res.status(500).json({ success: false, message: "Failed to connect Razorpay account" });
+//   }
+// };
+
+// export const createRazorpayOrder = async (req, res) => {
+//   console.log('reached to create razor');
+//   try {
+//     const { productId } = req.body;
+//     const userId = req.user.id;
+
+//     console.log(productId, userId);
+//     console.log("Using Razorpay ID:", `"${process.env.RAZORPAY_KEY_ID}"`);
+
+//     const product = await Product.findById(productId);
+//     if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+//     const options = {
+//       amount: product.amount * 100, // amount in paise
+//       currency: "INR",
+//       receipt: `receipt_${Date.now()}`,
+//     };
+
+//     const order = await razorpay.orders.create(options);
+
+//     await Payment.create({
+//       user: userId,
+//       product: productId,
+//       orderId: order.id,
+//       amount: product.amount,
+//       status: "CREATED",
+//       method: "razorpay",
+//     });
+
+//     console.log("done order", order);
+
+//     res.json({
+//       success: true,
+//       orderId: order.id,
+//       key: process.env.RAZORPAY_KEY_ID,
+//       amount: options.amount,        // ✅ include amount
+//       currency: options.currency,    // ✅ include currency
+//     });
+//   } catch (err) {
+//     console.error("createRazorpayOrder error:", err);
+//     res.status(500).json({ success: false, message: "Failed to create Razorpay order" });
+//   }
+// };
+
+
+// // ✅ Capture Razorpay Payment
+// export const captureRazorpayPayment = async (req, res) => {
+//   console.log('reached to capture razor')
+//   try {
+//     const { orderId, paymentId, signature, productId } = req.body;
+//     const userId = req.user.id;
+
+//     // Verify signature
+//     const generatedSignature = crypto
+//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+//       .update(orderId + "|" + paymentId)
+//       .digest("hex");
+
+//     if (generatedSignature !== signature) {
+//       return res.status(400).json({ success: false, message: "Invalid payment signature" });
+//     }
+
+//     // Update payment status
+//     await Payment.findOneAndUpdate(
+//       { orderId },
+//       { status: "COMPLETED", paymentId },
+//       { new: true }
+//     );
+
+//     const product = await Product.findById(productId);
+
+//     // Save in Orders collection
+//     const order = new Order({
+//       user: userId,
+//       product: productId,
+//       amount: product.amount,
+//       status: "paid",
+//     });
+//     await order.save();
+
+//     // Send Email
+//     const transporter = nodemailer.createTransport({
+//       host: process.env.SMTP_HOST || "smtp.gmail.com",
+//       port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
+//       secure: false,
+//       auth: {
+//         user: process.env.SMTP_USER,
+//         pass: process.env.SMTP_PASS,
+//       },
+//     });
+
+//     await transporter.sendMail({
+//       from: process.env.SMTP_FROM || process.env.SMTP_USER,
+//       to: req.user.email,
+//       subject: `Your purchase: ${product.name}`,
+//       html: `
+//         <h2>Thanks for purchasing ${product.name} 🎉</h2>
+//         <p><a href="${product.driveLink}" target="_blank">Click here to download</a></p>
+//       `,
+//     });
+
+//     // Create Notification
+//     await Notification.create({
+//       recipient: userId,         // the user who unlocked the product
+//       sender: product.postedBy,  // the product creator
+//       type: "order_created", // or custom type
+//       message: `Your order for ${product.name} was created successfully`,
+//       meta: { productId: product._id },
+//       image: product.image?.[0] || "", // first image of the product
+//     });
+
+//     res.json({ success: true, message: "Razorpay payment successful, email sent" });
+//   } catch (err) {
+//     console.error("captureRazorpayPayment error:", err.message);
+//     res.status(500).json({ success: false, message: "Failed to capture Razorpay payment" });
+//   }
+// };

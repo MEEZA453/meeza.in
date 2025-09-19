@@ -39,6 +39,9 @@ removeJuryApplied: {
   type: Boolean,
   default: false
 },
+// In User model
+balance: { type: Number, default: 0 },
+razorpayAccountId: { type: String, unique: true, sparse: true },
 
 // Normal application pending
 normalApplied: {

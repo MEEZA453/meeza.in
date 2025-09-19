@@ -6,7 +6,7 @@ const notificationSchema = new mongoose.Schema({
   sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // who caused it
   type: {
     type: String,
-    enum: ["vote", "follow", "comment","jury_request","jury_approved", "jury_removed" ,  "jury_rejected" , "jury_removal_request" , "normal_request_rejected" , "asset_attach_request", 'order_created',  
+    enum: ["vote", "follow", "comment","jury_request","jury_approved", "jury_removed" ,  "jury_rejected" , "jury_removal_request" , "normal_request_rejected" , "asset_attach_request", 'order_created', 'product_sold',  
       "asset_attach_approved",  
       "asset_attach_rejected"], 
     required: true,
