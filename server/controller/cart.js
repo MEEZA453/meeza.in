@@ -54,27 +54,33 @@ console.log('removed  from  cart')
 
 // Get User Cart
 export const getUserCart = async (req, res) => {
-  console.log('getting user  cart')
+  console.log('getting user cart');
   try {
     const userId = req.user.id;
-    const cart = await Cart.findOne({ user: userId })
-.populate({
-        path: "items.product",
-        select: "name amount image postedBy",
-        populate: {
-          path: "postedBy",
-          select: "name email handle profile" // 👈 user fields from User model
-        }
-      })
 
-    if (!cart) return res.status(200).json({ success: true, cart: { items: [] } });
-console.log('got the user cart')
-    res.status(200).json({ success: true, cart });
+    const cart = await Cart.findOne({ user: userId }).populate({
+      path: "items.product",
+      select: "name amount image postedBy",
+      populate: {
+        path: "postedBy",
+        select: "name email handle profile" // user fields from User model
+      }
+    });
+
+    if (!cart) 
+      return res.status(200).json({ success: true, cart: { items: [] } });
+
+    // Filter out null products
+    const filteredItems = cart.items.filter(item => item.product != null);
+
+    console.log('got the user cart');
+    res.status(200).json({ success: true, cart: { ...cart.toObject(), items: filteredItems } });
   } catch (error) {
     console.error("Get cart error:", error.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
 
 // Clear Cart
 export const clearCart = async (req, res) => {

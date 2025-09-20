@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 const paymentSchema = new mongoose.Schema(
   {
     buyer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    seller: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true }],
+    sellers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }],
     orderId: { type: String, required: true },
     paymentId: String,
     amount: { type: Number, required: true },
@@ -13,5 +13,6 @@ const paymentSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
 
 export default mongoose.model("Payment", paymentSchema);

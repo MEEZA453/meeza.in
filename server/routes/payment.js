@@ -1,5 +1,5 @@
 import express from "express";
-import { createPaypalOrder, capturePaypalOrder, createOrder, capturePayment, connectRazorpayAccount, withdrawBalance, getWallet } from "../controller/payment.js";
+import { createPaypalOrder, capturePaypalOrder, createOrder, capturePayment, connectRazorpayAccount, withdrawBalance, getWallet, createCartOrder, captureCartPayment } from "../controller/payment.js";
 import {verifyToken} from "../middleweres/auth.js";
 
 const router = express.Router();
@@ -11,7 +11,8 @@ router.post("/razorpay/capture", verifyToken, capturePayment);
 router.post("/razorpay/connect", verifyToken, connectRazorpayAccount);
 router.post("/razorpay/withdraw", verifyToken, withdrawBalance);
 router.get("/razorpay/wallet", verifyToken, getWallet);
-
+router.post("/razorpay/cart/create", verifyToken, createCartOrder);
+router.post("/razorpay/cart/capture", verifyToken, captureCartPayment);
 
 
 // Callback endpoint (Razorpay redirects here after seller approves)

@@ -57,6 +57,176 @@ export const getWallet = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch wallet" });
   }
 };
+
+// 📌 Create Order for Multiple Products (from Cart)
+export const createCartOrder = async (req, res) => {
+  try {
+    const { cartItems } = req.body; // [{ productId }, { productId }]
+    const buyerId = req.user.id;
+
+    console.log("🔹 createCartOrder called | buyer:", buyerId, " cart:", cartItems);
+
+    // 1️⃣ Fetch all products
+    const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
+
+    if (!products || products.length === 0) {
+      console.log("❌ No products found in cart");
+      return res.status(404).json({ success: false, message: "No products found" });
+    }
+
+    // 2️⃣ Calculate total amount
+    const totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
+
+    console.log("✅ Products found:", products.map(p => p._id));
+    console.log("💰 Total amount:", totalAmount);
+
+    // 3️⃣ Create Razorpay Order
+    const options = {
+      amount: totalAmount * 100, // in paise
+      currency: "INR",
+      receipt: `cart_${Date.now()}`,
+    };
+
+    console.log("📝 Creating Razorpay order with options:", options);
+
+    const order = await razorpay.orders.create(options);
+
+    console.log("✅ Razorpay cart order created:", order.id);
+
+    // 4️⃣ Store Payment Record (linked to multiple products)
+    await Payment.create({
+      buyer: buyerId,
+      products: products.map(p => p._id),
+      sellers: products.map(p => p.postedBy._id),
+      orderId: order.id,
+      amount: totalAmount,
+      status: "CREATED",
+    });
+
+    console.log("💾 Cart Payment record created in DB");
+
+    res.json({
+      success: true,
+      orderId: order.id,
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: options.amount,
+      currency: options.currency,
+    });
+
+  } catch (err) {
+    console.error("❌ createCartOrder error:", err);
+    res.status(500).json({ success: false, message: "Failed to create cart order" });
+  }
+};
+
+
+// 📌 Capture Cart Payment
+export const captureCartPayment = async (req, res) => {
+  try {
+    const { orderId, paymentId, signature } = req.body;
+    const buyerId = req.user.id;
+
+    // 1️⃣ Verify signature
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(orderId + "|" + paymentId)
+      .digest("hex");
+
+    if (generatedSignature !== signature) {
+      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    }
+
+    // 2️⃣ Update Payment record
+    const payment = await Payment.findOneAndUpdate(
+      { orderId },
+      { status: "COMPLETED", paymentId },
+      { new: true }
+    ).populate("sellers products");
+
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Payment not found" });
+    }
+
+    console.log("✅ Cart Payment captured:", paymentId);
+
+    // 3️⃣ Process each product & seller
+    for (const product of payment.products) {
+      const seller = product.postedBy;
+
+      // Credit seller balance
+      await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
+
+      // WalletTransaction
+      await WalletTransaction.create({
+        user: seller._id,
+        type: "CREDIT",
+        amount: product.amount,
+        reference: paymentId,
+        status: "SUCCESS",
+      });
+
+      // Order record for buyer
+      await Order.create({
+        user: buyerId,
+        product: product._id,
+        amount: product.amount,
+        status: "paid",
+      });
+
+      // Email to buyer for each product
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: req.user.email,
+        subject: `Your purchase: ${product.name}`,
+        html: `
+          <h2>Thanks for purchasing ${product.name} 🎉</h2>
+          <p><a href="${product.driveLink}" target="_blank">Click here to download your asset</a></p>
+        `,
+      });
+
+      // Notifications
+      await Notification.create({
+        recipient: buyerId,
+        sender: seller._id,
+        type: "order_created",
+        message: `You successfully purchased ${product.name}`,
+        meta: { productId: product._id },
+        image: product.image?.[0] || "",
+      });
+
+      await Notification.create({
+        recipient: seller._id,
+        sender: buyerId,
+        type: "product_sold",
+        message: `purchased your product.`,
+        meta: { productId: product._id },
+        image: product.image?.[0] || "",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Cart payment captured successfully",
+      products: payment.products,
+    });
+
+  } catch (err) {
+    console.error("❌ captureCartPayment error:", err);
+    res.status(500).json({ success: false, message: "Failed to capture cart payment" });
+  }
+};
+
+
 export const createOrder = async (req, res) => {
   try {
     const { productId } = req.body;
@@ -86,8 +256,8 @@ export const createOrder = async (req, res) => {
 
     await Payment.create({
       buyer: buyerId,
-      seller: product.postedBy._id,
-      product: productId,
+      sellers: product.postedBy._id,
+      products: productId,
       orderId: order.id,
       amount: product.amount,
       status: "CREATED",
@@ -112,7 +282,7 @@ export const createOrder = async (req, res) => {
 
 export const capturePayment = async (req, res) => {
   try {
-    const { orderId, paymentId, signature, productId } = req.body;
+    const { orderId, paymentId } = req.body;
     const buyerId = req.user.id;
 
     // 1️⃣ Verify payment signature
@@ -121,7 +291,7 @@ export const capturePayment = async (req, res) => {
       .update(orderId + "|" + paymentId)
       .digest("hex");
 
-    if (generatedSignature !== signature) {
+    if (generatedSignature !== req.body.signature) {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
 
@@ -130,85 +300,85 @@ export const capturePayment = async (req, res) => {
       { orderId },
       { status: "COMPLETED", paymentId },
       { new: true }
-    ).populate("seller product");
+    ).populate("sellers products");
 
     if (!payment) {
       return res.status(404).json({ success: false, message: "Payment not found" });
     }
 
-    // 3️⃣ Credit seller balance
-    await User.findByIdAndUpdate(payment.seller._id, { $inc: { balance: payment.amount } });
+    // 3️⃣ Process each product
+    for (let i = 0; i < payment.products.length; i++) {
+      const product = payment.products[i];
+      const seller = payment.sellers[i];
 
-    // 4️⃣ Create WalletTransaction for seller (CREDIT)
-    await WalletTransaction.create({
-      user: payment.seller._id,
-      type: "CREDIT",
-      amount: payment.amount,
-      reference: paymentId,
-      status: "SUCCESS",
-    });
+      // Credit seller balance
+      await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
 
-    // 5️⃣ Create Order record
-    const order = await Order.create({
-      user: buyerId,
-      product: productId,
-      amount: payment.amount,
-      status: "paid",
-    });
+      // WalletTransaction for seller
+      await WalletTransaction.create({
+        user: seller._id,
+        type: "CREDIT",
+        amount: product.amount,
+        reference: paymentId,
+        status: "SUCCESS",
+      });
 
-    // 6️⃣ Send email to buyer with download link
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+      // Order record for buyer
+      await Order.create({
+        user: buyerId,
+        product: product._id,
+        amount: product.amount,
+        status: "paid",
+      });
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: req.user.email,
-      subject: `Your purchase: ${payment.product.name}`,
-      html: `
-        <h2>Thanks for purchasing ${payment.product.name} 🎉</h2>
-        <p><a href="${payment.product.driveLink}" target="_blank">Click here to download your asset</a></p>
-      `,
-    });
+      // Send email
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
 
-    // 7️⃣ Create Notifications
-    // To buyer
-    await Notification.create({
-      recipient: buyerId,
-      sender: payment.seller._id,
-      type: "order_created",
-      message: `You successfully purchased ${payment.product.name}`,
-      meta: { productId: payment.product._id },
-      image: payment.product.image?.[0] || "",
-    });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: req.user.email,
+        subject: `Your purchase: ${product.name}`,
+        html: `
+          <h2>Thanks for purchasing ${product.name} 🎉</h2>
+          <p><a href="${product.driveLink}" target="_blank">Click here to download your asset</a></p>
+        `,
+      });
 
-    // To seller
-    await Notification.create({
-      recipient: payment.seller._id,
-      sender: buyerId,
-      type: "product_sold",
-      message: `purchased your product.`,
-      meta: { productId: payment.product._id },
-      image: payment.product.image?.[0] || "",
-    });
+      // Notifications
+      await Notification.create({
+        recipient: buyerId,
+        sender: seller._id,
+        type: "order_created",
+        message: `You successfully purchased ${product.name}`,
+        meta: { productId: product._id },
+        image: product.image?.[0] || "",
+      });
+
+      await Notification.create({
+        recipient: seller._id,
+        sender: buyerId,
+        type: "product_sold",
+        message: `purchased your product.`,
+        meta: { productId: product._id },
+        image: product.image?.[0] || "",
+      });
+    }
 
     res.json({
       success: true,
       message: "Payment captured successfully",
-      orderLink: payment.product.driveLink,
-      product: payment.product,
+      products: payment.products,
     });
   } catch (err) {
     console.error("❌ capturePayment error:", err);
     res.status(500).json({ success: false, message: "Failed to capture payment" });
   }
-}
+};
 
 export const connectRazorpayAccount = async (req, res) => {
   try {
