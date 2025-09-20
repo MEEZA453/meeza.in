@@ -24,289 +24,303 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 //   key_id: process.env.RAZORPAY_KEY_ID,
 //   key_secret: process.env.RAZORPAY_KEY_SECRET,
 // });
-export const getWallet = async (req, res) => {
-  try {
-    console.log("🔹 getWallet called for user:", req.user.id);
+  export const getWallet = async (req, res) => {
+    try {
+      console.log("🔹 getWallet called for user:", req.user.id);
 
-    const user = await User.findById(req.user.id).select("balance razorpayAccountId");
-    if (!user) {
-      console.log("❌ User not found");
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-    console.log("✅ User found:", user);
+      const user = await User.findById(req.user.id).select("balance razorpayAccountId");
+      if (!user) {
+        console.log("❌ User not found");
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+      console.log("✅ User found:", user);
 
-    // Fetch all transactions for this user
-    const transactions = await WalletTransaction.find({ user: req.user.id })
-      .sort({ createdAt: -1 })
-      .lean();
+      // Fetch all transactions for this user
+      const transactions = await WalletTransaction.find({ user: req.user.id })
+        .sort({ createdAt: -1 })
+        .lean();
 
-    console.log(`🔹 Found ${transactions.length} wallet transactions`);
+      console.log(`🔹 Found ${transactions.length} wallet transactions`);
 
-    const enrichedTransactions = await Promise.all(
-      transactions.map(async (tx, idx) => {
-        console.log(`🔹 Processing transaction ${idx}:`, tx);
+      const enrichedTransactions = await Promise.all(
+        transactions.map(async (tx, idx) => {
+          console.log(`🔹 Processing transaction ${idx}:`, tx);
 
-        if (tx.type === "CREDIT" && tx.reference) {
-          const payment = await Payment.findOne({ paymentId: tx.reference }).populate("products");
-          if (!payment) {
-            console.log(`❌ No payment found for reference: ${tx.reference}`);
-            return tx;
+          if (tx.type === "CREDIT" && tx.reference) {
+            const payment = await Payment.findOne({ paymentId: tx.reference }).populate("products");
+            if (!payment) {
+              console.log(`❌ No payment found for reference: ${tx.reference}`);
+              return tx;
+            }
+
+            console.log(`✅ Found payment ${payment._id} for transaction ${tx._id}`);
+
+            // Find the product that corresponds to this seller
+            const index = payment.sellers.findIndex(s => s.toString() === req.user.id);
+            if (index === -1) {
+              console.log(`❌ User ${req.user.id} not found in payment.sellers`);
+              return tx;
+            }
+
+            const product = payment.products[index] || null;
+            console.log(`🔹 Product matched for transaction ${tx._id}:`, product?._id);
+
+           return { 
+  ...tx, 
+  product:  tx.product 
+};
           }
 
-          console.log(`✅ Found payment ${payment._id} for transaction ${tx._id}`);
+          return tx;
+        })
+      );
 
-          // Find the product that corresponds to this seller
-          const index = payment.sellers.findIndex(s => s.toString() === req.user.id);
-          if (index === -1) {
-            console.log(`❌ User ${req.user.id} not found in payment.sellers`);
-            return tx;
-          }
+      console.log("🔹 Enriched transactions:", enrichedTransactions);
 
-          const product = payment.products[index] || null;
-          console.log(`🔹 Product matched for transaction ${tx._id}:`, product?._id);
-
-          return { ...tx, product };
-        }
-
-        return tx;
-      })
-    );
-
-    console.log("🔹 Enriched transactions:", enrichedTransactions);
-
-    res.json({
-      success: true,
-      balance: user.balance,
-      razorpayAccountId: user.razorpayAccountId || null,
-      transactions: enrichedTransactions,
-    });
-  } catch (err) {
-    console.error("❌ getWallet error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch wallet" });
-  }
-};
-
-// 📌 Create Order for Multiple Products (from Cart)
-export const createCartOrder = async (req, res) => {
-  try {
-    const { cartItems } = req.body; // [{ productId }, { productId }]
-    const buyerId = req.user.id;
-
-    console.log("🔹 createCartOrder called | buyer:", buyerId, " cart:", cartItems);
-
-    // 1️⃣ Fetch all products
-    const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
-
-    if (!products || products.length === 0) {
-      console.log("❌ No products found in cart");
-      return res.status(404).json({ success: false, message: "No products found" });
+      res.json({
+        success: true,
+        balance: user.balance,
+        razorpayAccountId: user.razorpayAccountId || null,
+        transactions: enrichedTransactions,
+      });
+    } catch (err) {
+      console.error("❌ getWallet error:", err);
+      res.status(500).json({ success: false, message: "Failed to fetch wallet" });
     }
+  };
 
-    // 2️⃣ Calculate total amount
-    const totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
+  // 📌 Create Order for Multiple Products (from Cart)
+  export const createCartOrder = async (req, res) => {
+    try {
+      const { cartItems } = req.body; // [{ productId }, { productId }]
+      const buyerId = req.user.id;
 
-    console.log("✅ Products found:", products.map(p => p._id));
-    console.log("💰 Total amount:", totalAmount);
+      console.log("🔹 createCartOrder called | buyer:", buyerId, " cart:", cartItems);
 
-    // 3️⃣ Create Razorpay Order
-    const options = {
-      amount: totalAmount * 100, // in paise
-      currency: "INR",
-      receipt: `cart_${Date.now()}`,
-    };
+      // 1️⃣ Fetch all products
+      const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
 
-    console.log("📝 Creating Razorpay order with options:", options);
+      if (!products || products.length === 0) {
+        console.log("❌ No products found in cart");
+        return res.status(404).json({ success: false, message: "No products found" });
+      }
 
-    const order = await razorpay.orders.create(options);
+      // 2️⃣ Calculate total amount
+      const totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
 
-    console.log("✅ Razorpay cart order created:", order.id);
+      console.log("✅ Products found:", products.map(p => p._id));
+      console.log("💰 Total amount:", totalAmount);
 
-    // 4️⃣ Store Payment Record (linked to multiple products)
-    await Payment.create({
-      buyer: buyerId,
-      products: products.map(p => p._id),
-      sellers: products.map(p => p.postedBy._id),
-      orderId: order.id,
-      amount: totalAmount,
-      status: "CREATED",
-    });
+      // 3️⃣ Create Razorpay Order
+      const options = {
+        amount: totalAmount * 100, // in paise
+        currency: "INR",
+        receipt: `cart_${Date.now()}`,
+      };
 
-    console.log("💾 Cart Payment record created in DB");
+      console.log("📝 Creating Razorpay order with options:", options);
 
-    res.json({
-      success: true,
-      orderId: order.id,
-      key: process.env.RAZORPAY_KEY_ID,
-      amount: options.amount,
-      currency: options.currency,
-    });
+      const order = await razorpay.orders.create(options);
 
-  } catch (err) {
-    console.error("❌ createCartOrder error:", err);
-    res.status(500).json({ success: false, message: "Failed to create cart order" });
-  }
-};
+      console.log("✅ Razorpay cart order created:", order.id);
 
+      // 4️⃣ Store Payment Record (linked to multiple products)
+      await Payment.create({
+        buyer: buyerId,
+        products: products.map(p => p._id),
+        sellers: products.map(p => p.postedBy._id),
+        orderId: order.id,
+        amount: totalAmount,
+        status: "CREATED",
+      });
 
-// 📌 Capture Cart Payment
-export const captureCartPayment = async (req, res) => {
-  try {
-    const { orderId, paymentId, signature } = req.body;
-    const buyerId = req.user.id;
+      console.log("💾 Cart Payment record created in DB");
 
-    // 1️⃣ Verify signature
-    const generatedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(orderId + "|" + paymentId)
-      .digest("hex");
+      res.json({
+        success: true,
+        orderId: order.id,
+        key: process.env.RAZORPAY_KEY_ID,
+        amount: options.amount,
+        currency: options.currency,
+      });
 
-    if (generatedSignature !== signature) {
-      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    } catch (err) {
+      console.error("❌ createCartOrder error:", err);
+      res.status(500).json({ success: false, message: "Failed to create cart order" });
     }
+  };
 
-    // 2️⃣ Update Payment record
-    const payment = await Payment.findOneAndUpdate(
-      { orderId },
-      { status: "COMPLETED", paymentId },
-      { new: true }
-    ).populate("sellers products");
 
-    if (!payment) {
-      return res.status(404).json({ success: false, message: "Payment not found" });
-    }
+  // 📌 Capture Cart Payment
+  export const captureCartPayment = async (req, res) => {
+    try {
+      const { orderId, paymentId, signature } = req.body;
+      const buyerId = req.user.id;
 
-    console.log("✅ Cart Payment captured:", paymentId);
+      // 1️⃣ Verify signature
+      const generatedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(orderId + "|" + paymentId)
+        .digest("hex");
 
-    // 3️⃣ Process each product & seller
-    for (const product of payment.products) {
-      const seller = product.postedBy;
+      if (generatedSignature !== signature) {
+        return res.status(400).json({ success: false, message: "Invalid payment signature" });
+      }
 
-      // Credit seller balance
-      await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
+      // 2️⃣ Update Payment record
+      const payment = await Payment.findOneAndUpdate(
+        { orderId },
+        { status: "COMPLETED", paymentId },
+        { new: true }
+      ).populate("sellers products");
 
-      // WalletTransaction
+      if (!payment) {
+        return res.status(404).json({ success: false, message: "Payment not found" });
+      }
+
+      console.log("✅ Cart Payment captured:", paymentId);
+
+      // 3️⃣ Process each product & seller
+      for (const product of payment.products) {
+        const seller = product.postedBy;
+
+        // Credit seller balance
+        await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
+    const buyer = await User.findById(buyerId).select("name email handle");
+        // WalletTransaction
       await WalletTransaction.create({
-        user: seller._id,
-        type: "CREDIT",
-        amount: product.amount,
-        reference: paymentId,
-        status: "SUCCESS",
-      });
-
-      // Order record for buyer
-      await Order.create({
-        user: buyerId,
-        product: product._id,
-        amount: product.amount,
-        status: "paid",
-      });
-
-      // Email to buyer for each product
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || "smtp.gmail.com",
-        port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
-        secure: false,
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: req.user.email,
-        subject: `Your purchase: ${product.name}`,
-        html: `
-          <h2>Thanks for purchasing ${product.name} 🎉</h2>
-          <p><a href="${product.driveLink}" target="_blank">Click here to download your asset</a></p>
-        `,
-      });
-
-      // Notifications
-      await Notification.create({
-        recipient: buyerId,
-        sender: seller._id,
-        type: "order_created",
-        message: `You successfully purchased ${product.name}`,
-        meta: { productId: product._id },
-        image: product.image?.[0] || "",
-      });
-
-      await Notification.create({
-        recipient: seller._id,
-        sender: buyerId,
-        type: "product_sold",
-        message: `purchased your product.`,
-        meta: { productId: product._id },
-        image: product.image?.[0] || "",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Cart payment captured successfully",
-      products: payment.products,
-    });
-
-  } catch (err) {
-    console.error("❌ captureCartPayment error:", err);
-    res.status(500).json({ success: false, message: "Failed to capture cart payment" });
-  }
-};
-
-
-export const createOrder = async (req, res) => {
-  try {
-    const { productId } = req.body;
-    const buyerId = req.user.id;
-
-    console.log("🔹 createOrder called | buyer:", buyerId, " product:", productId);
-
-    const product = await Product.findById(productId).populate("postedBy");
-    if (!product) {
-      console.log("❌ Product not found");
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
-
-    console.log("✅ Product found:", product._id, " Seller:", product.postedBy._id);
-
-    const options = {
-      amount: product.amount * 100,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-    };
-
-    console.log("📝 Creating Razorpay order with options:", options);
-
-    const order = await razorpay.orders.create(options);
-
-    console.log("✅ Razorpay order created:", order.id);
-
-await Payment.create({
-  buyer: buyerId,
-  products: [productId],               // wrap in array
-  sellers: [product.postedBy._id],    // wrap in array
-  orderId: order.id,
+  user: seller._id,
+  type: "CREDIT",
   amount: product.amount,
-  status: "CREATED",
+  reference: paymentId,
+  status: "SUCCESS",
+  product: {
+    _id: product._id,
+    name: product.name,
+    amount: product.amount,
+    image: product.image?.[0] || "", // take first image
+  },
+      purchasedBy: buyer
+          ? { handle: buyer.handle, name: buyer.name, email: buyer.email }
+          : null,
+  
 });
 
 
-    console.log("💾 Payment record created in DB");
+        // Order record for buyer
+        await Order.create({
+          user: buyerId,
+          product: product._id,
+          amount: product.amount,
+          status: "paid",
+        });
 
-    res.json({
-      success: true,
-      orderId: order.id,
-      key: process.env.RAZORPAY_KEY_ID,
-      amount: options.amount,
-      currency: options.currency,
-    });
-  } catch (err) {
-    console.log(err)
-    console.error("❌ createOrder error:", err);
-    res.status(500).json({ success: false, message: "Failed to create order" });
-  }
-};
+        // Email to buyer for each product
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || "smtp.gmail.com",
+          port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: req.user.email,
+          subject: `Your purchase: ${product.name}`,
+          html: `
+            <h2>Thanks for purchasing ${product.name} 🎉</h2>
+            <p><a href="${product.driveLink}" target="_blank">Click here to download your asset</a></p>
+          `,
+        });
+
+        // Notifications
+        await Notification.create({
+          recipient: buyerId,
+          sender: seller._id,
+          type: "order_created",
+          message: `You successfully purchased ${product.name}`,
+          meta: { productId: product._id },
+          image: product.image?.[0] || "",
+        });
+
+        await Notification.create({
+          recipient: seller._id,
+          sender: buyerId,
+          type: "product_sold",
+          message: `purchased your product.`,
+          meta: { productId: product._id },
+          image: product.image?.[0] || "",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Cart payment captured successfully",
+        products: payment.products,
+      });
+
+    } catch (err) {
+      console.error("❌ captureCartPayment error:", err);
+      res.status(500).json({ success: false, message: "Failed to capture cart payment" });
+    }
+  };
+
+
+  export const createOrder = async (req, res) => {
+    try {
+      const { productId } = req.body;
+      const buyerId = req.user.id;
+
+      console.log("🔹 createOrder called | buyer:", buyerId, " product:", productId);
+
+      const product = await Product.findById(productId).populate("postedBy");
+      if (!product) {
+        console.log("❌ Product not found");
+        return res.status(404).json({ success: false, message: "Product not found" });
+      }
+
+      console.log("✅ Product found:", product._id, " Seller:", product.postedBy._id);
+
+      const options = {
+        amount: product.amount * 100,
+        currency: "INR",
+        receipt: `receipt_${Date.now()}`,
+      };
+
+      console.log("📝 Creating Razorpay order with options:", options);
+
+      const order = await razorpay.orders.create(options);
+
+      console.log("✅ Razorpay order created:", order.id);
+
+  await Payment.create({
+    buyer: buyerId,
+    products: [productId],               // wrap in array
+    sellers: [product.postedBy._id],    // wrap in array
+    orderId: order.id,
+    amount: product.amount,
+    status: "CREATED",
+  });
+
+
+      console.log("💾 Payment record created in DB");
+
+      res.json({
+        success: true,
+        orderId: order.id,
+        key: process.env.RAZORPAY_KEY_ID,
+        amount: options.amount,
+        currency: options.currency,
+      });
+    } catch (err) {
+      console.log(err)
+      console.error("❌ createOrder error:", err);
+      res.status(500).json({ success: false, message: "Failed to create order" });
+    }
+  };
 
 
 export const capturePayment = async (req, res) => {
@@ -348,15 +362,25 @@ export const capturePayment = async (req, res) => {
 
       // Credit seller balance
       await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
-
+    const buyer = await User.findById(buyerId).select("name email handle");
       // WalletTransaction for seller
-      await WalletTransaction.create({
-        user: seller._id,
-        type: "CREDIT",
-        amount: product.amount,
-        reference: paymentId,
-        status: "SUCCESS",
-      });
+   await WalletTransaction.create({
+  user: seller._id,
+  type: "CREDIT",
+  amount: product.amount,
+  reference: paymentId,
+  status: "SUCCESS",
+  product: {
+    _id: product._id,
+    name: product.name,
+    amount: product.amount,
+    image: product.image?.[0] || "", // take first image
+  },
+      purchasedBy: buyer
+          ? { handle: buyer.handle, name: buyer.name, email: buyer.email }
+          : null,
+});
+
 
       // Order record for buyer
       await Order.create({

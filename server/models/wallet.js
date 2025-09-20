@@ -8,6 +8,18 @@ const walletTransactionSchema = new mongoose.Schema(
     currency: { type: String, default: "INR" },
     reference: String, // paymentId or payoutId
     status: { type: String, enum: ["PENDING", "SUCCESS", "FAILED"], default: "SUCCESS" },
+    product: {
+      _id: { type: mongoose.Schema.Types.ObjectId, ref: "Product" }, // optional
+      name: String,
+      amount: Number,
+      image: String,
+    },
+    purchasedBy: {
+      _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      handle : String,
+      name: String,
+      email: String,
+    },
   },
   { timestamps: true }
 );
