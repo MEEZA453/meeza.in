@@ -26,25 +26,53 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 // });
 export const getWallet = async (req, res) => {
   try {
+    console.log("🔹 getWallet called for user:", req.user.id);
+
     const user = await User.findById(req.user.id).select("balance razorpayAccountId");
     if (!user) {
+      console.log("❌ User not found");
       return res.status(404).json({ success: false, message: "User not found" });
     }
+    console.log("✅ User found:", user);
 
-    // Transactions with product info if CREDIT (sold product)
+    // Fetch all transactions for this user
     const transactions = await WalletTransaction.find({ user: req.user.id })
       .sort({ createdAt: -1 })
       .lean();
 
+    console.log(`🔹 Found ${transactions.length} wallet transactions`);
+
     const enrichedTransactions = await Promise.all(
-      transactions.map(async (tx) => {
-        if (tx.type === "CREDIT") {
-          const payment = await Payment.findOne({ paymentId: tx.reference }).populate("product");
-          return { ...tx, product: payment?.product || null };
+      transactions.map(async (tx, idx) => {
+        console.log(`🔹 Processing transaction ${idx}:`, tx);
+
+        if (tx.type === "CREDIT" && tx.reference) {
+          const payment = await Payment.findOne({ paymentId: tx.reference }).populate("products");
+          if (!payment) {
+            console.log(`❌ No payment found for reference: ${tx.reference}`);
+            return tx;
+          }
+
+          console.log(`✅ Found payment ${payment._id} for transaction ${tx._id}`);
+
+          // Find the product that corresponds to this seller
+          const index = payment.sellers.findIndex(s => s.toString() === req.user.id);
+          if (index === -1) {
+            console.log(`❌ User ${req.user.id} not found in payment.sellers`);
+            return tx;
+          }
+
+          const product = payment.products[index] || null;
+          console.log(`🔹 Product matched for transaction ${tx._id}:`, product?._id);
+
+          return { ...tx, product };
         }
+
         return tx;
       })
     );
+
+    console.log("🔹 Enriched transactions:", enrichedTransactions);
 
     res.json({
       success: true,
@@ -254,14 +282,15 @@ export const createOrder = async (req, res) => {
 
     console.log("✅ Razorpay order created:", order.id);
 
-    await Payment.create({
-      buyer: buyerId,
-      sellers: product.postedBy._id,
-      products: productId,
-      orderId: order.id,
-      amount: product.amount,
-      status: "CREATED",
-    });
+await Payment.create({
+  buyer: buyerId,
+  products: [productId],               // wrap in array
+  sellers: [product.postedBy._id],    // wrap in array
+  orderId: order.id,
+  amount: product.amount,
+  status: "CREATED",
+});
+
 
     console.log("💾 Payment record created in DB");
 
@@ -282,7 +311,7 @@ export const createOrder = async (req, res) => {
 
 export const capturePayment = async (req, res) => {
   try {
-    const { orderId, paymentId } = req.body;
+    const { orderId, paymentId, signature } = req.body;
     const buyerId = req.user.id;
 
     // 1️⃣ Verify payment signature
@@ -291,7 +320,7 @@ export const capturePayment = async (req, res) => {
       .update(orderId + "|" + paymentId)
       .digest("hex");
 
-    if (generatedSignature !== req.body.signature) {
+    if (generatedSignature !== signature) {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
 
@@ -306,10 +335,16 @@ export const capturePayment = async (req, res) => {
       return res.status(404).json({ success: false, message: "Payment not found" });
     }
 
-    // 3️⃣ Process each product
-    for (let i = 0; i < payment.products.length; i++) {
-      const product = payment.products[i];
-      const seller = payment.sellers[i];
+    // 3️⃣ Normalize single-product orders to arrays
+    const products = Array.isArray(payment.products) ? payment.products : [payment.products];
+    const sellers = Array.isArray(payment.sellers) ? payment.sellers : [payment.sellers];
+
+    // 4️⃣ Process each product
+    for (let i = 0; i < products.length; i++) {
+      const product = products[i];
+      const seller = sellers[i];
+
+      if (!seller || !product) continue; // safety check
 
       // Credit seller balance
       await User.findByIdAndUpdate(seller._id, { $inc: { balance: product.amount } });
@@ -331,7 +366,7 @@ export const capturePayment = async (req, res) => {
         status: "paid",
       });
 
-      // Send email
+      // Send email to buyer
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || "smtp.gmail.com",
         port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
@@ -372,7 +407,7 @@ export const capturePayment = async (req, res) => {
     res.json({
       success: true,
       message: "Payment captured successfully",
-      products: payment.products,
+      products,
     });
   } catch (err) {
     console.error("❌ capturePayment error:", err);
