@@ -506,8 +506,9 @@ export const votePost = async (req, res) => {
         recipient: updatedPost.createdBy._id,
         sender: userId,
         type: "vote",
-        post: updatedPost._id,
-        message: `@${req.user.handle} voted your post`,
+        image : updatedPost.images[0],
+        // post: updatedPost._id,
+        message: `voted your post`,
         // store preview image (use first image from post)
         image: updatedPost.images && updatedPost.images.length > 0
           ? updatedPost.images[0]

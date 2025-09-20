@@ -193,7 +193,7 @@ export const capturePayment = async (req, res) => {
       recipient: payment.seller._id,
       sender: buyerId,
       type: "product_sold",
-      message: `${req.user.name || "A user"} purchased your product ${payment.product.name}`,
+      message: `purchased your product.`,
       meta: { productId: payment.product._id },
       image: payment.product.image?.[0] || "",
     });
