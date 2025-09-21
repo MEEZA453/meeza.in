@@ -3,7 +3,7 @@ import Post from "../models/post.js";
 import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
 import Notification from "../models/notification.js";
 import Product from "../models/designs.js"
-
+import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 
 // controllers/assetController.js
 
@@ -202,16 +202,46 @@ export const getPostsOfAsset = async (req, res) => {
 
 
 export const getAssetsOfPost = async (req, res) => {
-  console.log('getting assets of posts')
+  console.log("getting assets of posts");
   try {
+    const userId = req.user.id;
+    console.log("userId:", userId);
+
     const { postId } = req.params;
-    const post = await Post.findById(postId).populate("assets");
+    const post = await Post.findById(postId).populate({
+      path: "assets",
+      select: "name amount image postedBy",
+      populate: {
+        path: "postedBy",
+        select: "name email handle profile" // user fields from User model
+      }
+    })
 
-    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    if (!post) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Post not found" });
+    }
 
-    res.status(200).json({ success: true, assets: post.assets });
+    // Map over assets and ensure they are plain objects
+    const productsWithOwnership = post.assets.map((product) => {
+      const plainProduct = product.toObject(); // 👈 removes ._doc wrapper
+      return {
+        ...sanitizeProduct(plainProduct),
+        isMyProduct: userId
+          ? product.postedBy?._id.toString() === userId.toString()
+          : false,
+      };
+    });
+
+    console.log("assets with ownership:", productsWithOwnership);
+
+    res.status(200).json({ success: true, assets: productsWithOwnership });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    console.error(error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -381,22 +411,33 @@ export const searchPosts = async (req, res) => {
 
 // ✅ Get single post by ID (with votes populated)
 export const getPostById = async (req, res) => {
-    console.log('getting post by id')
+  console.log("getting post by id");
 
   try {
+    const userId = req.user?.id; // logged-in user
     const post = await Post.findById(req.params.id)
-    .sort({ createdAt: -1 })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
 
-    if (!post) return res.status(404).json({ message: "Post not found" });
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
 
-    res.json(post);
-    console.log('got the post')
+    // convert mongoose doc → plain object
+    const postObj = post.toObject();
+
+    // add isMyPost flag
+    postObj.isMyPost = userId
+      ? post.createdBy?._id.toString() === userId.toString()
+      : false;
+
+    res.json(postObj);
+    console.log("got the post");
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 export const getPostsByHandle = async (req, res) => {
   console.log('Getting posts by handle:', req.params.handle);
 
