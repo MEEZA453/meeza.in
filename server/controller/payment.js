@@ -10,6 +10,7 @@ import paypal from "@paypal/checkout-server-sdk";
 import dotenv from "dotenv";
 import User from "../models/user.js";
 import WalletTransaction from "../models/wallet.js";
+import axios from "axios";
 import { error } from "console";
 // Razorpay Client
 dotenv.config();
@@ -90,65 +91,129 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   };
 
   // 📌 Create Order for Multiple Products (from Cart)
-  export const createCartOrder = async (req, res) => {
-    try {
-      const { cartItems } = req.body; // [{ productId }, { productId }]
-      const buyerId = req.user.id;
+  // export const createCartOrder = async (req, res) => {
+  //   try {
+  //     const { cartItems } = req.body; // [{ productId }, { productId }]
+  //     const buyerId = req.user.id;
 
-      console.log("🔹 createCartOrder called | buyer:", buyerId, " cart:", cartItems);
+  //     console.log("🔹 createCartOrder called | buyer:", buyerId, " cart:", cartItems);
 
-      // 1️⃣ Fetch all products
-      const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
+  //     // 1️⃣ Fetch all products
+  //     const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
 
-      if (!products || products.length === 0) {
-        console.log("❌ No products found in cart");
-        return res.status(404).json({ success: false, message: "No products found" });
-      }
+  //     if (!products || products.length === 0) {
+  //       console.log("❌ No products found in cart");
+  //       return res.status(404).json({ success: false, message: "No products found" });
+  //     }
 
-      // 2️⃣ Calculate total amount
-      const totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
+  //     // 2️⃣ Calculate total amount
+  //     const totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
 
-      console.log("✅ Products found:", products.map(p => p._id));
-      console.log("💰 Total amount:", totalAmount);
+  //     console.log("✅ Products found:", products.map(p => p._id));
+  //     console.log("💰 Total amount:", totalAmount);
 
-      // 3️⃣ Create Razorpay Order
-      const options = {
-        amount: totalAmount * 100, // in paise
-        currency: "INR",
-        receipt: `cart_${Date.now()}`,
-      };
+  //     // 3️⃣ Create Razorpay Order
+  //     const options = {
+  //       amount: totalAmount * 100, // in paise
+  //       currency: "INR",
+  //       receipt: `cart_${Date.now()}`,
+  //     };
 
-      console.log("📝 Creating Razorpay order with options:", options);
+  //     console.log("📝 Creating Razorpay order with options:", options);
 
-      const order = await razorpay.orders.create(options);
+  //     const order = await razorpay.orders.create(options);
 
-      console.log("✅ Razorpay cart order created:", order.id);
+  //     console.log("✅ Razorpay cart order created:", order.id);
 
-      // 4️⃣ Store Payment Record (linked to multiple products)
-      await Payment.create({
-        buyer: buyerId,
-        products: products.map(p => p._id),
-        sellers: products.map(p => p.postedBy._id),
-        orderId: order.id,
-        amount: totalAmount,
-        status: "CREATED",
-      });
+  //     // 4️⃣ Store Payment Record (linked to multiple products)
+  //     await Payment.create({
+  //       buyer: buyerId,
+  //       products: products.map(p => p._id),
+  //       sellers: products.map(p => p.postedBy._id),
+  //       orderId: order.id,
+  //       amount: totalAmount,
+  //       status: "CREATED",
+  //     });
 
-      console.log("💾 Cart Payment record created in DB");
+  //     console.log("💾 Cart Payment record created in DB");
 
-      res.json({
-        success: true,
-        orderId: order.id,
-        key: process.env.RAZORPAY_KEY_ID,
-        amount: options.amount,
-        currency: options.currency,
-      });
+  //     res.json({
+  //       success: true,
+  //       orderId: order.id,
+  //       key: process.env.RAZORPAY_KEY_ID,
+  //       amount: options.amount,
+  //       currency: options.currency,
+  //     });
 
-    } catch (err) {
-      console.error("❌ createCartOrder error:", err);
-      res.status(500).json({ success: false, message: "Failed to create cart order" });
+  //   } catch (err) {
+  //     console.error("❌ createCartOrder error:", err);
+  //     res.status(500).json({ success: false, message: "Failed to create cart order" });
+  //   }
+  // };
+export const createCartOrder = async (req, res) => {
+  try {
+    const { cartItems, currency } = req.body; // cartItems = [{ productId }]
+    const buyerId = req.user.id;
+console.log(currency
+)
+    // 1️⃣ Fetch all products
+    const products = await Product.find({ _id: { $in: cartItems.map(i => i.productId) } }).populate("postedBy");
+    if (!products || products.length === 0) {
+      return res.status(404).json({ success: false, message: "No products found" });
     }
-  };
+
+    // 2️⃣ Calculate total amount (in USD by default)
+    let totalAmount = products.reduce((sum, p) => sum + p.amount, 0);
+    let finalCurrency = "USD";
+
+    // 3️⃣ Convert USD → INR if needed
+    if (currency === "INR") {
+      try {
+        const fxRes = await axios.get("https://api.exchangerate.host/latest?base=USD&symbols=INR");
+        const usdToInrRate = fxRes.data?.rates?.INR || 83; // fallback
+        totalAmount = (totalAmount * usdToInrRate).toFixed(2);
+        finalCurrency = "INR";
+        console.log(`💱 Converted cart total: ${totalAmount} ${finalCurrency}`);
+      } catch (err) {
+        console.error("❌ FX API error, using fallback rate:", err);
+        const fallbackRate = 83;
+        totalAmount = (totalAmount * fallbackRate).toFixed(2);
+        finalCurrency = "INR";
+      }
+    }
+
+    // 4️⃣ Create Razorpay Order
+    const options = {
+      amount: Math.round(totalAmount * 100), // smallest unit
+      currency: finalCurrency,
+      receipt: `cart_${Date.now()}`,
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    // 5️⃣ Save Payment record
+    await Payment.create({
+      buyer: buyerId,
+      products: products.map(p => p._id),
+      sellers: products.map(p => p.postedBy._id),
+      orderId: order.id,
+      amount: totalAmount,
+      currency: finalCurrency,
+      status: "CREATED",
+    });
+
+    res.json({
+      success: true,
+      orderId: order.id,
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: options.amount, // smallest unit
+      currency: options.currency,
+    });
+  } catch (err) {
+    console.error("❌ createCartOrder error:", err);
+    res.status(500).json({ success: false, message: "Failed to create cart order" });
+  }
+};
 
 
   // 📌 Capture Cart Payment
@@ -254,6 +319,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
           meta: { productId: product._id },
           image: product.image?.[0] || "",
         });
+                 await Notification.create({
+        recipient: seller._id,
+        sender: buyerId,
+        type: "cash_received",
+        message: `Cash received your product.`,
+        amount : product.amount
+      });
+    
       }
 
       res.json({
@@ -269,58 +342,63 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   };
 
 
-  export const createOrder = async (req, res) => {
-    try {
-      const { productId } = req.body;
-      const buyerId = req.user.id;
+export const createOrder = async (req, res) => {
+  try {
+    const { productId, currency } = req.body; // INR / USD
+    const buyerId = req.user.id;
 
-      console.log("🔹 createOrder called | buyer:", buyerId, " product:", productId);
-
-      const product = await Product.findById(productId).populate("postedBy");
-      if (!product) {
-        console.log("❌ Product not found");
-        return res.status(404).json({ success: false, message: "Product not found" });
-      }
-
-      console.log("✅ Product found:", product._id, " Seller:", product.postedBy._id);
-
-      const options = {
-        amount: product.amount * 100,
-        currency: "INR",
-        receipt: `receipt_${Date.now()}`,
-      };
-
-      console.log("📝 Creating Razorpay order with options:", options);
-
-      const order = await razorpay.orders.create(options);
-
-      console.log("✅ Razorpay order created:", order.id);
-
-  await Payment.create({
-    buyer: buyerId,
-    products: [productId],               // wrap in array
-    sellers: [product.postedBy._id],    // wrap in array
-    orderId: order.id,
-    amount: product.amount,
-    status: "CREATED",
-  });
-
-
-      console.log("💾 Payment record created in DB");
-
-      res.json({
-        success: true,
-        orderId: order.id,
-        key: process.env.RAZORPAY_KEY_ID,
-        amount: options.amount,
-        currency: options.currency,
-      });
-    } catch (err) {
-      console.log(err)
-      console.error("❌ createOrder error:", err);
-      res.status(500).json({ success: false, message: "Failed to create order" });
+    // 1️⃣ Find product
+    const product = await Product.findById(productId).populate("postedBy");
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
-  };
+
+    // assume product.amount is stored in USD (example: 5.99)
+    let amount = product.amount;
+    let finalCurrency = "USD";
+
+    if (currency === "INR") {
+      // Convert USD → INR
+    const fxRes = await axios.get("https://api.exchangerate.host/latest?base=USD&symbols=INR");
+    const usdToInrRate = fxRes.data?.rates?.INR || 83
+      amount = (product.amount * usdToInrRate).toFixed(2);
+      finalCurrency = "INR";
+      console.log(`💱 Converted price: ${product.amount} USD → ${amount} INR`);
+    }
+
+    // 2️⃣ Razorpay expects amount in smallest unit
+    const options = {
+      amount: Math.round(amount * 100),
+      currency: finalCurrency,
+      receipt: `receipt_${Date.now()}`,
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    // 3️⃣ Save Payment record
+    await Payment.create({
+      buyer: buyerId,
+      products: [productId],
+      sellers: [product.postedBy._id],
+      orderId: order.id,
+      amount: amount,
+      currency: finalCurrency,
+      status: "CREATED",
+    });
+
+    res.json({
+      success: true,
+      orderId: order.id,
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: options.amount, // smallest unit
+      currency: options.currency,
+    });
+  } catch (err) {
+    console.error("❌ createOrder error:", err);
+    res.status(500).json({ success: false, message: "Failed to create order" });
+  }
+};
+
 
 
 export const capturePayment = async (req, res) => {
@@ -426,8 +504,19 @@ export const capturePayment = async (req, res) => {
         meta: { productId: product._id },
         image: product.image?.[0] || "",
       });
-    }
 
+         await Notification.create({
+        recipient: seller._id,
+        sender: buyerId,
+        type: "cash_received",
+        message: `Cash received your product`,
+        amount : product.amount
+      });
+    
+console.log(product.amount)
+      
+    }
+ 
     res.json({
       success: true,
       message: "Payment captured successfully",
