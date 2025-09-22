@@ -16,31 +16,26 @@ const OTP_TTL_MINUTES = 10;
 
 
 export const getUserByHandle = async (req, res) => {
-  console.log("got the user");
   const { handle } = req.params;
 
   try {
-    if (!handle) {
-      return res.status(400).json({ message: "Handle is required" });
-    }
+    if (!handle) return res.status(400).json({ message: "Handle is required" });
 
-    const user = await User.findOne({ handle });
+    const user = await User.findOne({ handle }).populate('followers', '_id');
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // requester (logged in user from token)
     const requesterUserId = req.user?.id?.toString() || null;
+    const isUser = requesterUserId && user._id.toString() === requesterUserId;
 
-    const isUser =
-      requesterUserId && user._id
-        ? user._id.toString() === requesterUserId
-        : false;
+    const response = { user, isUser };
 
+    // Only check isFollowing if not viewing own profile
+    if (!isUser && requesterUserId) {
+      const isFollowing = user.followers.some(f => f._id.toString() === requesterUserId);
+      response.isFollowing = isFollowing;
+    }
 
-
-    return res.status(200).json({ user, isUser });
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Error in getUserByHandle:", error);
     return res.status(500).json({ message: "Server error" });
