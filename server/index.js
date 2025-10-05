@@ -14,6 +14,7 @@ import favRoute from './routes/favourait.js'
 import highlightRoute from './routes/highlight.js'
 import promotionRoute from './routes/promotion.js'
 import orderRouter from './routes/order.js'
+import hotListRouter from './routes/hotlist.js'
 import notificationRoute from './routes/notification.js'
 // Define the server port
 const PORT = env.PORT || 8080;
@@ -58,6 +59,8 @@ app.use('/notification', notificationRoute)
 
 
 app.use('/promotion', promotionRoute);
+app.use('/hotlist', hotListRouter);
+
 app.use('/payment' , paymentRoute )
 app.use('/order' , orderRouter )
 

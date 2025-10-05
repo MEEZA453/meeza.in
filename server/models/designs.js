@@ -21,7 +21,8 @@ const productSchema = new mongoose.Schema(
         content: { type: [String], required: true },
       },
     ],
-    hashtags: [String],
+  hashtags: [String],
+   isHot: { type: Boolean, default: false },
 
     // 🔗 New field to track which posts this asset is used in
     usedInPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
