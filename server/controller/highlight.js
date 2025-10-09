@@ -36,11 +36,11 @@ console.log('removed highlikt')
 };
 
 export const getAllHighlights = async (req, res) => {
-  console.log('reached to getAll high');
+  console.log("reached to getAllHighlights");
   try {
     const requesterUserId = req.user?.id || null;
-    const { category } = req.query; // get category from query string
-    console.log('category filter:', category);
+    const { category } = req.query; // e.g. "Design,Photography"
+    console.log("category filter:", category);
 
     // Pull all highlights from all users and populate post details
     const usersWithHighlights = await User.find({ highlights: { $exists: true, $ne: [] } })
@@ -49,37 +49,41 @@ export const getAllHighlights = async (req, res) => {
         options: { sort: { createdAt: -1 } }, // newest first
         populate: [
           { path: "createdBy", select: "name profile handle" },
-          { path: "votes.user", select: "name profile handle" }
-        ]
+          { path: "votes.user", select: "name profile handle" },
+        ],
       });
 
     // Flatten all highlights into one array
-    const highlights = usersWithHighlights.flatMap(user => user.highlights);
+    let highlights = usersWithHighlights.flatMap(user => user.highlights);
 
-    // 🔹 Sort: posts in selected category first, then by newest
-    let sortedHighlights = highlights;
+    // 🔹 Filter & sort by category like getPosts
     if (category) {
+      const parts = category.split(",").map(c => c.trim());
+
+      // Posts matching any of the selected categories
       const inCategory = highlights
-        .filter(p => p.category === category)
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first in category
+        .filter(p => p.category.some(c => parts.includes(c)))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+      // Posts NOT in selected categories
       const outCategory = highlights
-        .filter(p => p.category !== category)
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first outside category
+        .filter(p => !p.category.some(c => parts.includes(c)))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      sortedHighlights = [...inCategory, ...outCategory];
+      highlights = [...inCategory, ...outCategory];
     } else {
-      // If no category filter, just sort all by newest
-      sortedHighlights = highlights.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      // No filter → sort all by newest
+      highlights = highlights.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     }
 
     return res.status(200).json({
       success: true,
-      highlights: sortedHighlights,
-      requesterUserId
+      highlights,
+      requesterUserId,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
