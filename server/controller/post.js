@@ -368,20 +368,34 @@ export const getDefaultPosts = async (req, res) => {
 
 // ✅ Get all posts (with votes & creator populated)
 export const getPosts = async (req, res) => {
-    console.log('getting post')
+  console.log('getting post');
 
   try {
+    const { category } = req.query;
+
+    // Get all posts
     const posts = await Post.find()
-    .sort({ createdAt: -1 })
+      .sort({ createdAt: -1 }) // newest first
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
-    res.json(posts);
+
+    // 🔹 Sort so that posts in the selected category appear first
+    let sortedPosts = posts;
+    if (category) {
+      const inCategory = posts.filter(p => p.category === category);
+      const outCategory = posts.filter(p => p.category !== category);
+      sortedPosts = [...inCategory, ...outCategory];
+    }
+
+    res.json(sortedPosts);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
-    console.log('got all posts.')
 
+  console.log('got all posts.');
 };
+
 export const searchPosts = async (req, res) => {
   try {
     const { query } = req.query; // example: /search?query=design

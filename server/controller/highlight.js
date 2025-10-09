@@ -35,17 +35,18 @@ console.log('removed highlikt')
   }
 };
 
-
 export const getAllHighlights = async (req, res) => {
-  console.log('reached to getAll high')
+  console.log('reached to getAll high');
   try {
     const requesterUserId = req.user?.id || null;
+    const { category } = req.query; // get category from query string
+    console.log('category filter:', category);
 
     // Pull all highlights from all users and populate post details
     const usersWithHighlights = await User.find({ highlights: { $exists: true, $ne: [] } })
-    .sort({ createdAt: -1 })
       .populate({
         path: "highlights",
+        options: { sort: { createdAt: -1 } }, // newest first
         populate: [
           { path: "createdBy", select: "name profile handle" },
           { path: "votes.user", select: "name profile handle" }
@@ -55,10 +56,26 @@ export const getAllHighlights = async (req, res) => {
     // Flatten all highlights into one array
     const highlights = usersWithHighlights.flatMap(user => user.highlights);
 
+    // 🔹 Sort: posts in selected category first, then by newest
+    let sortedHighlights = highlights;
+    if (category) {
+      const inCategory = highlights
+        .filter(p => p.category === category)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first in category
+
+      const outCategory = highlights
+        .filter(p => p.category !== category)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first outside category
+
+      sortedHighlights = [...inCategory, ...outCategory];
+    } else {
+      // If no category filter, just sort all by newest
+      sortedHighlights = highlights.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    }
 
     return res.status(200).json({
       success: true,
-      highlights,
+      highlights: sortedHighlights,
       requesterUserId
     });
   } catch (err) {
