@@ -13,7 +13,7 @@ const voteSchema = new mongoose.Schema({
 const postSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: String,
-  category: String,
+  category: [{ type: String, required: true }],
   hashtags: [String],
   images: [],
   voteFields: [{ type: String, enum: ["creativity", "aesthetics", "composition", "emotion"] }],

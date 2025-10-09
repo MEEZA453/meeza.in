@@ -255,6 +255,25 @@ export const createPost = async (req, res) => {
     if (!name || !category) {
       return res.status(400).json({ message: "Required fields missing" });
     }
+ let categoryArray = [];
+    if (typeof category === "string") {
+      try {
+        const parsed = JSON.parse(category);
+        categoryArray = Array.isArray(parsed)
+          ? parsed
+          : typeof parsed === "string"
+          ? parsed.split("/")
+          : [];
+      } catch {
+        categoryArray = category.split("/");
+      }
+    } else if (Array.isArray(category)) {
+      categoryArray = category;
+    }
+
+    if (categoryArray.length === 0) {
+      return res.status(400).json({ message: "Category array required" });
+    }
 
     let uploadedImages = [];
     if (req.files && req.files.length > 0) {
@@ -271,13 +290,13 @@ export const createPost = async (req, res) => {
     const post = new Post({
       name,
       description,
-      category,
+      category: categoryArray,
       hashtags: hashtags ? JSON.parse(hashtags) : [],
       voteFields: voteFields ? JSON.parse(voteFields) : [], // ✅ parse from frontend
       images: uploadedImages,
       createdBy: req.user.id
     });
-
+console.log(post)
     const savedPost = await post.save();
     console.log('post created successfully')
     res.status(201).json(savedPost);
@@ -331,15 +350,34 @@ export const editPost = async (req, res) => {
     // 4️⃣ Merge old + new images
     updatedImages = [...updatedImages, ...newImages];
 
-    // 5️⃣ Update post fields
+    // 5️⃣ Parse category like createPost
+    let categoryArray = [];
+    if (category) {
+      if (typeof category === "string") {
+        try {
+          const parsed = JSON.parse(category);
+          categoryArray = Array.isArray(parsed)
+            ? parsed
+            : typeof parsed === "string"
+            ? parsed.split("/")
+            : [];
+        } catch {
+          categoryArray = category.split("/");
+        }
+      } else if (Array.isArray(category)) {
+        categoryArray = category;
+      }
+    }
+
+    // 6️⃣ Update post fields
     post.name = name || post.name;
     post.description = description || post.description;
-    post.category = category || post.category;
+    post.category = categoryArray.length ? categoryArray : post.category;
     post.hashtags = hashtags ? JSON.parse(hashtags) : post.hashtags;
     post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
     post.images = updatedImages;
 
-    // 6️⃣ Save updated post
+    // 7️⃣ Save updated post
     await post.save();
     console.log("Post updated successfully");
     return res.status(200).json({ success: true, post });
@@ -348,6 +386,7 @@ export const editPost = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal server error" });
   }
 };
+
 
 export const getDefaultPosts = async (req, res) => {
   try {
@@ -368,32 +407,43 @@ export const getDefaultPosts = async (req, res) => {
 
 // ✅ Get all posts (with votes & creator populated)
 export const getPosts = async (req, res) => {
-  console.log('getting post');
-
+  console.log("getting post");
   try {
-    const { category } = req.query;
+    const { category } = req.query; // e.g. "Design,Visual,Photography"
 
-    // Get all posts
-    const posts = await Post.find()
-      .sort({ createdAt: -1 }) // newest first
-      .populate("createdBy", "name profile handle")
-      .populate("votes.user", "name profile handle");
+    let posts = [];
 
-    // 🔹 Sort so that posts in the selected category appear first
-    let sortedPosts = posts;
     if (category) {
-      const inCategory = posts.filter(p => p.category === category);
-      const outCategory = posts.filter(p => p.category !== category);
-      sortedPosts = [...inCategory, ...outCategory];
+      const parts = category.split(",").map(c => c.trim());
+
+      // 1️⃣ Get filtered posts (matching categories)
+      const filteredPosts = await Post.find({ category: { $in: parts } })
+        .sort({ createdAt: -1 })
+        .populate("createdBy", "name profile handle")
+        .populate("votes.user", "name profile handle");
+
+      // 2️⃣ Get remaining posts (not in those categories)
+      const remainingPosts = await Post.find({ category: { $nin: parts } })
+        .sort({ createdAt: -1 })
+        .populate("createdBy", "name profile handle")
+        .populate("votes.user", "name profile handle");
+
+      // 3️⃣ Combine (filtered first, others next)
+      posts = [...filteredPosts, ...remainingPosts];
+    } else {
+      // No filter → get all normally
+      posts = await Post.find()
+        .sort({ createdAt: -1 })
+        .populate("createdBy", "name profile handle")
+        .populate("votes.user", "name profile handle");
     }
 
-    res.json(sortedPosts);
+    res.json(posts);
+    console.log("got all posts.");
   } catch (err) {
-    console.error(err);
+    console.error("Error getting posts:", err);
     res.status(500).json({ message: err.message });
   }
-
-  console.log('got all posts.');
 };
 
 export const searchPosts = async (req, res) => {
