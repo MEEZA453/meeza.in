@@ -16,6 +16,9 @@ import promotionRoute from './routes/promotion.js'
 import orderRouter from './routes/order.js'
 import hotListRouter from './routes/hotlist.js'
 import notificationRoute from './routes/notification.js'
+import achivementRoute from './routes/achivement.js'
+import { generatePendingAchievements } from './corn/achievementScheduler.js';
+import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -56,6 +59,8 @@ app.use("/user", userRoute);
 app.use('/fav', favRoute);
 app.use('/highlight', highlightRoute)
 app.use('/notification', notificationRoute)
+app.use('/achivement', achivementRoute)
+
 
 
 app.use('/promotion', promotionRoute);
@@ -68,6 +73,18 @@ app.use('/cart' , cartRoute)
 
 // Connect to DB and start server
 connectDB();
+async function testAchievements() {
+  console.log("🏁 Testing achievement generation...");
+  await generatePendingAchievements("day", 1, 1); // for quick test
+`
+`
+      await finalizePendingAchievements();
+  console.log("✅ Achievement test completed");
+}
+
+// Run test only once on startup
+testAchievements();
+
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });

@@ -8,7 +8,9 @@ const notificationSchema = new mongoose.Schema({
     type: String,
     enum: ["vote", "follow", "comment","jury_request","jury_approved", "jury_removed" ,  "jury_rejected" , "jury_removal_request" , "normal_request_rejected" , "asset_attach_request", 'order_created', 'product_sold',  
       "asset_attach_approved",  
-      "asset_attach_rejected", 'cash_received'], 
+      "asset_attach_rejected", 'cash_received',  "achievement_pending",
+  "achievement_awarded",
+  "achievement_rejected", "achievement_review"], 
     required: true,
   },
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, // if related to a post
