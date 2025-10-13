@@ -59,7 +59,7 @@ app.use("/user", userRoute);
 app.use('/fav', favRoute);
 app.use('/highlight', highlightRoute)
 app.use('/notification', notificationRoute)
-app.use('/achivement', achivementRoute)
+app.use('/achievement', achivementRoute)
 
 
 
@@ -75,10 +75,15 @@ app.use('/cart' , cartRoute)
 connectDB();
 async function testAchievements() {
   console.log("🏁 Testing achievement generation...");
-  await generatePendingAchievements("day", 1, 1); // for quick test
-`
-`
+//   await generatePendingAchievements("day", 1, 1); // for quick test
+//       await finalizePendingAchievements();
+     await generatePendingAchievements("month", 0, 0); // for quick test
       await finalizePendingAchievements();
+  await generatePendingAchievements("week", 0, 0); // for quick test
+      await finalizePendingAchievements();
+        await generatePendingAchievements("day", 0, 0); // for quick test
+      await finalizePendingAchievements();
+        
   console.log("✅ Achievement test completed");
 }
 

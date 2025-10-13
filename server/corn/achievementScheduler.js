@@ -62,7 +62,16 @@ export async function generatePendingAchievements(period, minNormal = 1, minJury
   if (period === "week") since.setDate(now.getDate() - 7);
   if (period === "month") since.setMonth(now.getMonth() - 1);
 
-  const posts = await Post.find({ createdAt: { $gte: since } }).populate("createdBy");
+  // const posts = await Post.find({ createdAt: { $gte: since } }).populate("createdBy");
+  const posts = await Post.find({ 
+  $and: [
+    { pendingAchievement: null },
+    { $or: [
+        { createdAt: { $gte: since } },
+      ] 
+    }
+  ]
+}).populate("createdBy");
   if (!posts.length) return;
 
   // 1️⃣ Group posts by parent category
@@ -80,8 +89,11 @@ export async function generatePendingAchievements(period, minNormal = 1, minJury
       for (const post of categoryPosts) {
           const { normalVotes, juryDevVotes } = await countVotesByRole(post);
           if (normalVotes >= minNormal && juryDevVotes >= minJuryDev) {
-              const avgScore = calculateAverageScore(post);
-              scored.push({ post, avgScore });
+             const avgScore = calculateAverageScore(post);
+scored.push({ post, avgScore });
+post.totalScore = avgScore; // ← add this
+await post.save();
+
               console.log(`Post: ${post.name}, Parent: ${parent}, AvgScore: ${avgScore}`);
           }
       }
@@ -95,12 +107,15 @@ export async function generatePendingAchievements(period, minNormal = 1, minJury
 
       // 4️⃣ Set pending achievement
       const type = `${parent}_of_the_${period}`;
-      top.post.pendingAchievement = {
-          type,
-          startedAt: now,
-          expiresAt: new Date(Date.now() - 1000), // expired immediately for testing
-          votes: [],
-      };
+top.post.pendingAchievement = {
+    type,
+    startedAt: now,
+    expiresAt: new Date(Date.now() - 1000),
+    score: top.avgScore,
+    votes: [],
+    category: top.post.category[0] // ← lock the category now
+};
+   
       await top.post.save();
 
       console.log(`Top post for ${parent}: ${top.post.name}, Achievement: ${type}`);

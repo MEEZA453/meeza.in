@@ -22,6 +22,7 @@ const pendingSchema = new mongoose.Schema({
   type: { type: String },
   startedAt: { type: Date, default: Date.now },
   expiresAt: { type: Date },
+    score: { type: Number, default: 0 }, // ← add this,
   votes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Jury/Dev who voted to cancel
 }, { _id: false });
 

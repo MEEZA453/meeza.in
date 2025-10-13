@@ -25,43 +25,80 @@ export const voteAgainstAchievement = async (req, res) => {
 
   res.json({ success: true, message: "Voted to cancel pending achievement." });
 };
-export const getDesignOfTheDay = async (req, res) => {
+export const getAchievementsByPeriod = async (req, res) => {
   try {
-    const post = await Post.findOne({ 
-      "currentAchievement.type": "design_of_the_day" 
-    })
-    .populate("createdBy", "name profile handle")
-    .populate("votes.user", "name profile handle");
+    const { period = "week" } = req.query; // day | week | month
 
-    if (!post) return res.status(404).json({ message: "No design of the day yet" });
+    if (!["day", "week", "month"].includes(period.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid period. Use day, week, or month." });
+    }
 
-    res.json(post);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    // 1️⃣ Date range setup
+    const now = new Date();
+    const since = new Date();
+
+    if (period === "day") since.setDate(now.getDate() - 1);
+    if (period === "week") since.setDate(now.getDate() - 7);
+    if (period === "month") since.setMonth(now.getMonth() - 1);
+
+    // 2️⃣ Regex for type match
+    const regex = new RegExp(`_of_the_${period}$`, "i");
+
+    console.log(`🎯 Fetching all achievements of the ${period} since ${since.toISOString()}`);
+
+    // 3️⃣ Fetch posts that:
+    // - have currentAchievement.type matching the period
+    // - and were awarded within that period
+const posts = await Post.find({
+  "currentAchievement.type": { $regex: regex },
+  "currentAchievement.awardedAt": { $gte: since }, // only achievements awarded in this period
+})
+.sort({ "currentAchievement.awardedAt": -1 })
+.populate("createdBy", "name profile handle")
+.populate("votes.user", "name profile handle");
+
+    if (!posts.length) {
+      return res.status(404).json({ message: `No achievements for this ${period} yet.` });
+    }
+
+    res.json({
+      success: true,
+      period,
+      total: posts.length,
+      achievements: posts,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching achievements by period:", error);
+    res.status(500).json({ message: error.message });
   }
 };
+
 export const getAllAchievements = async (req, res) => {
 console.log('getting all achivements')
   try {
     const posts = await Post.find({
-      "currentAchievement.type": { 
-        $in: [
-          "design_of_the_day",
-          "design_of_the_week",
-          "design_of_the_month",
-          "photography_of_the_day",
-          "photography_of_the_week",
-          "photography_of_the_month",
-          "creativity_of_the_day",
-          "creativity_of_the_week",
-          "creativity_of_the_month"
-        ] 
-      }
+     "currentAchievement.type": { 
+  $in: [
+    "Design_of_the_day",
+    "Design_of_the_week",
+    "Design_of_the_month",
+    "Photography_of_the_day",
+    "Photography_of_the_week",
+    "Photography_of_the_month",
+    "creativity_of_the_day",
+    "creativity_of_the_week",
+    "creativity_of_the_month",
+    "Portrait_of_the_day",
+    "Portrait_of_the_week",
+    "Portrait_of_the_month"
+  ]
+}
+
     })
     .sort({ "currentAchievement.awardedAt": -1 })
     .populate("createdBy", "name profile handle")
     .populate("votes.user", "name profile handle");
-console.log(posts)
+
     res.json(posts);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -83,9 +120,8 @@ export const getAchievementByType = async (req, res) => {
 };
 
 export const getLeaderboard = async (req, res) => {
-    console.log('getting leaderBoard')
   try {
-    const { period = "day", category } = req.query; // e.g., ?period=week&category=design
+    const { period = "day", category } = req.query;
 
     const since = new Date();
     if (period === "day") since.setDate(since.getDate() - 1);
@@ -98,14 +134,15 @@ export const getLeaderboard = async (req, res) => {
     const posts = await Post.find(filter)
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
-      const scored = posts.map(post => ({
-          post,
-          avgScore: calculateAverageScore(post),
-        }));
-        
-        scored.sort((a, b) => b.avgScore - a.avgScore);
-        
-        console.logt('top scored posts',scored)
+
+    const scored = posts.map(post => ({
+      post,
+      avgScore: calculateAverageScore(post),
+    }));
+
+    scored.sort((a, b) => b.avgScore - a.avgScore);
+
+    console.log("Top scored posts:", scored.slice(0, 3).map(s => s.post.name));
     res.json(scored.map(s => ({ post: s.post, avgScore: s.avgScore })));
   } catch (err) {
     res.status(500).json({ message: err.message });

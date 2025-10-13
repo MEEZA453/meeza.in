@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middleweres/auth.js";
-import { getAchievementByType, getAllAchievements, getLeaderboard, getPendingAchievements, voteAgainstAchievement } from "../controller/achivement.js";
+import { getAchievementByType, getAchievementsByPeriod, getAllAchievements, getLeaderboard, getPendingAchievements, voteAgainstAchievement } from "../controller/achivement.js";
 
 
 const router = express.Router();
@@ -10,7 +10,8 @@ const router = express.Router();
 // ==============================
 router.get("/pending", verifyToken, getPendingAchievements);       // Get pending achievements
 router.post("/voteAgainst", verifyToken, voteAgainstAchievement);  // Jury/dev vote to cancel
-
+// 🎯 New routes
+router.get("/period", getAchievementsByPeriod);
 // ==============================
 // Feed / Public Routes
 // ==============================
