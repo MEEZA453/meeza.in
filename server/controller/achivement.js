@@ -104,16 +104,22 @@ console.log('getting all achivements')
     res.status(500).json({ message: err.message });
   }
 };
-export const getAchievementByType = async (req, res) => {
+export const getAchievementsByTypes = async (req, res) => {
+  console.log('getting by type')
   try {
-    const { type } = req.params;
-    const post = await Post.findOne({ "currentAchievement.type": type })
+    const typesQuery = req.query.types;
+    if (!typesQuery) return res.status(400).json({ message: "types query is required" });
+
+    // Split comma-separated types
+    const types = typesQuery.split(',');
+
+    const posts = await Post.find({
+      "currentAchievement.type": { $in: types },
+    })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
 
-    if (!post) return res.status(404).json({ message: "No post with this achievement yet" });
-
-    res.json(post);
+    res.json(posts);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

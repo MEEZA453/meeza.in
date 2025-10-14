@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middleweres/auth.js";
-import { getAchievementByType, getAchievementsByPeriod, getAllAchievements, getLeaderboard, getPendingAchievements, voteAgainstAchievement } from "../controller/achivement.js";
+import {  getAchievementsByPeriod, getAchievementsByTypes, getAllAchievements, getLeaderboard, getPendingAchievements, voteAgainstAchievement } from "../controller/achivement.js";
 
 
 const router = express.Router();
@@ -16,7 +16,7 @@ router.get("/period", getAchievementsByPeriod);
 // Feed / Public Routes
 // ==============================
 router.get("/leaderboard", getLeaderboard);
-router.get("/type/:type", getAchievementByType); // e.g. design_of_the_day, photography_of_the_week
+router.get("/types", getAchievementsByTypes);;// e.g. design_of_the_day, photography_of_the_week
 router.get("/all", getAllAchievements);          // Returns all current achievements for feed
 
 export default router;
