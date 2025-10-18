@@ -26,6 +26,7 @@ const productSchema = new mongoose.Schema(
 
     // 🔗 New field to track which posts this asset is used in
     usedInPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+        parent: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
   },
   { timestamps: true }
 );

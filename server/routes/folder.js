@@ -10,13 +10,14 @@ import {
   renameFolder,
   copyProductToFolder,
   moveProductToFolder,
+  getFolderById,
 } from "../controller/folder.js";
 
 const router = express.Router();
 
 // Create folder
 router.post("/create", verifyToken, createFolder);
-
+router.get("/folder/:id", getFolderById);
 // Get folders
 router.get("/my-folders", verifyToken, getMyFolders); // only user's folders
 router.get("/all-folders", getAllFolders); // all folders (no auth required, or can add verifyToken if needed)
