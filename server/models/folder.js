@@ -13,6 +13,10 @@ const folderSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    elements : {
+      type : [String],
+      required:true
+    },
     products: [
       {
         type: mongoose.Schema.Types.ObjectId,

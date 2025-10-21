@@ -14,7 +14,7 @@ export const createFolder = async (req, res) => {
       owner,
       elements: Array.isArray(elements) ? elements : [], // ensure array
     });
-
+console.log(folder)
     await folder.save();
     console.log('folder created successfully')
     res.status(201).json({ success: true, folder });

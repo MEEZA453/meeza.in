@@ -270,7 +270,7 @@ export const postDesign = async (req, res) => {
     }
 
     try {
-      const { name, amount, driveLink, sections, faq, hashtags } = req.body;
+      const { name, amount, driveLink, sections, faq, hashtags, description } = req.body;
 
       const parsedSections = sections ? JSON.parse(sections) : [];
       const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
@@ -284,6 +284,7 @@ export const postDesign = async (req, res) => {
         amount,
         image: imagePaths,
         driveLink,
+        description,
         sections: parsedSections,
         faq: parsedFaq,
         hashtags: parsedHashtags, // ✅ correct spelling matches schema
@@ -291,7 +292,7 @@ export const postDesign = async (req, res) => {
       });
 
       await product.save();
-      console.log("Product added successfully:", product._id);
+      console.log("Product added successfully:", product);
       res.status(201).json({ success: true, product });
     } catch (error) {
       console.error("Error:", error.message);
@@ -314,7 +315,7 @@ export const editDesign = async (req, res) => {
 
     try {
       const { id } = req.params;
-      const { name, amount, driveLink, sections, faq, hashtags, removeImages } = req.body;
+      const { name, amount, driveLink, sections, faq, hashtags, removeImages, description } = req.body;
 console.log(removeImages)
       // 1️⃣ Find the product
       const product = await Product.findById(id);
@@ -370,13 +371,14 @@ console.log(removeImages)
       product.driveLink = driveLink ?? product.driveLink;
       product.sections = parsedSections;
       product.faq = parsedFaq;
+      product.description = description
       product.hashtags = parsedHashtags;
       product.image = updatedImages;
 
       // 7️⃣ Save updated product
       await product.save();
 
-      console.log("✅ Product updated successfully:", product._id , );
+      console.log("✅ Product updated successfully:", product, );
       res.status(200).json({ success: true, product });
     } catch (error) {
       console.error("Edit design error:", error.message);
