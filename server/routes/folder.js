@@ -2,7 +2,6 @@ import express from "express";
 import { verifyToken } from "../middleweres/auth.js";
 import {
   createFolder,
-  getMyFolders,
   getAllFolders,
   addProductToFolder,
   removeProductFromFolder,
@@ -11,6 +10,7 @@ import {
   copyProductToFolder,
   moveProductToFolder,
   getFolderById,
+  getFoldersByHandle,
 } from "../controller/folder.js";
 
 const router = express.Router();
@@ -19,7 +19,7 @@ const router = express.Router();
 router.post("/create", verifyToken, createFolder);
 router.get("/folder/:id", getFolderById);
 // Get folders
-router.get("/my-folders", verifyToken, getMyFolders); // only user's folders
+router.get("/user-folders/:handle", getFoldersByHandle); // only user's folders
 router.get("/all-folders", getAllFolders); // all folders (no auth required, or can add verifyToken if needed)
 
 // Add / remove / rename / delete / copy / move

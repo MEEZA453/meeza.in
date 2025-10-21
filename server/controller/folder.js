@@ -1,7 +1,7 @@
 // controller/folder.js
 import Folder from "../models/folder.js";
 import Product from "../models/designs.js";
-
+import User from '../models/user.js'
 // ✅ Create Folder
 export const createFolder = async (req, res) => {
   console.log('create a folder')
@@ -14,7 +14,6 @@ export const createFolder = async (req, res) => {
       owner,
       elements: Array.isArray(elements) ? elements : [], // ensure array
     });
-console.log(folder)
     await folder.save();
     console.log('folder created successfully')
     res.status(201).json({ success: true, folder });
@@ -24,18 +23,38 @@ console.log(folder)
   }
 };
 // ✅ Get All Folders of a User
-export const getMyFolders = async (req, res) => {
-  console.log('getting my folders')
+export const getFoldersByHandle = async (req, res) => {
+  console.log("getting folders by handle");
   try {
-    const userId = req.user.id;
-    const folders = await Folder.find({ owner: userId }).populate("products");
+    const { handle } = req.params; // 🆕 handle from URL params
+
+    // 1️⃣ Find user by handle
+    const user = await User.findOne({ handle });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // 2️⃣ Get folders owned by that user
+ const folders = await Folder.find()
+ .populate({
+        path: "products",
+        model: "Product",
+        populate: {
+          path: "postedBy",
+          select: "name profile handle", // expand product's creator
+        },
+      })
+      .populate({
+        path: "owner",
+        select: "name handle profile",
+      });
+console.log('got it!', folders)
     res.status(200).json({ success: true, folders });
   } catch (error) {
+    console.error("Error fetching folders by handle:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-
 export const getFolderById = async (req, res) => {
   const { id } = req.params;
   console.log(id)
