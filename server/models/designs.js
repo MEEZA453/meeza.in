@@ -10,7 +10,7 @@ const productSchema = new mongoose.Schema(
     },
     name: { type: String, required: true },
     image: [],
-    driveLink: { type: String, required: true },
+    driveLink: { type: String, required: false },
     amount: { type: Number, required: true },
 
     faq: [{ question: { type: String }, answer: { type: String } }],

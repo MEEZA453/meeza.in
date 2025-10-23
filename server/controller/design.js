@@ -239,67 +239,67 @@ function getCloudinaryPublicId(imageUrl) {
 
 
 // Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// Configure Multer to use Cloudinary
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: "uploads", // Cloudinary folder
-        public_id: (req, file) => Date.now() + "-" + file.originalname,
-    },
-});
-
-const upload = multer({ storage });
-
-export default upload;
-
-
-
-export const postDesign = async (req, res) => {
-  console.log("Reached postDesign route");
-
-  upload.array("images", 10)(req, res, async (err) => {
-    if (err) {
-      console.error("Multer error:", err);
-      return res.status(400).json({ success: false, message: "Image upload failed" });
-    }
-
-    try {
-      const { name, amount, driveLink, sections, faq, hashtags, description } = req.body;
-
-      const parsedSections = sections ? JSON.parse(sections) : [];
-      const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
-      console.log(hashtags)
-      const parsedFaq = faq ? JSON.parse(faq) : [];
-
-      const imagePaths = req.files ? req.files.map((file) => file.path) : [];
-
-      const product = new Product({
-        name,
-        amount,
-        image: imagePaths,
-        driveLink,
-        description,
-        sections: parsedSections,
-        faq: parsedFaq,
-        hashtags: parsedHashtags, // ✅ correct spelling matches schema
-        postedBy: req.user.id,
-      });
-
-      await product.save();
-      console.log("Product added successfully:", product);
-      res.status(201).json({ success: true, product });
-    } catch (error) {
-      console.error("Error:", error.message);
-      res.status(500).json({ success: false, message: error.message });
-    }
+  cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
   });
-};
+
+  // Configure Multer to use Cloudinary
+  const storage = new CloudinaryStorage({
+      cloudinary: cloudinary,
+      params: {
+          folder: "uploads", // Cloudinary folder
+          public_id: (req, file) => Date.now() + "-" + file.originalname,
+      },
+  });
+
+  const upload = multer({ storage });
+
+  export default upload;
+
+
+
+  export const postDesign = async (req, res) => {
+    console.log("Reached postDesign route");
+
+    upload.array("images", 10)(req, res, async (err) => {
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(400).json({ success: false, message: "Image upload failed" });
+      }
+
+      try {
+        const { name, amount, driveLink, sections, faq, hashtags, description } = req.body;
+
+        const parsedSections = sections ? JSON.parse(sections) : [];
+        const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
+        console.log(hashtags)
+        const parsedFaq = faq ? JSON.parse(faq) : [];
+
+        const imagePaths = req.files ? req.files.map((file) => file.path) : [];
+
+        const product = new Product({
+          name,
+          amount,
+          image: imagePaths,
+          driveLink,
+          description,
+          sections: parsedSections,
+          faq: parsedFaq,
+          hashtags: parsedHashtags, // ✅ correct spelling matches schema
+          postedBy: req.user.id,
+        });
+
+        await product.save();
+        console.log("Product added successfully:", product);
+        res.status(201).json({ success: true, product });
+      } catch (error) {
+        console.error("Error:", error.message);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+  };
 
 
 
