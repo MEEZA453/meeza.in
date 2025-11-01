@@ -4,6 +4,7 @@ import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
 import Notification from "../models/notification.js";
 import Product from "../models/designs.js"
 import { sanitizeProduct } from "../utils/sanitizeProduct.js";
+import { handleVoteNotification } from "../utils/handleVoteNotification.js";
 
 // controllers/assetController.js
 
@@ -606,20 +607,14 @@ export const votePost = async (req, res) => {
       .populate("votes.user", "name profile handle");
 
     // ✅ Create notification (don’t notify if user voted own post)
-    if (String(updatedPost.createdBy._id) !== String(userId)) {
-      await Notification.create({
-        recipient: updatedPost.createdBy._id,
-        sender: userId,
-        type: "vote",
-        image : updatedPost.images[0],
-        // post: updatedPost._id,
-        message: `voted your post`,
-        // store preview image (use first image from post)
-        image: updatedPost.images && updatedPost.images.length > 0
-          ? updatedPost.images[0]
-          : null,
-      });
+  if (String(updatedPost.createdBy._id) !== String(userId)) {
+      await handleVoteNotification(
+        updatedPost.createdBy._id,
+        updatedPost._id,
+        userId
+      );
     }
+
 
     res.json(updatedPost);
   } catch (err) {

@@ -115,6 +115,7 @@ export async function finalizePendingAchievements() {
                 type: "achievement_awarded",
                 message: `🏆 Your post "${post.name}" won ${final.type.replace(/_/g, " ")}!`,
                 post: post._id,
+                honour : final.type,
                 image: post.images?.[0],
             });
         }

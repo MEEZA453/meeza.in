@@ -14,8 +14,13 @@ const notificationSchema = new mongoose.Schema({
     required: true,
   },
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, // if related to a post
-    meta: { type: Object },
+    meta: {
+      voters: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // users who voted
+      totalVotes: { type: Number, default: 0 },
+      extra: { type: Object }, // optional — keeps backward compatibility for other meta info
+    },
       image: { type: String },
+      honour : {type: String},
   message: { type: String }, // optional, can store '@handle voted your post'
   amount : Number,
   isRead: { type: Boolean, default: false },

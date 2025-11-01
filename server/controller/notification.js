@@ -2,20 +2,54 @@ import Notification from "../models/notification.js";
 
 // Get notifications
 export const getNotifications = async (req, res) => {
-
   try {
-    const notifications = await Notification.find({ recipient: req.user.id })
+    const { page = 1, limit = 10, category } = req.query;
+    console.log('fetching notification ',page, limit)
+    const skip = (page - 1) * limit;
+
+    const REQUEST_TYPES = [
+      "jury_request",
+      "jury_removal_request",
+      "asset_attach_request",
+      "normal_request_rejected",
+    ];
+
+    const filter = { recipient: req.user.id };
+
+    if (category === "requests") {
+      filter.type = { $in: REQUEST_TYPES };
+    } else if (category === "normal") {
+      filter.type = { $nin: REQUEST_TYPES };
+    }
+
+    const notifications = await Notification.find(filter)
       .populate("sender", "handle profile")
       .populate("post", "name images")
-      .sort({ createdAt: -1 });
+       .populate("meta.voters", "handle profile") // ✅ populate voter info here
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
 
-    res.json(notifications);
+    const total = await Notification.countDocuments(filter);
+    const hasMore = skip + notifications.length < total;
 
+    res.json({ notifications, total, hasMore });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+export const getUnreadNotifications = async (req, res) => {
+  try {
+    const unread = await Notification.countDocuments({
+      recipient: req.user.id,
+      isRead: false,
+    });
+    res.json({ count: unread });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 // Mark all as read
 export const markAllAsRead = async (req, res) => {
 
