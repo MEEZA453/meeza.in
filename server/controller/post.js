@@ -407,45 +407,70 @@ export const getDefaultPosts = async (req, res) => {
 };
 
 // ✅ Get all posts (with votes & creator populated)
+// controllers/postController.js
 export const getPosts = async (req, res) => {
-  console.log("getting post");
   try {
-    const { category } = req.query; // e.g. "Design,Visual,Photography"
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
+    const categoryQuery = req.query.category || '';
+    const parts = categoryQuery ? categoryQuery.split(',').map((c) => c.trim()) : [];
+console.log(page, categoryQuery, limit)
+    const skip = (page - 1) * limit;
 
     let posts = [];
+    let total = await Post.countDocuments({}); // total count of all posts
 
-    if (category) {
-      const parts = category.split(",").map(c => c.trim());
-
-      // 1️⃣ Get filtered posts (matching categories)
-      const filteredPosts = await Post.find({ category: { $in: parts } })
+    if (parts.length) {
+      // 🔹 Step 1: get matching posts
+      const matchingPosts = await Post.find({ category: { $in: parts } })
         .sort({ createdAt: -1 })
-        .populate("createdBy", "name profile handle")
-        .populate("votes.user", "name profile handle");
+        .skip(skip)
+        .limit(limit)
+        .populate([
+          { path: 'createdBy', select: 'name profile handle' },
+          { path: 'votes.user', select: 'name profile handle' },
+        ]);
 
-      // 2️⃣ Get remaining posts (not in those categories)
-      const remainingPosts = await Post.find({ category: { $nin: parts } })
-        .sort({ createdAt: -1 })
-        .populate("createdBy", "name profile handle")
-        .populate("votes.user", "name profile handle");
+      // 🔹 Step 2: if not enough posts to fill the limit, fetch rest
+      let remainingLimit = limit - matchingPosts.length;
+      if (remainingLimit > 0) {
+        const nonMatchingPosts = await Post.find({ category: { $nin: parts } })
+          .sort({ createdAt: -1 })
+          .skip(skip - matchingPosts.length > 0 ? skip - matchingPosts.length : 0)
+          .limit(remainingLimit)
+          .populate([
+            { path: 'createdBy', select: 'name profile handle' },
+            { path: 'votes.user', select: 'name profile handle' },
+          ]);
 
-      // 3️⃣ Combine (filtered first, others next)
-      posts = [...filteredPosts, ...remainingPosts];
+        posts = [...matchingPosts, ...nonMatchingPosts];
+      } else {
+        posts = matchingPosts;
+      }
     } else {
-      // No filter → get all normally
-      posts = await Post.find()
+      // 🔹 No category → normal pagination
+      posts = await Post.find({})
         .sort({ createdAt: -1 })
-        .populate("createdBy", "name profile handle")
-        .populate("votes.user", "name profile handle");
+        .skip(skip)
+        .limit(limit)
+        .populate([
+          { path: 'createdBy', select: 'name profile handle' },
+          { path: 'votes.user', select: 'name profile handle' },
+        ]);
     }
 
-    res.json(posts);
-    console.log("got all posts.");
+    res.json({
+      results: posts,
+      page,
+      limit,
+      count: total,
+    });
   } catch (err) {
-    console.error("Error getting posts:", err);
+    console.error('Error getting posts:', err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 export const searchPosts = async (req, res) => {
   try {

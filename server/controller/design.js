@@ -48,37 +48,69 @@ export const getDefaultDesigns = async (req, res) => {
   }
 };
 
+
+
 export const getDesign = async (req, res) => {
+  console.log('getting design')
   try {
-    const userId = req.user?.id; // from auth middleware
+    const userId = req.user?.id || null;
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
+    const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {}; // filters JSON
+console.log(userId, page, limit , rawFilters)
+    // Build Mongo query
+    const andClauses = [];
 
-    console.log("User from token:", userId);
+    // For each filter key, create an $elemMatch against sections array
+    Object.entries(rawFilters).forEach(([key, values]) => {
+      if (!Array.isArray(values) || values.length === 0) return;
+      // Match a section with title == key (case-insensitive) and content contains any of the values
+      andClauses.push({
+        sections: {
+          $elemMatch: {
+            title: new RegExp(`^${key}$`, 'i'),
+            content: { $in: values },
+          },
+        },
+      });
+    });
 
-    let designs = await Product.find({})
+    const baseQuery = andClauses.length ? { $and: andClauses } : {};
+
+    // OPTIONAL: additional filters, search, ownership etc. could be added here
+
+    // Count total matching docs (for client to know total)
+    const total = await Product.countDocuments(baseQuery);
+
+    // Pagination
+    const skip = (page - 1) * limit;
+
+    // Fetch page results
+    let designs = await Product.find(baseQuery)
       .sort({ createdAt: -1 })
-      .populate("postedBy", "name profile handle")
+      .skip(skip)
+      .limit(limit)
+      .populate('postedBy', 'name profile handle')
       .lean();
 
-    console.log("Fetched products:", designs.length);
-
-    // Add ownership flag
-  designs = designs.map((product) => {
-      const base = sanitizeProduct(product);
-
+    // sanitize and add isMyProduct flag
+    designs = designs.map((product) => {
+      const base = sanitizeProduct(product); // keep your sanitizer
       return {
         ...base,
         isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
       };
     });
-
-
+console.log('got post page:', page,'limit:', limit  )
     res.status(200).json({
-      count: designs.length,
+      count: total,         // total matching items
+      page,
+      limit,
       results: designs,
     });
   } catch (error) {
-    console.error("Error in getDesign:", error.message);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error('Error in getDesign:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
