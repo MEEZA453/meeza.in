@@ -91,7 +91,7 @@ async function testAchievements() {
 }
 
 // Run test only once on startup
-testAchievements();
+// testAchievements();
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);

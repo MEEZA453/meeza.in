@@ -54,8 +54,8 @@ router.post("/follow/:id", verifyToken, followUser);
 router.post("/unfollow/:id", verifyToken, unfollowUser);
 
 // Public followers/following list by handle
-router.get("/:handle/followers", getFollowers);
-router.get("/:handle/following", getFollowing);
+router.get("/:handle/followers",verifyToken, getFollowers);
+router.get("/:handle/following",verifyToken, getFollowing);
 router.get("/search/users", verifyToken, searchUsers);
 router.get("/defaultSearch", getDefaultUsers);
 router.get("/:handle", verifyToken, getUserByHandle);

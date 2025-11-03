@@ -1,6 +1,20 @@
 // models/Notification.js
 import mongoose from "mongoose";
 
+const metaSchema = new mongoose.Schema(
+  {
+    voters: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // users who voted (populatable)
+    totalVotes: { type: Number, default: 0 },
+    // keep common optional fields you'll use for other notification types
+    assetId: { type: mongoose.Schema.Types.ObjectId, ref: "Asset" },
+    assetImage: { type: String },
+    postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
+    postImage: { type: String },
+    extra: { type: mongoose.Schema.Types.Mixed }, // flexible place for any other data
+  },
+  { _id: false }
+);
+
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // who gets the notification
   sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // who caused it
@@ -14,16 +28,16 @@ const notificationSchema = new mongoose.Schema({
     required: true,
   },
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, // if related to a post
-    meta: {
-      voters: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // users who voted
-      totalVotes: { type: Number, default: 0 },
-      extra: { type: Object }, // optional — keeps backward compatibility for other meta info
-    },
-      image: { type: String },
-      honour : {type: String},
+
+  // <-- REPLACED meta: Mixed with a small sub-schema that keeps flexibility
+  meta: { type: metaSchema, default: {} },
+
+  image: { type: String },
+  honour : {type: String},
   message: { type: String }, // optional, can store '@handle voted your post'
   amount : Number,
   isRead: { type: Boolean, default: false },
+   isFollowing: { type: Boolean, default: false },
 }, { timestamps: true });
 
 export default mongoose.model("Notification", notificationSchema);
