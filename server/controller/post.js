@@ -413,42 +413,64 @@ export const getPosts = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page || '1', 10));
     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
     const categoryQuery = req.query.category || '';
-    const parts = categoryQuery ? categoryQuery.split(',').map((c) => c.trim()) : [];
-console.log(page, categoryQuery, limit)
+    const parts = categoryQuery ? categoryQuery.split(',').map(c => c.trim()) : [];
     const skip = (page - 1) * limit;
 
+    console.log("category filter:", parts.join(', ') || 'none', page, limit);
+
     let posts = [];
-    let total = await Post.countDocuments({}); // total count of all posts
+    let total = await Post.countDocuments({}); // total posts count (for client ref)
 
     if (parts.length) {
-      // 🔹 Step 1: get matching posts
-      const matchingPosts = await Post.find({ category: { $in: parts } })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate([
-          { path: 'createdBy', select: 'name profile handle' },
-          { path: 'votes.user', select: 'name profile handle' },
-        ]);
+      // Count totals
+      const totalMatching = await Post.countDocuments({ category: { $in: parts } });
+      const totalNonMatching = total - totalMatching;
 
-      // 🔹 Step 2: if not enough posts to fill the limit, fetch rest
-      let remainingLimit = limit - matchingPosts.length;
-      if (remainingLimit > 0) {
-        const nonMatchingPosts = await Post.find({ category: { $nin: parts } })
+      // If we still have filtered posts left in the current page range
+      if (skip < totalMatching) {
+        // 1️⃣ Get matching posts for this page
+        const matchingPosts = await Post.find({ category: { $in: parts } })
           .sort({ createdAt: -1 })
-          .skip(skip - matchingPosts.length > 0 ? skip - matchingPosts.length : 0)
-          .limit(remainingLimit)
+          .skip(skip)
+          .limit(limit)
           .populate([
             { path: 'createdBy', select: 'name profile handle' },
             { path: 'votes.user', select: 'name profile handle' },
           ]);
 
-        posts = [...matchingPosts, ...nonMatchingPosts];
-      } else {
         posts = matchingPosts;
+
+        // If this page still has room (e.g. last filtered page not full), fill with others
+        if (matchingPosts.length < limit && skip + limit > totalMatching) {
+          const remaining = limit - matchingPosts.length;
+          const nonMatchingSkip = Math.max(0, skip + matchingPosts.length - totalMatching);
+
+          const extra = await Post.find({ category: { $nin: parts } })
+            .sort({ createdAt: -1 })
+            .skip(nonMatchingSkip)
+            .limit(remaining)
+            .populate([
+              { path: 'createdBy', select: 'name profile handle' },
+              { path: 'votes.user', select: 'name profile handle' },
+            ]);
+
+          posts = [...matchingPosts, ...extra];
+        }
+      } else {
+        // 2️⃣ All filtered posts exhausted — continue with non-matching posts
+        const nonMatchingSkip = skip - totalMatching;
+
+        posts = await Post.find({ category: { $nin: parts } })
+          .sort({ createdAt: -1 })
+          .skip(nonMatchingSkip)
+          .limit(limit)
+          .populate([
+            { path: 'createdBy', select: 'name profile handle' },
+            { path: 'votes.user', select: 'name profile handle' },
+          ]);
       }
     } else {
-      // 🔹 No category → normal pagination
+      // No filter
       posts = await Post.find({})
         .sort({ createdAt: -1 })
         .skip(skip)
