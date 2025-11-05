@@ -117,25 +117,29 @@ export const getFolderById = async (req, res) => {
 // };
 
 
+
+
 export const getFoldersByProductId = async (req, res) => {
   try {
     const { productId } = req.params;
-    const userId = req.user?.id; // optional auth filter
+    const userId = req.user?.id;
 
     console.log("Fetching folders containing product:", productId);
 
-    // Find folders containing the product, but only select minimal fields
+    // Fetch only minimal fields for performance
     const folders = await Folder.find(
       { products: productId, owner: userId },
-      "name createdAt products" // only these fields
-    ).lean(); // makes result plain JS objects (faster)
+      "name createdAt products updatedAt"
+    ).lean();
 
-    // Transform to include product count only
-    const formattedFolders = folders.map(folder => ({
+    // Format output
+    const formattedFolders = folders.map((folder) => ({
       _id: folder._id,
       name: folder.name,
       createdAt: folder.createdAt,
       productCount: folder.products?.length || 0,
+      // Use folder.updatedAt as last product change date (Mongo updates this on modification)
+      lastAddedProductDate: folder.updatedAt,
     }));
 
     res.status(200).json({ success: true, folders: formattedFolders });
@@ -144,6 +148,7 @@ export const getFoldersByProductId = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // ✅ Get all folders (public)
 export const getAllFolders = async (req, res) => {
