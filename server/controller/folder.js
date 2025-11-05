@@ -1,5 +1,6 @@
 // controller/folder.js
 import Folder from "../models/folder.js";
+import mongoose from "mongoose";
 import Product from "../models/designs.js";
 import User from '../models/user.js'
 // ✅ Create Folder
@@ -82,6 +83,64 @@ export const getFolderById = async (req, res) => {
     res.status(200).json({ success: true, folder });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// export const getFoldersByProductId = async (req, res) => {
+//   console.log("Fetching folders containing product:", req.params.productId);
+//   console.log(req.params.productId)
+//   try {
+//     const { productId } = req.params;
+//     console.log(productId)
+//     const userId = req.user?.id; // for auth (optional check)
+
+//     // Find folders where products array includes this productId
+//     const folders = await Folder.find({ products: productId, owner: userId })
+//       .populate({
+//         path: "products",
+//         model: "Product",
+//         populate: {
+//           path: "postedBy",
+//           select: "name handle profile",
+//         },
+//       })
+//       .populate({
+//         path: "owner",
+//         select: "name handle profile",
+//       });
+
+//     res.status(200).json({ success: true, folders });
+//   } catch (error) {
+//     console.error("Error fetching folders by productId:", error);
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
+export const getFoldersByProductId = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const userId = req.user?.id; // optional auth filter
+
+    console.log("Fetching folders containing product:", productId);
+
+    // Find folders containing the product, but only select minimal fields
+    const folders = await Folder.find(
+      { products: productId, owner: userId },
+      "name createdAt products" // only these fields
+    ).lean(); // makes result plain JS objects (faster)
+
+    // Transform to include product count only
+    const formattedFolders = folders.map(folder => ({
+      _id: folder._id,
+      name: folder.name,
+      createdAt: folder.createdAt,
+      productCount: folder.products?.length || 0,
+    }));
+
+    res.status(200).json({ success: true, folders: formattedFolders });
+  } catch (error) {
+    console.error("Error fetching folders by productId:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

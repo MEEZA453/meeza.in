@@ -11,6 +11,7 @@ import {
   moveProductToFolder,
   getFolderById,
   getFoldersByHandle,
+  getFoldersByProductId,
 } from "../controller/folder.js";
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.put("/remove-product", verifyToken, removeProductFromFolder);
 router.put("/rename/:id", verifyToken, renameFolder);
 router.delete("/delete/:id", verifyToken, deleteFolder);
 router.put("/copy-product", verifyToken, copyProductToFolder);
+router.get("/by-product/:productId", verifyToken, getFoldersByProductId);
 router.put("/move-product", verifyToken, moveProductToFolder);
 
 export default router;
