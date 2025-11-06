@@ -125,7 +125,9 @@ export const getFoldersByProductId = async (req, res) => {
     const userId = req.user?.id;
 
     console.log("Fetching folders containing product:", productId);
-
+console.log("USER:", req.user);
+console.log("TOKEN:", req.headers.authorization);
+console.log("PRODUCT ID:", req.params.productId);
     // Fetch only minimal fields for performance
     const folders = await Folder.find(
       { products: productId, owner: userId },
@@ -141,7 +143,7 @@ export const getFoldersByProductId = async (req, res) => {
       // Use folder.updatedAt as last product change date (Mongo updates this on modification)
       lastAddedProductDate: folder.updatedAt,
     }));
-
+console.log(formattedFolders)
     res.status(200).json({ success: true, folders: formattedFolders });
   } catch (error) {
     console.error("Error fetching folders by productId:", error);
