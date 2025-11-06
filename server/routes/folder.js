@@ -18,7 +18,7 @@ const router = express.Router();
 
 // Create folder
 router.post("/create", verifyToken, createFolder);
-router.get("/folder/:id", getFolderById);
+router.get("/folder/:id",verifyToken, getFolderById);
 // Get folders
 router.get("/user-folders/:handle", getFoldersByHandle); // only user's folders
 router.get("/all-folders", getAllFolders); // all folders (no auth required, or can add verifyToken if needed)

@@ -151,27 +151,55 @@ export const getFoldersByProductId = async (req, res) => {
 
 
 // ✅ Get all folders (public)
+// export const getAllFolders = async (req, res) => {
+//   console.log('getting all folders')
+//   try {
+//        const folders = await Folder.find()
+//  .populate({
+//         path: "products",
+//         model: "Product",
+//         populate: {
+//           path: "postedBy",
+//           select: "name profile handle", // expand product's creator
+//         },
+//       })
+//       .populate({
+//         path: "owner",
+//         select: "name handle profile",
+//       });
+//     res.status(200).json({ success: true, folders });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
 export const getAllFolders = async (req, res) => {
-  console.log('getting all folders')
+  console.log("Getting all folders (lightweight)");
   try {
-       const folders = await Folder.find()
- .populate({
-        path: "products",
-        model: "Product",
-        populate: {
-          path: "postedBy",
-          select: "name profile handle", // expand product's creator
-        },
-      })
+    const folders = await Folder.find({}, "name owner createdAt updatedAt products")
       .populate({
         path: "owner",
-        select: "name handle profile",
-      });
-    res.status(200).json({ success: true, folders });
+        select: "name handle profile", // minimal owner info
+      })
+      .lean(); // faster plain objects
+
+    // Format results
+    const formattedFolders = folders.map((folder) => ({
+      _id: folder._id,
+      name: folder.name,
+      createdAt: folder.createdAt,
+      productCount: folder.products?.length || 0,
+      lastAddedProductDate: folder.updatedAt,
+      owner: folder.owner || null,
+    }));
+
+    res.status(200).json({ success: true, folders: formattedFolders });
   } catch (error) {
+    console.error("Error fetching all folders:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 // ✅ Add Product to Folder
 export const addProductToFolder = async (req, res) => {
   console.log('adding product to folder')
