@@ -24,6 +24,16 @@ const productSchema = new mongoose.Schema(
   description : {type: String , required : false},
   hashtags: [String],
    isHot: { type: Boolean, default: false },
+   groups: [
+  {
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
+    name: String,
+    profile: String,
+    noOfContributors: Number,
+    noOfProducts: Number,
+    createdAt: Date,
+  },
+],
 
     // 🔗 New field to track which posts this asset is used in
     usedInPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],

@@ -86,36 +86,6 @@ export const getFolderById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-// export const getFoldersByProductId = async (req, res) => {
-//   console.log("Fetching folders containing product:", req.params.productId);
-//   console.log(req.params.productId)
-//   try {
-//     const { productId } = req.params;
-//     console.log(productId)
-//     const userId = req.user?.id; // for auth (optional check)
-
-//     // Find folders where products array includes this productId
-//     const folders = await Folder.find({ products: productId, owner: userId })
-//       .populate({
-//         path: "products",
-//         model: "Product",
-//         populate: {
-//           path: "postedBy",
-//           select: "name handle profile",
-//         },
-//       })
-//       .populate({
-//         path: "owner",
-//         select: "name handle profile",
-//       });
-
-//     res.status(200).json({ success: true, folders });
-//   } catch (error) {
-//     console.error("Error fetching folders by productId:", error);
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// };
-
 
 
 
@@ -125,9 +95,7 @@ export const getFoldersByProductId = async (req, res) => {
     const userId = req.user?.id;
 
     console.log("Fetching folders containing product:", productId);
-console.log("USER:", req.user);
-console.log("TOKEN:", req.headers.authorization);
-console.log("PRODUCT ID:", req.params.productId);
+
     // Fetch only minimal fields for performance
     const folders = await Folder.find(
       { products: productId, owner: userId },
@@ -143,7 +111,7 @@ console.log("PRODUCT ID:", req.params.productId);
       // Use folder.updatedAt as last product change date (Mongo updates this on modification)
       lastAddedProductDate: folder.updatedAt,
     }));
-console.log(formattedFolders)
+
     res.status(200).json({ success: true, folders: formattedFolders });
   } catch (error) {
     console.error("Error fetching folders by productId:", error);
@@ -151,29 +119,6 @@ console.log(formattedFolders)
   }
 };
 
-
-// ✅ Get all folders (public)
-// export const getAllFolders = async (req, res) => {
-//   console.log('getting all folders')
-//   try {
-//        const folders = await Folder.find()
-//  .populate({
-//         path: "products",
-//         model: "Product",
-//         populate: {
-//           path: "postedBy",
-//           select: "name profile handle", // expand product's creator
-//         },
-//       })
-//       .populate({
-//         path: "owner",
-//         select: "name handle profile",
-//       });
-//     res.status(200).json({ success: true, folders });
-//   } catch (error) {
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// };
 
 export const getAllFolders = async (req, res) => {
   console.log("Getting all folders (lightweight)");
