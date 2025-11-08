@@ -18,6 +18,8 @@ import {
   addProductToGroupDirect,
   listContributionRequests,
   getGroupsByProductId,
+  removeMultipleProductsFromGroup,
+  addMultipleProductsToGroup,
 } from "../controller/group.js";
 import { upload } from "../config/cloudinery.js";
 
@@ -34,7 +36,7 @@ router.get("/:id/contributors", getContributorsByGroupId);
 
 // auth required
 router.post("/create", verifyToken, upload.single("profile"), createGroup);
-router.put("/edit/:id", verifyToken, editGroup);
+router.put("/edit/:id", verifyToken,upload.single("profile"), editGroup);
 router.delete("/delete/:id", verifyToken,upload.single("profile"), deleteGroup);
 
 // contribution flow
@@ -48,7 +50,10 @@ router.post("/make-admin/:groupId", verifyToken, makeAdmin); // body: userIdToMa
 router.post("/remove-admin/:groupId", verifyToken, removeAdmin); // body: userIdToRemove
 
 // product operations
+router.post("/add-multiple-products", verifyToken, addMultipleProductsToGroup);
 router.put("/add-product", verifyToken, addProductToGroupDirect); // body: groupId, productId (admin/owner)
 router.put("/remove-product", verifyToken, removeProductFromGroup); // body: groupId, productId
+router.put("/remove-multiple-products", verifyToken, removeMultipleProductsFromGroup); // body: groupId, productId
+
 
 export default router;

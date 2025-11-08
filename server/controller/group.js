@@ -87,7 +87,7 @@ export const editGroup = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, about, visibility } = req.body;
-
+console.log('editing the grupu', id , name , about, visibility)
     const group = await Group.findById(id);
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
     if (!isOwner(group, req.user.id)) return res.status(403).json({ success: false, message: "Forbidden" });
@@ -120,16 +120,31 @@ export const editGroup = async (req, res) => {
 export const deleteGroup = async (req, res) => {
   try {
     const { id } = req.params;
-    const group = await Group.findById(id);
-    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
-    if (!isOwner(group, req.user.id)) return res.status(403).json({ success: false, message: "Forbidden" });
+    console.log('Deleting a group', id);
 
+    const group = await Group.findById(id);
+    if (!group)
+      return res
+        .status(404)
+        .json({ success: false, message: "Group not found" });
+
+    if (!isOwner(group, req.user.id))
+      return res
+        .status(403)
+        .json({ success: false, message: "Forbidden" });
+
+    // Delete all related contribution requests
     await ContributionRequest.deleteMany({ group: group._id });
-    await group.remove();
+
+    // ✅ Correct deletion
+    await group.deleteOne();
+
     return res.status(200).json({ success: true, message: "Group deleted" });
   } catch (error) {
     console.error("deleteGroup:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message });
   }
 };
 
@@ -427,11 +442,39 @@ export const removeAdmin = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+export const removeMultipleProductsFromGroup = async (req, res) => {
+  try {
+    const { groupId, productIds } = req.body;
+    const userId = req.user.id;
+
+    const group = await Group.findById(groupId);
+    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
+
+    // Only owner/admin can delete multiple
+    const isInvokingOwner = isOwner(group, userId);
+    const isInvokingAdmin = (group.admins || []).some(a => a.toString() === userId.toString());
+    if (!isInvokingOwner && !isInvokingAdmin) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    // ✅ Remove multiple products safely
+    group.products = (group.products || [])
+      .filter(p => p && !productIds.includes(p.toString()));
+
+    await group.save();
+
+    return res.status(200).json({ success: true, group });
+  } catch (error) {
+    console.error("removeMultipleProductsFromGroup:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // Remove product from group (owner or admin). If product removal by owner/admin should be allowed even if not contributor.
 export const removeProductFromGroup = async (req, res) => {
   try {
     const { groupId, productId } = req.body;
+    console.log('removing',groupId, productId)
     const userId = req.user.id;
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
@@ -450,7 +493,7 @@ export const removeProductFromGroup = async (req, res) => {
     group.products = (group.products || []).filter(p => p.toString() !== productId.toString());
     // optionally remove from contributors if user has no more products in group
     await group.save();
-
+console.log('removed')
     return res.status(200).json({ success: true, group });
   } catch (error) {
     console.error("removeProductFromGroup:", error);
@@ -545,6 +588,74 @@ export const addProductToGroupDirect = async (req, res) => {
   }
 };
 
+export const addMultipleProductsToGroup = async (req, res) => {
+  console.log('adding multiple')
+  try {
+    const { groupId, productIds } = req.body;
+    const userId = req.user.id;
+
+    if (!groupId || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "groupId and array of productIds are required",
+      });
+    }
+
+    const group = await Group.findById(groupId);
+    if (!group)
+      return res.status(404).json({ success: false, message: "Group not found" });
+
+    if (!isAdminOrOwner(group, userId))
+      return res.status(403).json({ success: false, message: "Forbidden" });
+
+    // Keep track of added products
+    const addedProducts = [];
+
+    for (const productId of productIds) {
+      // Skip duplicates in group
+      if (group.products.includes(productId)) continue;
+
+      group.products.push(productId);
+      if (!group.contributors.includes(userId)) {
+        group.contributors.push(userId);
+      }
+
+      const product = await Product.findById(productId);
+      if (!product) continue;
+
+      // Skip duplicate group in product
+      const groupAlreadyInProduct = product.groups?.some(
+        (g) => g._id.toString() === group._id.toString()
+      );
+
+      if (!groupAlreadyInProduct) {
+        product.groups.push({
+          _id: group._id,
+          name: group.name,
+          profile: group.profile,
+          noOfContributors: group.contributors.length,
+          noOfProducts: group.products.length,
+          createdAt: group.createdAt,
+        });
+        await product.save();
+      }
+
+      addedProducts.push(product._id);
+    }
+
+    await group.save();
+console.log('multiple items added')
+    return res.status(200).json({
+      success: true,
+      message: `Added ${addedProducts.length} products to group`,
+      group,
+      addedProducts,
+    });
+  } catch (error) {
+    console.error("❌ addMultipleProductsToGroup error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Server error" });
+  }
+};
 
 // List pending contribution requests for a group (admin/owner)
 export const listContributionRequests = async (req, res) => {
