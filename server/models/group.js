@@ -15,6 +15,7 @@ const groupSchema = new mongoose.Schema(
     // optional tags or visibility settings in future
     visibility: { type: String, enum: ["public", "private"], default: "public" },
     // flexible meta
+subscribers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     meta: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }

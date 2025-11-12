@@ -3,18 +3,28 @@ import mongoose from "mongoose";
 
 const metaSchema = new mongoose.Schema(
   {
-    voters: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // users who voted (populatable)
+    voters: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     totalVotes: { type: Number, default: 0 },
-    // keep common optional fields you'll use for other notification types
+
+    // Common asset/post fields
     assetId: { type: mongoose.Schema.Types.ObjectId, ref: "Asset" },
     assetImage: { type: String },
     postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
     postImage: { type: String },
-    extra: { type: mongoose.Schema.Types.Mixed }, // flexible place for any other data
+
+    // ✅ New fields for group_post notifications
+    groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
+    groupName: { type: String },
+    groupProfile: { type: String },
+    contributorHandle: { type: String },
+    contributorProfile: { type: String },
+    contributorAddedImages: [{ type: String }], // max 2 but array for flexibility
+
+    // Fallback for any other dynamic data
+    extra: { type: mongoose.Schema.Types.Mixed },
   },
   { _id: false }
 );
-
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // who gets the notification
   sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // who caused it
@@ -24,6 +34,7 @@ const notificationSchema = new mongoose.Schema({
       "asset_attach_approved",  
       "asset_attach_rejected", 'cash_received',  "achievement_pending",
   "achievement_awarded",
+   "group_post",
   "achievement_rejected", "achievement_review"], 
     required: true,
   },

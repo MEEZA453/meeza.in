@@ -20,6 +20,7 @@ import {
   getGroupsByProductId,
   removeMultipleProductsFromGroup,
   addMultipleProductsToGroup,
+  updateGroupSubscription,
 } from "../controller/group.js";
 import { upload } from "../config/cloudinery.js";
 
@@ -27,7 +28,7 @@ const router = express.Router();
 
 // public
 router.get("/all", getAllGroups);
-router.get("/:id", getGroupById);
+router.get("/:id",verifyToken,  getGroupById);
 router.get("/by-product/:productId", getGroupsByProductId);
 
 // group products & contributors
@@ -51,6 +52,7 @@ router.post("/remove-admin/:groupId", verifyToken, removeAdmin); // body: userId
 
 // product operations
 router.post("/add-multiple-products", verifyToken, addMultipleProductsToGroup);
+router.post("/subscription", verifyToken, updateGroupSubscription);
 router.put("/add-product", verifyToken, addProductToGroupDirect); // body: groupId, productId (admin/owner)
 router.put("/remove-product", verifyToken, removeProductFromGroup); // body: groupId, productId
 router.put("/remove-multiple-products", verifyToken, removeMultipleProductsFromGroup); // body: groupId, productId

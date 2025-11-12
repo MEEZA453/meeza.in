@@ -114,7 +114,91 @@ console.log('editing the grupu', id , name , about, visibility)
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+export const updateGroupSubscription = async (req, res) => {
 
+  try {
+    const { groupId, action } = req.body; 
+    console.log('trying to subscribe with:', groupId, action)
+    // action can be: "subscribe", "unsubscribe", "toggleNotification"
+    const userId = req.user.id;
+
+    const group = await Group.findById(groupId);
+    if (!group)
+      return res.status(404).json({ success: false, message: "Group not found" });
+
+    const user = await User.findById(userId);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    const existing = user.subscribedGroups.find(
+      (s) => s.group.toString() === groupId
+    );
+
+    // ---- SUBSCRIBE ----
+    if (action === "subscribe") {
+      if (existing)
+        return res.status(200).json({ success: true, message: "Already subscribed." });
+
+      user.subscribedGroups.push({
+        group: groupId,
+        notificationsEnabled: false,
+      });
+      group.subscribers.push(userId);
+      await user.save();
+      await group.save();
+      console.log('subscribed')
+      return res.status(200).json({
+        success: true,
+        message: "Subscribed to group.",
+        subscribed: true,
+        notificationsEnabled: false,
+      });
+    }
+
+    // ---- UNSUBSCRIBE ----
+    if (action === "unsubscribe") {
+      user.subscribedGroups = user.subscribedGroups.filter(
+        (s) => s.group.toString() !== groupId
+      );
+      group.subscribers = group.subscribers.filter(
+        (id) => id.toString() !== userId
+      );
+      await user.save();
+      await group.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Unsubscribed from group.",
+        subscribed: false,
+      });
+    }
+console.log('unsubscribed')
+    // ---- TOGGLE NOTIFICATION ----
+    if (action === "toggleNotification") {
+      if (!existing)
+        return res.status(400).json({
+          success: false,
+          message: "Subscribe first to enable notifications.",
+        });
+
+      existing.notificationsEnabled = !existing.notificationsEnabled;
+      await user.save();
+console.log('notification toggled')
+      return res.status(200).json({
+        success: true,
+        message: `Notifications ${
+          existing.notificationsEnabled ? "enabled" : "disabled"
+        } for this group.`,
+        notificationsEnabled: existing.notificationsEnabled,
+      });
+    }
+console.log('done')
+    return res.status(400).json({ success: false, message: "Invalid action." });
+  } catch (error) {
+    console.error("updateGroupSubscription error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 // Delete group (owner only)
 export const deleteGroup = async (req, res) => {
@@ -178,25 +262,76 @@ export const getAllGroups = async (req, res) => {
 export const getGroupById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
+console.log('getting one group ', userId)
     const group = await Group.findById(id)
       .populate({ path: "owner", select: "handle profile _id" })
       .populate({ path: "admins", select: "handle profile _id" })
       .lean();
-    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
 
-    // include counts but do not include the full product docs
+    if (!group)
+      return res
+        .status(404)
+        .json({ success: false, message: "Group not found" });
+
+    // ✅ default flags
+    let isSubscribed = false;
+    let notificationsEnabled = false;
+    let isMyGroup = false;
+
+    // ✅ add computed counts
     const result = {
       ...group,
       noOfProducts: (group.products || []).length,
       noOfContributors: (group.contributors || []).length,
     };
 
-    return res.status(200).json({ success: true, group: result });
+    // ✅ Check if logged in
+    if (userId) {
+      // 1️⃣ Check ownership
+      if (group.owner?._id?.toString() === userId.toString()) {
+        isMyGroup = true;
+      }
+
+      // 2️⃣ Check if subscribed (exists in group.subscribers)
+      if (group.subscribers?.some((u) => u.toString() === userId.toString())) {
+        isSubscribed = true;
+      }
+
+      // 3️⃣ Fetch user to check notification status
+      const user = await User.findById(userId)
+        .select("subscribedGroups")
+        .lean();
+
+      if (user?.subscribedGroups?.length) {
+        const sub = user.subscribedGroups.find(
+          (g) => g.group.toString() === id.toString()
+        );
+        if (sub) {
+          isSubscribed = true;
+          notificationsEnabled = sub.notificationsEnabled;
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      group: {
+        ...result,
+        isSubscribed,
+        notificationsEnabled,
+        isMyGroup,
+      },
+    });
   } catch (error) {
-    console.error("getGroupById:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("getGroupById error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
   }
 };
+
 
 // Get products by group id (full product docs with minimal owner info) - paginated
 export const getProductsByGroupId = async (req, res) => {
@@ -255,17 +390,79 @@ export const getProductsByGroupId = async (req, res) => {
 
 
 // Get contributors by group id (handle, profile, _id)
+// Get contributors by group id (paginated)
 export const getContributorsByGroupId = async (req, res) => {
+  console.log("getting contributors");
   try {
     const { id } = req.params;
-    const group = await Group.findById(id).populate({ path: "contributors", select: "handle profile _id" });
-    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
-    return res.status(200).json({ success: true, contributors: group.contributors });
+    const limit = parseInt(req.query.limit || "10", 10);
+    const page = parseInt(req.query.page || "1", 10);
+
+    console.log("getting contributors by group id", page, limit);
+
+    const group = await Group.findById(id).select("contributors products");
+    if (!group)
+      return res.status(404).json({
+        success: false,
+        message: "Group not found",
+      });
+
+    const totalCount = group.contributors.length;
+    if (totalCount === 0)
+      return res.status(200).json({
+        success: true,
+        contributors: [],
+        page,
+        limit,
+        count: 0,
+      });
+
+    // Pagination bounds
+    const startIndex = (page - 1) * limit;
+    const endIndex = Math.min(page * limit, totalCount);
+
+    // Slice contributor IDs for current page
+    const contributorIds = group.contributors.slice(startIndex, endIndex);
+
+    // Fetch contributors’ basic info
+    const contributors = await User.find({ _id: { $in: contributorIds } })
+      .select("handle profile _id passion")
+      .lean();
+
+    // Count how many products each contributor has in this group
+    const productCounts = await Product.aggregate([
+      { $match: { _id: { $in: group.products } } },
+      { $group: { _id: "$postedBy", count: { $sum: 1 } } },
+    ]);
+
+    // Convert productCounts to a lookup map
+    const countMap = {};
+    productCounts.forEach((p) => {
+      countMap[p._id?.toString()] = p.count;
+    });
+
+    // Attach contributionCount to each contributor
+    const enrichedContributors = contributors.map((c) => ({
+      ...c,
+      contributionCount: countMap[c._id.toString()] || 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      contributors: enrichedContributors,
+      page,
+      limit,
+      count: totalCount,
+      hasMore: endIndex < totalCount,
+    });
   } catch (error) {
     console.error("getContributorsByGroupId:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message });
   }
 };
+
 
 // Send contribution request (normal user -> create ContributionRequest, notify owner/admins)
 export const sendContributionRequest = async (req, res) => {
@@ -566,6 +763,31 @@ export const addProductToGroupDirect = async (req, res) => {
         createdAt: group.createdAt,
       });
       await product.save();
+const subscribersWithNotifOn = await User.find({
+  "subscribedGroups.group": groupId,
+  "subscribedGroups.notificationsEnabled": true,
+}).select("_id");
+
+const recipients = subscribersWithNotifOn
+  .map((u) => u._id.toString())
+  .filter((id) => id !== userId.toString());
+
+if (recipients.length > 0) {
+  const notifications = recipients.map((recipientId) => ({
+    recipient: recipientId,
+    sender: userId,
+    type: "group_post",
+    message: `New product added in ${group.name}`,
+    meta: {
+      assetId: productId,
+      assetImage: product.thumbnail || "",
+      extra: { groupId, groupName: group.name },
+    },
+  }));
+
+  await Notification.insertMany(notifications);
+  console.log(`📢 Notified ${recipients.length} users`);
+}
       console.log(`✅ Group "${group.name}" added inside product ${product._id}`);
     } else {
       console.log(
@@ -589,12 +811,12 @@ export const addProductToGroupDirect = async (req, res) => {
 };
 
 export const addMultipleProductsToGroup = async (req, res) => {
-  console.log('adding multiple')
+  console.log('adding multiple');
   try {
     const { groupId, productIds } = req.body;
     const userId = req.user.id;
 
-    if (!groupId || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
+    if (!groupId || !Array.isArray(productIds) || productIds.length === 0) {
       return res.status(400).json({
         success: false,
         message: "groupId and array of productIds are required",
@@ -605,17 +827,12 @@ export const addMultipleProductsToGroup = async (req, res) => {
     if (!group)
       return res.status(404).json({ success: false, message: "Group not found" });
 
-    if (!isAdminOrOwner(group, userId))
-      return res.status(403).json({ success: false, message: "Forbidden" });
-
-    // Keep track of added products
     const addedProducts = [];
 
     for (const productId of productIds) {
-      // Skip duplicates in group
       if (group.products.includes(productId)) continue;
-
       group.products.push(productId);
+
       if (!group.contributors.includes(userId)) {
         group.contributors.push(userId);
       }
@@ -623,7 +840,6 @@ export const addMultipleProductsToGroup = async (req, res) => {
       const product = await Product.findById(productId);
       if (!product) continue;
 
-      // Skip duplicate group in product
       const groupAlreadyInProduct = product.groups?.some(
         (g) => g._id.toString() === group._id.toString()
       );
@@ -644,7 +860,62 @@ export const addMultipleProductsToGroup = async (req, res) => {
     }
 
     await group.save();
-console.log('multiple items added')
+
+    // ✅ Fetch subscribers who have notifications enabled
+    const subscribersWithNotifOn = await User.find({
+      "subscribedGroups.group": groupId,
+      "subscribedGroups.notificationsEnabled": true,
+    }).select("_id");
+
+    const recipients = subscribersWithNotifOn
+      .map((u) => u._id.toString())
+      .filter((id) => id !== userId.toString()); // exclude uploader
+
+    if (recipients.length > 0 && addedProducts.length > 0) {
+      const notifications = [];
+
+      // ✅ Get contributor info
+      const contributor = await User.findById(userId).select("handle profile");
+
+      // ✅ Get latest added product (most recent from selected)
+      const latestProduct = await Product.findById(
+        addedProducts[addedProducts.length - 1]
+      )
+        .select("image name postedBy createdAt")
+        .populate("postedBy", "handle profile")
+        .lean();
+
+      const productImage =
+        Array.isArray(latestProduct?.image) && latestProduct.image.length > 0
+          ? latestProduct.image[0]
+          : "";
+
+      recipients.forEach((recipientId) => {
+        notifications.push({
+          recipient: recipientId,
+          sender: userId,
+          type: "group_post",
+          message: `New product added in ${group.name}`,
+          meta: {
+            groupId: group._id,
+            groupName: group.name,
+            groupProfile: group.profile,
+            assetId: latestProduct._id,
+            assetImage: productImage,
+            contributorHandle: contributor?.handle || "",
+            contributorProfile: contributor?.profile || "",
+          },
+        });
+      });
+
+      if (notifications.length > 0) {
+        await Notification.insertMany(notifications);
+        console.log(`📢 Notified ${recipients.length} users`);
+      }
+    }
+
+    console.log('✅ Multiple items added successfully');
+
     return res.status(200).json({
       success: true,
       message: `Added ${addedProducts.length} products to group`,
@@ -653,10 +924,30 @@ console.log('multiple items added')
     });
   } catch (error) {
     console.error("❌ addMultipleProductsToGroup error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Server error" });
   }
 };
 
+
+
+export const getSubscribedGroups = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId)
+      .populate("subscribedGroups.group", "name profile about")
+      .select("subscribedGroups");
+
+    res.status(200).json({
+      success: true,
+      groups: user.subscribedGroups,
+    });
+  } catch (error) {
+    console.error("getSubscribedGroups error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 // List pending contribution requests for a group (admin/owner)
 export const listContributionRequests = async (req, res) => {
   try {

@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
-
+const subscribedGroupSchema = new mongoose.Schema(
+  {
+    group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
+    notificationsEnabled: { type: Boolean, default: false }, // like YouTube bell 🔔
+  },
+  { _id: false }
+);
 const userSchema = new mongoose.Schema({
   name: String,
   email: {
@@ -22,14 +28,14 @@ const userSchema = new mongoose.Schema({
   password: String,
   instagram: String,
   bio: String,
-
+ passion: String,
   // Roles
   role: {
     type: String,
     enum: ["normal", "jury", "dev"],
     default: "normal"
   },
-
+  subscribedGroups: [subscribedGroupSchema],
   // Jury application pending
   juryApplied: {
     type: Boolean,
