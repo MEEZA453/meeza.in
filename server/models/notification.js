@@ -11,7 +11,7 @@ const metaSchema = new mongoose.Schema(
     assetImage: { type: String },
     postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
     postImage: { type: String },
-
+   isMultiple: { type: Boolean, default: false },
     // ✅ New fields for group_post notifications
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
     groupName: { type: String },

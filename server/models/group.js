@@ -5,6 +5,9 @@ const groupSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     about: { type: String, default: "" },
+    bio: { type: String, default: "" }, 
+    website: { type: String, default: "" },
+        instagram: { type: String, default: "" },
     profile: { type: String, default: "" }, // brand logo / profile image url
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // superadmin
     admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // additional admins

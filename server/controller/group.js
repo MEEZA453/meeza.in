@@ -15,7 +15,7 @@ const isAdminOrOwner = (group, userId) =>
 export const createGroup = async (req, res) => {
   try {
     console.log('creating a group')
-    const { name, about, visibility } = req.body;
+    const { name, about, visibility ,bio, website, instagram } = req.body;
     const owner = req.user.id;
 
     if (!name) {
@@ -35,6 +35,9 @@ export const createGroup = async (req, res) => {
     const group = new Group({
       name,
       about,
+      bio,
+      instagram,
+      website,
       profile: profileUrl,
       visibility,
       owner,
@@ -86,8 +89,8 @@ export const getGroupsByProductId = async (req, res) => {
 export const editGroup = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, about, visibility } = req.body;
-console.log('editing the grupu', id , name , about, visibility)
+    const { name, about, visibility, bio, instagram, website } = req.body;
+console.log('editing the grupu', id , name , about, visibility, bio, instagram, website)
     const group = await Group.findById(id);
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
     if (!isOwner(group, req.user.id)) return res.status(403).json({ success: false, message: "Forbidden" });
@@ -106,7 +109,9 @@ console.log('editing the grupu', id , name , about, visibility)
     group.name = name || group.name;
     group.about = about || group.about;
     group.visibility = visibility || group.visibility;
-
+    group.bio = bio || group.bio;
+    group.instagram = instagram || group.instagram
+    group.website = website || group.website
     await group.save();
     return res.status(200).json({ success: true, group });
   } catch (error) {
@@ -235,35 +240,116 @@ export const deleteGroup = async (req, res) => {
 // Get all groups (lightweight fields)
 export const getAllGroups = async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit || "10", 10);
+    const page = parseInt(req.query.page || "1", 10);
+
+    console.log("getting all groups", page, limit);
+
+    const totalCount = await Group.countDocuments({});
+    if (totalCount === 0)
+      return res.status(200).json({
+        success: true,
+        groups: [],
+        page,
+        limit,
+        count: 0,
+      });
+
     const groups = await Group.find({})
-      .select("name profile createdAt owner products contributors")
+      .select("name profile createdAt owner products contributors subscribers")
       .populate({ path: "owner", select: "handle profile _id" })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
       .lean();
 
-    // map to required shape: name, profile, _id, noOfContributors, noOfProducts
-    const shaped = groups.map(g => ({
+    // map to required shape
+    const shaped = groups.map((g) => ({
       _id: g._id,
       name: g.name,
       profile: g.profile,
       owner: g.owner,
       noOfContributors: (g.contributors || []).length,
       noOfProducts: (g.products || []).length,
+      totalSubscribers: (g.subscribers || []).length,
       createdAt: g.createdAt,
     }));
-
-    return res.status(200).json({ success: true, groups: shaped });
+console.log('got all groups')
+    return res.status(200).json({
+      success: true,
+      groups: shaped,
+      page,
+      limit,
+      count: totalCount,
+      hasMore: page * limit < totalCount,
+    });
   } catch (error) {
     console.error("getAllGroups:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+
+export const searchGroups = async (req, res) => {
+  console.log("🔍 Searching groups...");
+  try {
+    const { query } = req.query;
+    const userId = req.user?.id;
+    console.log(query, userId);
+
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const groups = await Group.find({
+      name: { $regex: query, $options: "i" },
+    })
+      .select("name profile owner contributors products subscribers createdAt")
+      .populate({ path: "owner", select: "handle profile _id" })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // ✅ Same shape as getAllGroups
+    const shaped = groups.map((g) => ({
+      _id: g._id,
+      name: g.name,
+      profile: g.profile,
+      owner: g.owner,
+      noOfContributors: (g.contributors || []).length,
+      noOfProducts: (g.products || []).length,
+      totalSubscribers: (g.subscribers || []).length,
+      createdAt: g.createdAt,
+      isMyGroup: userId ? g.owner?._id.toString() === userId.toString() : false,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      groups: shaped, // ✅ same key as getAllGroups
+      page,
+      limit,
+      count: shaped.length,
+      hasMore: shaped.length === limit, // ✅ consistent pagination indicator
+    });
+  } catch (error) {
+    console.error("❌ Error in searchGroups:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
 // Get group by id (all group details but not listing products)
 export const getGroupById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-console.log('getting one group ', userId)
+    console.log('getting one group ', userId);
+
     const group = await Group.findById(id)
       .populate({ path: "owner", select: "handle profile _id" })
       .populate({ path: "admins", select: "handle profile _id" })
@@ -284,6 +370,7 @@ console.log('getting one group ', userId)
       ...group,
       noOfProducts: (group.products || []).length,
       noOfContributors: (group.contributors || []).length,
+      totalSubscribers: (group.subscribers || []).length, // ✅ Added here
     };
 
     // ✅ Check if logged in
@@ -331,6 +418,7 @@ console.log('getting one group ', userId)
     });
   }
 };
+
 
 
 // Get products by group id (full product docs with minimal owner info) - paginated
@@ -714,6 +802,11 @@ export const addProductToGroupDirect = async (req, res) => {
       });
     }
 
+    // ✅ Allow both single and multiple product IDs
+    const productIds = Array.isArray(productId) ? productId : [productId];
+    const isMultiple = productIds.length > 1;
+    console.log(productIds, "isMultiple is", isMultiple);
+
     // ✅ Fetch and validate group
     const group = await Group.findById(groupId);
     if (!group)
@@ -727,80 +820,101 @@ export const addProductToGroupDirect = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Forbidden: not group owner/admin" });
 
-    // ✅ Check for duplicates before adding product
-    if (group.products.includes(productId)) {
-      return res.status(400).json({
-        success: false,
-        message: "This product is already added to this group.",
-      });
+    const addedProducts = [];
+
+    for (const pid of productIds) {
+      if (group.products.includes(pid)) continue;
+
+      group.products.push(pid);
+      if (!group.contributors.includes(userId)) {
+        group.contributors.push(userId);
+      }
+
+      const product = await Product.findById(pid);
+      if (!product) continue;
+
+      const groupAlreadyInProduct = product.groups?.some(
+        (g) => g._id.toString() === group._id.toString()
+      );
+
+      if (!groupAlreadyInProduct) {
+        product.groups.push({
+          _id: group._id,
+          name: group.name,
+          profile: group.profile,
+          noOfContributors: group.contributors.length,
+          noOfProducts: group.products.length,
+          createdAt: group.createdAt,
+        });
+        await product.save();
+        addedProducts.push(product);
+      }
     }
 
-    // ✅ Add product & contributor
-    group.products.push(productId);
-    if (!group.contributors.includes(userId)) {
-      group.contributors.push(userId);
-    }
     await group.save();
 
-    // ✅ Sync group info inside the product
-    const product = await Product.findById(productId);
-    if (!product)
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
+    // ✅ Notify subscribers with notifications enabled + group owner if notifications ON
+    if (addedProducts.length > 0) {
+      // Fetch subscribers with notifications ON
+      const subscribersWithNotifOn = await User.find({
+        "subscribedGroups.group": groupId,
+        "subscribedGroups.notificationsEnabled": true,
+      }).select("_id");
 
-    const groupAlreadyInProduct = product.groups?.some(
-      (g) => g._id.toString() === group._id.toString()
-    );
+      let recipientIds = subscribersWithNotifOn.map((u) => u._id.toString());
 
-    if (!groupAlreadyInProduct) {
-      product.groups.push({
-        _id: group._id,
-        name: group.name,
-        profile: group.profile,
-        noOfContributors: group.contributors.length,
-        noOfProducts: group.products.length,
-        createdAt: group.createdAt,
-      });
-      await product.save();
-const subscribersWithNotifOn = await User.find({
-  "subscribedGroups.group": groupId,
-  "subscribedGroups.notificationsEnabled": true,
-}).select("_id");
-
-const recipients = subscribersWithNotifOn
-  .map((u) => u._id.toString())
-  .filter((id) => id !== userId.toString());
-
-if (recipients.length > 0) {
-  const notifications = recipients.map((recipientId) => ({
-    recipient: recipientId,
-    sender: userId,
-    type: "group_post",
-    message: `New product added in ${group.name}`,
-    meta: {
-      assetId: productId,
-      assetImage: product.thumbnail || "",
-      extra: { groupId, groupName: group.name },
-    },
-  }));
-
-  await Notification.insertMany(notifications);
-  console.log(`📢 Notified ${recipients.length} users`);
-}
-      console.log(`✅ Group "${group.name}" added inside product ${product._id}`);
-    } else {
-      console.log(
-        `⚠️ Group "${group.name}" already exists in product ${product._id}, skipping`
+      // ✅ Also include group owner if their notifications are ON
+      const ownerUser = await User.findById(group.owner).select(
+        "subscribedGroups"
       );
+      const ownerHasNotifOn = ownerUser?.subscribedGroups?.some(
+        (g) =>
+          g.group.toString() === groupId.toString() && g.notificationsEnabled
+      );
+
+      if (ownerHasNotifOn && !recipientIds.includes(group.owner.toString())) {
+        recipientIds.push(group.owner.toString());
+      }
+
+      // Exclude the sender from being notified
+      const recipients = recipientIds.filter((id) => id !== userId.toString());
+
+      if (recipients.length > 0) {
+        const latestProduct = addedProducts[addedProducts.length - 1];
+        const contributor = await User.findById(userId).select("handle profile");
+
+        const notifications = recipients.map((recipientId) => ({
+          recipient: recipientId,
+          sender: userId,
+          type: "group_post",
+          message: isMultiple
+            ? `Multiple products added in ${group.name}!`
+            : `New product added in ${group.name}!`,
+          meta: {
+            groupId: group._id,
+            groupName: group.name,
+            groupProfile: group.profile,
+            contributorHandle: contributor.handle,
+            contributorProfile: contributor.profile,
+            contributorAddedImages: [latestProduct.image?.[0]].filter(Boolean),
+            isMultiple,
+          },
+        }));
+
+        await Notification.insertMany(notifications);
+        console.log(`📢 Notified ${recipients.length} users`);
+      }
     }
 
-    console.log("✅ Product added successfully:", productId);
+    console.log("✅ Products added successfully:", productIds);
     return res.status(200).json({
       success: true,
-      message: "Product successfully added to group and synced.",
+      message:
+        addedProducts.length > 0
+          ? "Products successfully added to group and synced."
+          : "All selected products already exist in this group.",
       group,
-      product,
+      addedProducts,
     });
   } catch (error) {
     console.error("❌ addProductToGroupDirect error:", error);
@@ -809,6 +923,8 @@ if (recipients.length > 0) {
       .json({ success: false, message: error.message || "Server error" });
   }
 };
+
+
 
 export const addMultipleProductsToGroup = async (req, res) => {
   console.log('adding multiple');
@@ -890,6 +1006,8 @@ export const addMultipleProductsToGroup = async (req, res) => {
           ? latestProduct.image[0]
           : "";
 
+      const isMultiple = productIds.length > 1; // ✅ Added here
+
       recipients.forEach((recipientId) => {
         notifications.push({
           recipient: recipientId,
@@ -904,6 +1022,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
             assetImage: productImage,
             contributorHandle: contributor?.handle || "",
             contributorProfile: contributor?.profile || "",
+            isMultiple, // ✅ Added here
           },
         });
       });
@@ -929,6 +1048,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
       .json({ success: false, message: error.message || "Server error" });
   }
 };
+
 
 
 

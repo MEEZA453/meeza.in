@@ -21,6 +21,7 @@ import {
   removeMultipleProductsFromGroup,
   addMultipleProductsToGroup,
   updateGroupSubscription,
+  searchGroups,
 } from "../controller/group.js";
 import { upload } from "../config/cloudinery.js";
 
@@ -29,8 +30,8 @@ const router = express.Router();
 // public
 router.get("/all", getAllGroups);
 router.get("/:id",verifyToken,  getGroupById);
+router.get("/search/search", verifyToken, searchGroups);
 router.get("/by-product/:productId", getGroupsByProductId);
-
 // group products & contributors
 router.get("/:id/products", getProductsByGroupId); // ?page=1&limit=10
 router.get("/:id/contributors", getContributorsByGroupId);
