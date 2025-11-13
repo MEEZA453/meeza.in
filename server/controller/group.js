@@ -295,7 +295,6 @@ export const searchGroups = async (req, res) => {
   try {
     const { query } = req.query;
     const userId = req.user?.id;
-    console.log(query, userId);
 
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Search query is required" });
