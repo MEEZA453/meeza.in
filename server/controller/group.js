@@ -291,7 +291,7 @@ console.log('got all groups')
 
 
 export const searchGroups = async (req, res) => {
-  console.log("🔍 Searching groups...");
+
   try {
     const { query } = req.query;
     const userId = req.user?.id;
