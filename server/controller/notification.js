@@ -49,6 +49,7 @@ export const getNotifications = async (req, res) => {
       "jury_removal_request",
       "asset_attach_request",
       "normal_request_rejected",
+      "group_contribution_request",
     ];
 
     const { category } = req.query;

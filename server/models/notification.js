@@ -34,6 +34,7 @@ const notificationSchema = new mongoose.Schema({
       "asset_attach_approved",  
       "asset_attach_rejected", 'cash_received',  "achievement_pending",
   "achievement_awarded",
+  "group_contribution_request", "group_contribution_approved", "group_contribution_rejected",
    "group_post",
   "achievement_rejected", "achievement_review"], 
     required: true,

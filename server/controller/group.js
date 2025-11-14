@@ -5,6 +5,7 @@ import User from "../models/user.js";
 import ContributionRequest from "../models/contributionRequest.js";
 import Notification from "../models/notification.js";
 import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
+import notification from "../models/notification.js";
 // helper to check if user is owner
 const isOwner = (group, userId) => group.owner.toString() === userId.toString();
 // helper to check if admin (owner included)
@@ -550,73 +551,159 @@ export const getContributorsByGroupId = async (req, res) => {
   }
 };
 
+const canUserAddDirectly = (group, userId) => {
+  const isOwner = group.owner.toString() === userId.toString();
+  const isAdmin = group.admins?.some(a => a.toString() === userId.toString());
 
+  switch (group.directAddPermission) {
+    case "owner_only":
+      return isOwner;
+
+    case "admins_and_owner":
+      return isOwner || isAdmin;
+
+    case "everyone":
+      return true;
+
+    default:
+      return isOwner || isAdmin; // fallback
+  }
+};
 // Send contribution request (normal user -> create ContributionRequest, notify owner/admins)
 export const sendContributionRequest = async (req, res) => {
+  console.log('sending contribution request');
   try {
-    const { groupId, productId, message } = req.body;
+    const { groupId, productIds, message } = req.body; // <-- productIds array
     const requester = req.user.id;
-
-    const group = await Group.findById(groupId);
-    if (!group) return res.status(404).json({ success: false, message: "Group not found" });
-
-    // If requester is owner or admin, allow direct add without request (optional behavior)
-    if (isAdminOrOwner(group, requester)) {
-      // add directly
-      if (!group.products.includes(productId)) group.products.push(productId);
-      if (!group.contributors.includes(requester)) group.contributors.push(requester);
-      await group.save();
-
-      // notification to requester: contribution added
-      await Notification.create({
-        recipient: requester,
-        sender: req.user.id,
-        type: "asset_attach_approved",
-        message: `Your product was added to group ${group.name}`,
-        meta: { assetId: productId, extra: { groupId: group._id } },
-      });
-
-      return res.status(200).json({ success: true, message: "Added to group (you are admin/owner)" });
+ 
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ success: false, message: "productIds array required" });
     }
 
-    // check existing pending request
-    const existing = await ContributionRequest.findOne({
-      group: groupId,
-      product: productId,
-      requester,
-      status: "pending",
+    const group = await Group.findById(groupId);
+    if (!group)
+      return res.status(404).json({ success: false, message: "Group not found" });
+
+    const results = [];  // store each product’s result
+
+    // helper to compare ids safely
+    const eqId = (a, b) => (a && b) ? a.toString() === b.toString() : false;
+
+    for (const productIdRaw of productIds) {
+      const productId = productIdRaw; // keep original type, but use toString comparisons below
+
+      // --------- ALREADY IN GROUP CHECK ----------
+      const alreadyInGroup = (group.products || []).some(p => eqId(p, productId));
+      if (alreadyInGroup) {
+        console.log('already in group free you ass')
+        results.push({ productId, status: "already_in_group" });
+        continue;
+      }
+
+      // --------- DIRECT ADD (same logic as before) ----------
+      if (canUserAddDirectly(group, requester)) {
+        // Add product & contributor
+        if (!(group.products || []).some(p => eqId(p, productId))) group.products.push(productId);
+        if (!(group.contributors || []).some(c => eqId(c, requester))) group.contributors.push(requester);
+        await group.save();
+
+        await Notification.create({
+          recipient: requester,
+          sender: req.user.id,
+          type: "group_contribution_approved",
+          message: `Your product was added to group ${group.name}`,
+          meta: { assetId: productId, extra: { groupId: group._id } },
+        });
+
+        results.push({ productId, status: "direct_added" });
+        continue; // next product
+      }
+
+      // --------- PENDING REQUEST CHECK ----------
+ 
+
+      // fetch product once (used for image) — if product doesn't exist, mark and skip
+      const product = await Product.findById(productId).lean();
+      if (!product) {
+        results.push({ productId, status: "product_not_found" });
+        continue;
+      }
+
+      // If existing pending request found -> still notify admins/owner again
+     const existing = await ContributionRequest.findOne({
+  group: groupId,
+  product: productId,
+  requester,
+  status: "pending",
+});
+
+// If pending request exists → DO NOT send again
+if (existing) {
+  console.log('request already pending for product', productId);
+  results.push({
+    productId,
+    status: "already_pending",
+    requestId: existing._id
+  });
+  continue;
+}
+      // --------- CREATE NEW CONTRIBUTION REQUEST ----------
+      const reqDoc = new ContributionRequest({
+        group: groupId,
+        product: productId,
+        requester,
+        message
+      });
+      await reqDoc.save();
+ 
+
+      // ---------- NOTIFY OWNER + ADMINS ----------
+      const recipients = [group.owner, ...(group.admins || [])];
+
+      const notifications = recipients.map(r => ({
+    
+        recipient: r,
+        sender: requester,
+        type: "group_contribution_request",
+        message: `${req.user.handle || req.user.id} wants to contribute a product to ${group.name}`,
+        meta: {
+          assetId: productId,
+          postId: null,
+          assetImage: Array.isArray(product.image) ? product.image[0] : product.image || product.preview || null,
+          groupId: group._id,
+          groupName: group.name,
+          groupProfile: group.profile || null,
+          contributorHandle: req.user.handle || null,
+          contributorProfile: req.user.profile || null,
+          extra: { requestId: reqDoc._id }
+        }
+      }));
+
+      if (notifications.length) await Notification.insertMany(notifications);
+
+      results.push({ productId, status: "request_created", request: reqDoc });
+    } // end for
+
+    console.log('sent contribution request');
+    return res.status(200).json({
+      success: true,
+      results,   // array of results for each product
     });
-    if (existing) return res.status(400).json({ success: false, message: "Request already pending" });
 
-    const reqDoc = new ContributionRequest({ group: groupId, product: productId, requester, message });
-    await reqDoc.save();
-
-    // Notify owner and admins
-    const recipients = [group.owner, ...(group.admins || [])];
-    const recipientObjs = recipients.map(r => ({ recipient: r, sender: requester }));
-
-    const notifications = recipientObjs.map(obj => ({
-      recipient: obj.recipient,
-      sender: requester,
-      type: "asset_attach_request",
-      message: `${req.user.handle || req.user.id} wants to contribute a product to ${group.name}`,
-      meta: { assetId: productId, postId: null, extra: { groupId: group._id, requestId: reqDoc._id } },
-    }));
-    await Notification.insertMany(notifications);
-
-    return res.status(201).json({ success: true, request: reqDoc });
   } catch (error) {
     console.error("sendContributionRequest:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+
+
 // Accept contribution (admin or owner)
 export const acceptContribution = async (req, res) => {
   try {
     const { requestId } = req.params;
     const userId = req.user.id;
-
+console.log('accepting contribution', requestId, userId)
     const reqDoc = await ContributionRequest.findById(requestId).populate("group product requester");
     if (!reqDoc) return res.status(404).json({ success: false, message: "Request not found" });
     const group = await Group.findById(reqDoc.group._id);
@@ -632,15 +719,71 @@ export const acceptContribution = async (req, res) => {
     reqDoc.handledBy = userId;
     reqDoc.handledAt = new Date();
     await reqDoc.save();
+console.log('contribution accepted')
 
-    // Notify requester
-    await Notification.create({
-      recipient: reqDoc.requester._id,
-      sender: userId,
-      type: "asset_attach_approved",
-      message: `Your contribution to ${group.name} was accepted.`,
-      meta: { assetId: reqDoc.product._id, extra: { groupId: group._id, requestId: reqDoc._id } },
-    });
+ await Notification.create({
+  recipient: reqDoc.requester._id,
+  sender: userId,
+  type: "group_contribution_approved",
+  message: `Your contribution to ${group.name} was accepted.`,
+  meta: { 
+    assetId: reqDoc.product._id,
+    assetImage: reqDoc.product?.image?.[0] || reqDoc.product?.preview || null,
+
+    groupId: group._id,
+    groupName: group.name,
+    groupProfile: group.profile || null,
+
+    extra: { 
+      requestId: reqDoc._id 
+    }
+  }
+});
+const subscribers = await User.find({
+  "subscribedGroups.group": group._id,
+  "subscribedGroups.notificationsEnabled": true,
+}).select("_id");
+
+const contributorId = reqDoc.requester._id.toString();
+const ownerId = group.owner.toString();
+
+const recipients = subscribers
+  .map(u => u._id.toString())
+  .filter(id => id !== contributorId && id !== ownerId);
+
+if (recipients.length > 0) {
+  const product = reqDoc.product;
+
+  const productImage =
+    Array.isArray(product.image) && product.image.length > 0
+      ? product.image[0]
+      : product.preview || null;
+
+  const contributorUser = await User.findById(contributorId)
+    .select("handle profile")
+    .lean();
+
+  const notifications = recipients.map(r => ({
+    recipient: r,
+    sender: contributorId, // the one whose post was accepted
+    type: "group_post",
+    message: `New product added in ${group.name}`,
+    meta: {
+      groupId: group._id,
+      groupName: group.name,
+      groupProfile: group.profile || null,
+      assetId: product._id,
+      assetImage: productImage,
+      contributorHandle: contributorUser?.handle || "",
+      contributorProfile: contributorUser?.profile || "",
+      isMultiple: false, // since accept is always single
+      addedByRequest: true,
+    },
+  }));
+
+  await Notification.insertMany(notifications);
+  console.log(`📢 Notified ${recipients.length} subscribers after request acceptance`);
+}
 
     return res.status(200).json({ success: true, message: "Contribution accepted" });
   } catch (error) {
@@ -654,7 +797,7 @@ export const rejectContribution = async (req, res) => {
   try {
     const { requestId } = req.params;
     const userId = req.user.id;
-
+console.log('rejecting contribution', requestId, userId)
     const reqDoc = await ContributionRequest.findById(requestId).populate("group product requester");
     if (!reqDoc) return res.status(404).json({ success: false, message: "Request not found" });
     const group = await Group.findById(reqDoc.group._id);
@@ -664,16 +807,27 @@ export const rejectContribution = async (req, res) => {
     reqDoc.handledBy = userId;
     reqDoc.handledAt = new Date();
     await reqDoc.save();
-
+console.log('contribution rejected')
     // Notify requester
-    await Notification.create({
-      recipient: reqDoc.requester._id,
-      sender: userId,
-      type: "asset_attach_rejected",
-      message: `Your contribution to ${group.name} was rejected.`,
-      meta: { assetId: reqDoc.product._id, extra: { groupId: group._id, requestId: reqDoc._id } },
-    });
+  await Notification.create({
+  recipient: reqDoc.requester._id,
+  sender: userId,
+  type: "group_contribution_rejected",
+  message: `Your contribution to ${group.name} was rejected.`,
+  meta: { 
+    assetId: reqDoc.product._id,
+assetImage: reqDoc.product?.image?.[0] || reqDoc.product?.preview || null,
 
+    groupId: group._id,
+    groupName: group.name,
+    groupProfile: group.profile || null,
+
+    extra: { 
+      requestId: reqDoc._id 
+    }
+  }
+});
+console.log(reqDoc.product?.image?.[0])
     return res.status(200).json({ success: true, message: "Contribution rejected" });
   } catch (error) {
     console.error("rejectContribution:", error);
@@ -784,6 +938,9 @@ console.log('removed')
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
 
 // Add product directly to group (owner/admin or contributor via acceptance)
 export const addProductToGroupDirect = async (req, res) => {
@@ -924,7 +1081,6 @@ export const addProductToGroupDirect = async (req, res) => {
 };
 
 
-
 export const addMultipleProductsToGroup = async (req, res) => {
   console.log('adding multiple');
   try {
@@ -942,6 +1098,21 @@ export const addMultipleProductsToGroup = async (req, res) => {
     if (!group)
       return res.status(404).json({ success: false, message: "Group not found" });
 
+    // ✅ Check whether user has permission to add directly
+    const canDirectAdd = canUserAddDirectly(group, userId);
+
+    if (!canDirectAdd) {
+      console.log("🔒 Direct add blocked → request required");
+
+      return res.status(200).json({
+        success: false,
+        message: "Request required",
+        requiresRequest: true,
+        productIds, // frontend will send these in sendContributionRequest()
+      });
+    }
+
+    // ---------- DIRECT ADD BELOW (unchanged logic) ----------
     const addedProducts = [];
 
     for (const productId of productIds) {
@@ -976,7 +1147,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
 
     await group.save();
 
-    // ✅ Fetch subscribers who have notifications enabled
+    // ---------- Notifications (unchanged) ----------
     const subscribersWithNotifOn = await User.find({
       "subscribedGroups.group": groupId,
       "subscribedGroups.notificationsEnabled": true,
@@ -984,15 +1155,12 @@ export const addMultipleProductsToGroup = async (req, res) => {
 
     const recipients = subscribersWithNotifOn
       .map((u) => u._id.toString())
-      .filter((id) => id !== userId.toString()); // exclude uploader
+      .filter((id) => id !== userId.toString());
 
     if (recipients.length > 0 && addedProducts.length > 0) {
       const notifications = [];
-
-      // ✅ Get contributor info
       const contributor = await User.findById(userId).select("handle profile");
 
-      // ✅ Get latest added product (most recent from selected)
       const latestProduct = await Product.findById(
         addedProducts[addedProducts.length - 1]
       )
@@ -1005,7 +1173,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
           ? latestProduct.image[0]
           : "";
 
-      const isMultiple = productIds.length > 1; // ✅ Added here
+      const isMultiple = productIds.length > 1;
 
       recipients.forEach((recipientId) => {
         notifications.push({
@@ -1021,7 +1189,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
             assetImage: productImage,
             contributorHandle: contributor?.handle || "",
             contributorProfile: contributor?.profile || "",
-            isMultiple, // ✅ Added here
+            isMultiple,
           },
         });
       });
@@ -1032,13 +1200,14 @@ export const addMultipleProductsToGroup = async (req, res) => {
       }
     }
 
-    console.log('✅ Multiple items added successfully');
+    console.log("✅ Multiple items added successfully");
 
     return res.status(200).json({
       success: true,
       message: `Added ${addedProducts.length} products to group`,
       group,
       addedProducts,
+      requiresRequest: false, // ✅ Always false when direct add succeeded
     });
   } catch (error) {
     console.error("❌ addMultipleProductsToGroup error:", error);

@@ -17,6 +17,11 @@ const groupSchema = new mongoose.Schema(
     contributors: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     // optional tags or visibility settings in future
     visibility: { type: String, enum: ["public", "private"], default: "public" },
+    directAddPermission: {
+  type: String,
+  enum: ["owner_only", "admins_and_owner", "everyone"],
+  default: "admins_and_owner",
+},
     // flexible meta
 subscribers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     meta: { type: mongoose.Schema.Types.Mixed, default: {} },
