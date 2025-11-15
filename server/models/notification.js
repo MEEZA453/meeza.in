@@ -36,7 +36,9 @@ const notificationSchema = new mongoose.Schema({
   "achievement_awarded",
   "group_contribution_request", "group_contribution_approved", "group_contribution_rejected",
    "group_post",
-  "achievement_rejected", "achievement_review"], 
+  "achievement_rejected","subscribe","become_admin",
+"remove_admin",
+ "achievement_review"], 
     required: true,
   },
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post" }, // if related to a post

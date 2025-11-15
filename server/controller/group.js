@@ -153,6 +153,29 @@ export const updateGroupSubscription = async (req, res) => {
       await user.save();
       await group.save();
       console.log('subscribed')
+            const recipients = [
+        group.owner,
+        ...(Array.isArray(group.admins) ? group.admins : []),
+      ];
+
+      const notificationDocs = recipients.map((r) => ({
+        recipient: r,
+        sender: userId,
+        type: "subscribe", // ⭐ NEW TYPE YOU ASKED FOR
+        message: `${user.handle || "Someone"} subscribed to your group ${group.name}`,
+        meta: {
+          groupId: group._id,
+          groupName: group.name,
+          groupProfile: group.profile || null,
+          contributorHandle: user.handle || null,
+          contributorProfile: user.profile || null,
+          extra: {
+            subscriberId: userId,
+          }
+        }
+      }));
+
+      await Notification.insertMany(notificationDocs);
       return res.status(200).json({
         success: true,
         message: "Subscribed to group.",
@@ -488,7 +511,7 @@ export const getContributorsByGroupId = async (req, res) => {
 
     console.log("getting contributors by group id", page, limit);
 
-    const group = await Group.findById(id).select("contributors products");
+    const group = await Group.findById(id).select("contributors products owner admins");
     if (!group)
       return res.status(404).json({
         success: false,
@@ -513,9 +536,12 @@ export const getContributorsByGroupId = async (req, res) => {
     const contributorIds = group.contributors.slice(startIndex, endIndex);
 
     // Fetch contributors’ basic info
-    const contributors = await User.find({ _id: { $in: contributorIds } })
+    let contributors = await User.find({ _id: { $in: contributorIds } })
       .select("handle profile _id passion")
       .lean();
+
+    // ⭐ Remove undefined contributors safely
+    contributors = contributors.filter(c => c && c._id);
 
     // Count how many products each contributor has in this group
     const productCounts = await Product.aggregate([
@@ -523,17 +549,34 @@ export const getContributorsByGroupId = async (req, res) => {
       { $group: { _id: "$postedBy", count: { $sum: 1 } } },
     ]);
 
-    // Convert productCounts to a lookup map
+    // Convert to lookup map
     const countMap = {};
     productCounts.forEach((p) => {
-      countMap[p._id?.toString()] = p.count;
+      if (p._id) countMap[p._id.toString()] = p.count;
     });
 
-    // Attach contributionCount to each contributor
-    const enrichedContributors = contributors.map((c) => ({
-      ...c,
-      contributionCount: countMap[c._id.toString()] || 0,
-    }));
+    // Attach contributionCount + role safely
+    const enrichedContributors = contributors.map((c) => {
+      const userIdStr = c._id.toString();
+      let role = "contributor";
+
+      if (group.owner && group.owner.toString() === userIdStr) {
+        role = "owner";
+      } else if (
+        Array.isArray(group.admins) &&
+        group.admins.some(a => a && a.toString() === userIdStr)
+      ) {
+        role = "admin";
+      }
+
+      return {
+        ...c,
+        role,
+        contributionCount: countMap[userIdStr] || 0,
+      };
+    });
+
+
 
     return res.status(200).json({
       success: true,
@@ -545,9 +588,7 @@ export const getContributorsByGroupId = async (req, res) => {
     });
   } catch (error) {
     console.error("getContributorsByGroupId:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -840,20 +881,25 @@ export const makeAdmin = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { userIdToMakeAdmin } = req.body;
+    console.log('making admin', groupId, userIdToMakeAdmin)
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
     if (!isOwner(group, req.user.id)) return res.status(403).json({ success: false, message: "Forbidden" });
 
     if (!group.admins.includes(userIdToMakeAdmin)) group.admins.push(userIdToMakeAdmin);
     await group.save();
-
+console.log('made admin')
     // optional notification
-    await Notification.create({
+ await Notification.create({
       recipient: userIdToMakeAdmin,
       sender: req.user.id,
-      type: "achievement_awarded",
-      message: `You were made an admin of group ${group.name}`,
-      meta: { extra: { groupId: group._id } },
+      type: "become_admin",        // ⭐ NEW TYPE
+      message: `You were made an admin of ${group.name}`,
+      meta: {
+        groupId: group._id,
+        groupName: group.name,
+        groupProfile: group.profile || null
+      }
     });
 
     return res.status(200).json({ success: true, group });
@@ -868,12 +914,25 @@ export const removeAdmin = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { userIdToRemove } = req.body;
+    console.log('removing admin', groupId, userIdToRemove)
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
     if (!isOwner(group, req.user.id)) return res.status(403).json({ success: false, message: "Forbidden" });
 
     group.admins = (group.admins || []).filter(a => a.toString() !== userIdToRemove.toString());
     await group.save();
+ await Notification.create({
+      recipient: userIdToRemove,
+      sender: req.user.id,
+      type: "remove_admin",       // ⭐ NEW TYPE
+      message: `You were removed as admin from ${group.name}`,
+      meta: {
+        groupId: group._id,
+        groupName: group.name,
+        groupProfile: group.profile || null
+      }
+    });
+    console.log('removed admin')
     return res.status(200).json({ success: true, group });
   } catch (error) {
     console.error("removeAdmin:", error);
