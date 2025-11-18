@@ -97,38 +97,88 @@ export const getNotifications = async (req, res) => {
 
 
 export const getUnreadNotifications = async (req, res) => {
+  console.log("Fetching unread notification counts for user:", req.user.id);
   try {
-    const unread = await Notification.countDocuments({
+
+    const REQUEST_TYPES = [
+      "jury_request",
+      "jury_removal_request",
+      "asset_attach_request",
+      "normal_request_rejected",
+      "group_contribution_request",
+    ];
+
+    // 🔹 Count unread request-type notifications
+    const requestsCount = await Notification.countDocuments({
+      recipient: req.user.id,
+      isRead: false,
+      type: { $in: REQUEST_TYPES }
+    });
+
+    // 🔹 Count all unread notifications
+    const allUnreadCount = await Notification.countDocuments({
       recipient: req.user.id,
       isRead: false,
     });
-    res.json({ count: unread });
+
+    res.json({
+      requestsCount,
+      allUnreadCount,
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
 // Mark all as read
 export const markAllAsRead = async (req, res) => {
-
   try {
-    await Notification.updateMany(
-      { recipient: req.user.id, isRead: false },
-      { $set: { isRead: true } }
-    );
-    console.log('marked notification all read')
-    res.json({ message: "All notifications marked as read" });
+    const { category } = req.query;
+console.log('marking all as read for category ', category)
+    const REQUEST_TYPES = [
+      "jury_request",
+      "jury_removal_request",
+      "asset_attach_request",
+      "normal_request_rejected",
+      "group_contribution_request",
+    ];
+
+    let filter = { recipient: req.user.id, isRead: false };
+
+    if (category === "requests") {
+      filter.type = { $in: REQUEST_TYPES };
+    } else if (category === "normal") {
+      filter.type = { $nin: REQUEST_TYPES };
+    }
+
+    await Notification.updateMany(filter, {
+      $set: { isRead: true },
+    });
+
+    res.json({ message: `All ${category || "all"} notifications marked as read` });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // Mark single as read
 export const markOneAsRead = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const REQUEST_TYPES = [
+      "jury_request",
+      "jury_removal_request",
+      "asset_attach_request",
+      "normal_request_rejected",
+      "group_contribution_request",
+    ];
+
     const notification = await Notification.findOneAndUpdate(
-      { _id: id, recipient: req.user.id }, // ✅ only allow owner to update
+      { _id: id, recipient: req.user.id },
       { isRead: true },
       { new: true }
     );
@@ -137,11 +187,21 @@ export const markOneAsRead = async (req, res) => {
       return res.status(404).json({ message: "Notification not found" });
     }
 
-    res.json({ message: "Notification marked as read" });
+    const category = REQUEST_TYPES.includes(notification.type)
+      ? "requests"
+      : "normal";
+
+    res.json({
+      message: "Notification marked as read",
+      category,
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 // ❌ Delete notification
 export const deleteNotification = async (req, res) => {
