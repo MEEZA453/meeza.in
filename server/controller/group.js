@@ -56,25 +56,21 @@ export const getGroupsByProductId = async (req, res) => {
   try {
     const { productId } = req.params;
 
-    // Find all groups that contain this product
-    const groups = await Group.find({ "products": productId })
-      .select("name logo profileImage products contributors createdAt")
+    const groups = await Group.find({ products: productId })
+      .select("name profile products contributors createdAt")
       .populate("contributors", "name profileImage");
 
-    // Map and format response
     const formattedGroups = groups.map(group => {
-      // total number of items in this group
       const totalItems = group.products.length;
 
-      // number of contributions by same user/product
       const productContributions = group.products.filter(
         p => p.toString() === productId
       ).length;
 
       return {
-        id: group._id,
+        _id: group._id,
         name: group.name,
-        logo: group.logo || group.profileImage,
+        profile: group.profile, // 🔥 NOW SENDING IT
         noOfItems: totalItems,
         noOfContributions: productContributions,
       };
@@ -86,6 +82,7 @@ export const getGroupsByProductId = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
 // Edit group (only owner can edit core details)
 export const editGroup = async (req, res) => {
   try {

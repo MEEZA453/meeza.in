@@ -90,17 +90,32 @@ console.log(userId, page, limit , rawFilters)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('postedBy', 'name profile handle')
+     .populate('postedBy', 'name profile handle followers')
       .lean();
 
     // sanitize and add isMyProduct flag
-    designs = designs.map((product) => {
-      const base = sanitizeProduct(product); // keep your sanitizer
-      return {
-        ...base,
-        isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
-      };
-    });
+designs = designs.map((product) => {
+  const base = sanitizeProduct(product);
+
+  const isMyProduct =
+    userId ? product.postedBy?._id.toString() === userId.toString() : false;
+
+  let isFollowing = false;
+
+  if (userId && !isMyProduct) {
+    // postedBy.followers is array of ObjectIds
+    isFollowing = product.postedBy?.followers?.some(
+      (f) => f.toString() === userId.toString()
+    );
+  }
+
+  return {
+    ...base,
+    isMyProduct,
+    isFollowing, // 🔥 added
+  };
+});
+
 console.log('got post page:', page,'limit:', limit  )
     res.status(200).json({
       count: total,         // total matching items
@@ -302,9 +317,10 @@ function getCloudinaryPublicId(imageUrl) {
       }
 
       try {
-        const { name, amount, driveLink, sections, faq, hashtags, description } = req.body;
-
+        const { name, amount, driveLink, sections, faq, hashtags, sources, description } = req.body;
+console.log(sections  )
         const parsedSections = sections ? JSON.parse(sections) : [];
+        const parsedSources = sources ? JSON.parse(sources): []
         const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
         console.log(hashtags)
         const parsedFaq = faq ? JSON.parse(faq) : [];
@@ -318,6 +334,7 @@ function getCloudinaryPublicId(imageUrl) {
           driveLink,
           description,
           sections: parsedSections,
+          sources : parsedSources,
           faq: parsedFaq,
           hashtags: parsedHashtags, // ✅ correct spelling matches schema
           postedBy: req.user.id,
@@ -347,7 +364,7 @@ export const editDesign = async (req, res) => {
 
     try {
       const { id } = req.params;
-      const { name, amount, driveLink, sections, faq, hashtags, removeImages, description } = req.body;
+      const { name, amount, driveLink, sections, faq, sources,  hashtags, removeImages, description } = req.body;
 console.log(removeImages)
       // 1️⃣ Find the product
       const product = await Product.findById(id);
@@ -359,6 +376,8 @@ console.log(removeImages)
       const parsedSections = sections ? JSON.parse(sections) : product.sections;
       const parsedFaq = faq ? JSON.parse(faq) : product.faq;
       const parsedHashtags = hashtags ? JSON.parse(hashtags) : product.hashtags;
+        const parsedSources = sources ? JSON.parse(sources): []
+
 
       // 3️⃣ Handle newly uploaded images (upload to Cloudinary)
       let newImages = [];
@@ -402,6 +421,8 @@ console.log(removeImages)
       product.amount = amount ?? product.amount;
       product.driveLink = driveLink ?? product.driveLink;
       product.sections = parsedSections;
+      product.sources = parsedSources;
+
       product.faq = parsedFaq;
       product.description = description
       product.hashtags = parsedHashtags;

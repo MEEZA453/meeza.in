@@ -21,6 +21,9 @@ const productSchema = new mongoose.Schema(
         content: { type: [String], required: true },
       },
     ],
+    sources : [
+      {name : String, link : String}
+    ],
   description : {type: String , required : false},
   hashtags: [String],
    isHot: { type: Boolean, default: false },
