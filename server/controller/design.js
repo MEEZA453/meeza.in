@@ -5,6 +5,7 @@ import multer from "multer";
 import dotenv from "dotenv";
 import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 import Order from "../models/Order.js";
+import user from "../models/user.js";
 dotenv.config();
 
 export const pingServer = (req, res) => {
@@ -116,7 +117,7 @@ designs = designs.map((product) => {
   };
 });
 
-console.log('got post page:', page,'limit:', limit  )
+console.log('got post page:', page,'limit:', limit, rawFilters, 'total matches:', total);
     res.status(200).json({
       count: total,         // total matching items
       page,
@@ -166,28 +167,96 @@ export const getDesignById = async (req, res) => {
 export const getDesignByHandle = async (req, res) => {
   try {
     const { handle } = req.params;
-    const userId = req.user?.id;
+    const page = parseInt(req.query.page || "0", 10);
+    const limit = parseInt(req.query.limit || "10", 10);
 
+    console.log("getDesignByHandle:", handle, "page:", page, "limit:", limit);
+
+    // ------------------ PAGINATED LIST MODE ------------------
+    if (req.query.page) {
+
+      // FIXED ✔ correct model name + no shadowing
+      const foundUser = await user.findOne({ handle }).select("_id");
+
+      if (!foundUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const totalCount = await Product.countDocuments({
+        postedBy: foundUser._id,
+      });
+
+      if (totalCount === 0) {
+        return res.status(200).json({
+          success: true,
+          products: [],
+          page,
+          limit,
+          count: 0,
+          hasMore: false,
+        });
+      }
+
+      console.log("total products by user:", totalCount);
+
+      const skip = (page - 1) * limit;
+
+      const products = await Product.find({ postedBy: foundUser._id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({ path: "postedBy", select: "profile handle _id" })
+        .lean();
+
+      return res.status(200).json({
+        success: true,
+        products,
+        page,
+        limit,
+        count: totalCount,
+        hasMore: page * limit < totalCount,
+      });
+    }
+
+    // ------------------ SINGLE PRODUCT MODE ------------------
     const product = await Product.findOne({ handle })
       .populate("postedBy", "name profile handle")
       .lean();
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
 
-   const productWithOwnership = {
-      ...sanitizeProduct(product),
-      isMyProduct: userId ? product.postedBy?._id.toString() === userId.toString() : false,
+    const userId = req.user?.id;
+    const unlocked = false;
+
+    const productWithOwnership = {
+      ...product,
+      isMyProduct: userId
+        ? product.postedBy?._id.toString() === userId.toString()
+        : false,
       unlocked,
     };
 
-    res.status(200).json({ success: true, product: productWithOwnership });
+    res.status(200).json({
+      success: true,
+      product: productWithOwnership,
+    });
   } catch (error) {
-    console.error("Error in getDesignByHandle:", error.message);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Error in getDesignByHandle:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
+;
 
 
 export const searchDesigns = async (req, res) => {

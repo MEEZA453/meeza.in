@@ -1,5 +1,6 @@
 import Product from "../models/designs.js";
 import User from "../models/user.js";
+import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 
 // ✅ Add to Hot List (Only Dev)
 export const addToHotList = async (req, res) => {
@@ -68,16 +69,46 @@ export const getAllHotProducts = async (req, res) => {
   console.log("Reached getAllHotProducts");
 
   try {
-    const hotProducts = await Product.find({ isHot: true })
+    const userId = req.user?.id || null;
+console.log('userid ',userId)
+    // Fetch all hot products
+    let hotProducts = await Product.find({ isHot: true })
       .sort({ createdAt: -1 })
-      .populate("postedBy", "name profile handle");
+      .populate("postedBy", "name profile handle followers")
+      .lean();
 
+    // Transform data like getDesign
+    hotProducts = hotProducts.map((product) => {
+      const base = sanitizeProduct(product);
+
+const isMyProduct =
+  userId ? product.postedBy?._id.toString() === userId.toString() : false;
+
+      let isFollowing = false;
+
+      if (userId && !isMyProduct) {
+        isFollowing = product.postedBy?.followers?.some(
+          (f) => f.toString() === userId.toString()
+        );
+      }
+
+      return {
+        ...base,
+        isMyProduct,
+        isFollowing,
+      };
+    });
+
+    console.log("got hoooot");
+
+    // ✅ Return EXACT OLD STRUCTURE to avoid frontend breaking
     res.status(200).json({
       success: true,
-      hotProducts,
+      hotProducts, // <-- same key as before
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error in getAllHotProducts:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
+

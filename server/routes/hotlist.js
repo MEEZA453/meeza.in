@@ -9,7 +9,7 @@ router.post("/add", verifyToken, addToHotList);
 router.post("/remove", verifyToken, removeFromHotList);
 
 // ✅ Anyone can get all hot products
-router.get("/getAll", getAllHotProducts);
+router.get("/getAll",verifyToken, getAllHotProducts);
 
 export default router;
 

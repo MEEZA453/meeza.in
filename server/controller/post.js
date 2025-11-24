@@ -551,35 +551,61 @@ export const getPostById = async (req, res) => {
 };
 
 export const getPostsByHandle = async (req, res) => {
-  console.log('Getting posts by handle:', req.params.handle);
+  console.log("Getting posts by handle:", req.params.handle);
 
   try {
-    // Step 1: Find the user by handle
-    const user = await User.findOne({ handle: req.params.handle });
+    const { handle } = req.params;
+    const limit = parseInt(req.query.limit || "10", 10);
+    const page = parseInt(req.query.page || "1", 10);
+
+    // Find user
+    const user = await User.findOne({ handle });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Step 2: Find posts created by this user
-    const posts = await Post.find({ createdBy: user._id })
-    .sort({ createdAt: -1 })
+    // Get total count first
+    const total = await Post.countDocuments({ createdBy: user._id });
+
+    if (total === 0) {
+      return res.json({
+        success: true,
+        results: [],
+        page,
+        limit,
+        count: 0,
+        hasMore: false,
+      });
+    }
+
+    // Pagination calculation
+    const skip = (page - 1) * limit;
+
+    // Fetch only required posts
+    const results = await Post.find({ createdBy: user._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle")
-      .sort({ createdAt: -1 });
+      .lean();
 
-    if (!posts.length) {
-      return res.status(404).json({ message: "No posts found for this handle" });
-    }
+    res.json({
+      success: true,
+      results,
+      page,
+      limit,
+      count: total,
+      hasMore: page * limit < total,
+    });
 
-    res.json(posts);
-    console.log(`Got ${posts.length} post(s) for handle:`, req.params.handle);
-
-
+    console.log(`Returned page ${page} (${results.length} posts) for:`, handle);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ✅ Delete post by postId
 export const deletePost = async (req, res) => {

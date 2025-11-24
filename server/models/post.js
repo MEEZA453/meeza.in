@@ -11,7 +11,7 @@ const voteSchema = new mongoose.Schema({
 }, { _id: false });
 
 
-const achievementSchema = new mongoose.Schema({
+const achievementSchema = new mongoose.Schema({ 
   type: { type: String }, // e.g. "design_of_the_day"
   awardedAt: { type: Date, default: Date.now },
   score: { type: Number, default: 0 },
@@ -36,6 +36,16 @@ const postSchema = new mongoose.Schema({
   voteFields: [{ type: String, enum: ["creativity", "aesthetics", "composition", "emotion"] }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],
+  appreciations: [
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    name: String,
+    profile: String,
+    handle: String,
+    appreciatedAt: { type: Date, default: Date.now }
+  }
+],
+appreciationCount: { type: Number, default: 0 },
 currentAchievement: achievementSchema,
   achievementHistory: [achievementSchema],
   pendingAchievement: pendingSchema,
