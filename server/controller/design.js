@@ -260,38 +260,51 @@ export const getDesignByHandle = async (req, res) => {
 
 
 export const searchDesigns = async (req, res) => {
-  console.log('searching design');
+  
+  console.log("searching design");
+
   try {
     const { query } = req.query;
-    const userId = req.user?.id; // ✅ get userId from token middleware
-console.log(userId)
-    if (!query || query.trim() === "") {
+    const userId = req.user?.id;
+
+    if (!query || !query.trim()) {
       return res.status(400).json({ message: "Search query is required" });
     }
 
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+console.log(`Searching designs for query: "${query}" | page: ${page}, limit: ${limit}`);
+    // Build search conditions
+    const regex = { $regex: query, $options: "i" };
 
-    let designs = await Product.find({
-      $or: [
-        { name: { $regex: query, $options: "i" } },
-        { description: { $regex: query, $options: "i" } },
-        { category: { $regex: query, $options: "i" } },
-        { tags: { $regex: query, $options: "i" } },
-      ],
-    })
+    const searchConditions = [
+      { name: regex },
+      { description: regex },
+      { category: regex },
+      { tags: regex },
+      { hashtags: regex },
+
+      // 🔥 Now searching inside Sections
+      { "sections.title": regex },
+      { "sections.content": regex },
+    ];
+
+    let designs = await Product.find({ $or: searchConditions })
       .populate("postedBy", "name profile handle")
       .skip(skip)
       .limit(limit)
-      .lean(); // ✅ return plain objects (not mongoose docs)
+        .sort({ createdAt: -1 })  
+      .lean();
 
-    // ✅ Add `isMyProduct` flag for each design
+    // Add isMyProduct flag
     designs = designs.map((d) => ({
       ...d,
-      isMyProduct: userId ? d.postedBy?._id.toString() === userId.toString() : false,
+      isMyProduct: userId
+        ? d.postedBy?._id.toString() === userId.toString()
+        : false,
     }));
-
+console.log(`Found ${designs.length} designs matching query: "${query}"`);
     return res.status(200).json({
       page,
       limit,
@@ -303,6 +316,7 @@ console.log(userId)
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 export const deleteDesign = async (req, res) => {
   console.log('reach to deleteDesign')

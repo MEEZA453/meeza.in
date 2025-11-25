@@ -29,7 +29,7 @@ router.post("/approve-attach",verifyToken, approveAssetAttachment)
 router.get("/:postId/assets", verifyToken, getAssetsOfPost);
 router.post("/detach", detachAssetFromPost);
 // get all posts where asset is used
-router.get("/search/posts", searchPosts);
+router.get("/search", searchPosts);
 router.get("/defaultSearch", getDefaultPosts);
 router.post("/createPost", verifyToken, upload.array("images", 5), createPost);    
 router.put("/editPost/:id", verifyToken, upload.array("images", 10), editPost);

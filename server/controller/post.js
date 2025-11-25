@@ -390,6 +390,7 @@ export const editPost = async (req, res) => {
 
 
 export const getDefaultPosts = async (req, res) => {
+  console.log("getting default posts");
   try {
     const limit = parseInt(req.query.limit) || 10; // default = 10 posts
 
@@ -496,30 +497,43 @@ export const getPosts = async (req, res) => {
 
 export const searchPosts = async (req, res) => {
   try {
-    const { query } = req.query; // example: /search?query=design
+    const { query } = req.query;
 
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Search query is required" });
     }
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+console.log(`Searching posts for query: "${query}" | page: ${page}, limit: ${limit}`);
     const posts = await Post.find({
       $or: [
         { name: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
         { category: { $regex: query, $options: "i" } },
-        { hashtags: { $regex: query, $options: "i" } }, // if hashtags are strings
+        { hashtags: { $regex: query, $options: "i" } },
       ],
     })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle")
-      .limit(20);
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 }) // optional
+      .lean();
 
-    return res.status(200).json(posts);
+    return res.status(200).json({
+      page,
+      limit,
+      count: posts.length,
+      results: posts,
+    });
   } catch (error) {
     console.error("Error in searchPosts:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // ✅ Get single post by ID (with votes populated)
 export const getPostById = async (req, res) => {
