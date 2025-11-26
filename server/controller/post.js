@@ -498,7 +498,6 @@ export const getPosts = async (req, res) => {
 export const searchPosts = async (req, res) => {
   try {
     const { query } = req.query;
-
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Search query is required" });
     }

@@ -1,89 +1,183 @@
 import User from "../models/user.js";
 import Product from "../models/designs.js";
+import Post from "../models/post.js";
+
+// -----------------------------------------
+// ADD TO HIGHLIGHT
+// -----------------------------------------
 export const addToHighlight = async (req, res) => {
-console.log('reached to add highlight')
-  try {
-    const userId = req.user.id;
-    const { designId } = req.body;
-console.log(userId)
-    const user = await User.findById(userId);
-
-    if (!user.highlights.includes(designId)) {
-      user.highlights.push(designId);
-
-      await user.save();
-    }
-console.log('added to highlight')
-    res.status(200).json({ success: true, message: "Design added to highlight." });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-export const removeFromHighlight = async (req, res) => {
-  console.log('reached to remove highlight')
   try {
     const userId = req.user.id;
     const { designId } = req.body;
 
-    await User.findByIdAndUpdate(userId, {
-      $pull: { highlights: designId },
-    });
-console.log('removed highlikt')
-    res.status(200).json({ success: true, message: "Design removed from highlifht." });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+    const post = await Post.findById(designId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
 
-export const getAllHighlights = async (req, res) => {
-  console.log("reached to getAllHighlights");
-  try {
-    const requesterUserId = req.user?.id || null;
-    const { category } = req.query; // e.g. "Design,Photography"
-    console.log("category filter:", category);
+    // Check if user already highlighted
+    const already = post.highlightedBy.some(
+      h => h.user.toString() === userId
+    );
 
-    // Pull all highlights from all users and populate post details
-    const usersWithHighlights = await User.find({ highlights: { $exists: true, $ne: [] } })
-      .populate({
-        path: "highlights",
-        options: { sort: { createdAt: -1 } }, // newest first
-        populate: [
-          { path: "createdBy", select: "name profile handle" },
-          { path: "votes.user", select: "name profile handle" },
-        ],
+    if (!already) {
+      post.highlightedBy.push({
+        user: userId,
+        highlightedAt: new Date()
       });
-
-    // Flatten all highlights into one array
-    let highlights = usersWithHighlights.flatMap(user => user.highlights);
-
-    // 🔹 Filter & sort by category like getPosts
-    if (category) {
-      const parts = category.split(",").map(c => c.trim());
-
-      // Posts matching any of the selected categories
-      const inCategory = highlights
-        .filter(p => p.category.some(c => parts.includes(c)))
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-      // Posts NOT in selected categories
-      const outCategory = highlights
-        .filter(p => !p.category.some(c => parts.includes(c)))
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-      highlights = [...inCategory, ...outCategory];
-    } else {
-      // No filter → sort all by newest
-      highlights = highlights.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      post.isHighlighted = true;
     }
+
+    await post.save();
+
+    return res.status(200).json({ success: true, message: "Post highlighted" });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// -----------------------------------------
+// REMOVE HIGHLIGHT
+// -----------------------------------------
+export const removeFromHighlight = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { designId } = req.body;
+
+    const post = await Post.findById(designId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    post.highlightedBy = post.highlightedBy.filter(
+      h => h.user.toString() !== userId
+    );
+
+    post.isHighlighted = post.highlightedBy.length > 0;
+
+    await post.save();
+
+    return res.status(200).json({ success: true, message: "Highlight removed" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// -----------------------------------------
+// GET ALL HIGHLIGHTS (SORT BY RECENTLY HIGHLIGHTED)
+// -----------------------------------------
+export const getAllHighlights = async (req, res) => {
+  try {
+    const { category } = req.query;
+
+    const categoryFilter = category
+      ? { category: { $in: category.split(",") } }
+      : {};
+
+    const highlights = await Post.aggregate([
+      // Match highlighted posts
+      {
+        $match: {
+          isHighlighted: true,
+          ...categoryFilter
+        }
+      },
+
+      // Add lastHighlightedAt (for sorting)
+      {
+        $addFields: {
+          lastHighlightedAt: { $max: "$highlightedBy.highlightedAt" }
+        }
+      },
+
+      // Sort by latest highlight
+      { $sort: { lastHighlightedAt: -1 } },
+
+      // ---- populate createdBy ----
+      {
+        $lookup: {
+          from: "users",
+          localField: "createdBy",
+          foreignField: "_id",
+          as: "createdBy",
+          pipeline: [
+            { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
+          ]
+        }
+      },
+      { $unwind: "$createdBy" },
+
+      // ---- take only last 2 recent votes ----
+      {
+        $addFields: {
+          recentVotes: {
+            $slice: [
+              {
+                $sortArray: {
+                  input: "$votes",
+                  sortBy: { _id: -1 }   // newest first
+                }
+              },
+              4
+            ]
+          }
+        }
+      },
+
+      // ---- populate users of recentVotes ----
+      {
+        $lookup: {
+          from: "users",
+          localField: "recentVotes.user",
+          foreignField: "_id",
+          as: "voteUsers",
+          pipeline: [
+            { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
+          ]
+        }
+      },
+
+      // ---- merge populated users back into votes ----
+      {
+        $addFields: {
+          votes: {
+            $map: {
+              input: "$recentVotes",
+              as: "v",
+              in: {
+                creativity: "$$v.creativity",
+                aesthetics: "$$v.aesthetics",
+                composition: "$$v.composition",
+                emotion: "$$v.emotion",
+                totalVote: "$$v.totalVote",
+                user: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: "$voteUsers",
+                        as: "u",
+                        cond: { $eq: ["$$u._id", "$$v.user"] }
+                      }
+                    },
+                    0
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // remove temp fields
+      { $unset: ["recentVotes", "voteUsers"] }
+    ]);
 
     return res.status(200).json({
       success: true,
-      highlights,
-      requesterUserId,
+      highlights
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.log(err);
+    res.status(500).json({ message: err.message });
   }
 };
+
 

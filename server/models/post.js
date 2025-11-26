@@ -33,9 +33,18 @@ const postSchema = new mongoose.Schema({
   category: [{ type: String, required: true }],
   hashtags: [String],
   images: [],
+  
   voteFields: [{ type: String, enum: ["creativity", "aesthetics", "composition", "emotion"] }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],
+  isHighlighted: { type: Boolean, default: false },
+highlightedBy: [
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    highlightedAt: { type: Date, default: Date.now }
+  }
+]
+,
   appreciations: [
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
