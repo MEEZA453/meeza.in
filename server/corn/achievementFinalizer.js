@@ -100,7 +100,7 @@ export async function finalizePendingAchievements() {
             const final = {
                 type: post.pendingAchievement.type,
                 awardedAt: now,
-                  score: post.pendingAchievement.score || 0,
+               score: post.pendingAchievement.score ?? 0
             };
 
             post.currentAchievement = final;

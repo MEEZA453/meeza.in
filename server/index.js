@@ -2,6 +2,8 @@ import express from 'express';
 import { env } from './config/dotenv.js';
 import connectDB from './config/db.js';
 import cors from 'cors';
+import { Server as IOServer } from 'socket.io';
+import http from 'http';
 import path from 'path';
 import multer from 'multer';
 import designRoute from './routes/postDesign.js';
@@ -25,11 +27,21 @@ import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
 const PORT = env.PORT || 8080;
 const app = express();
 const __dirname = path.resolve(); // Fix for ES module
+const server = http.createServer(app);
 
 // Middleware
 app.use(express.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
+const io = new IOServer(server, {
+  cors: {
+    origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000",
+    methods: ["GET","POST"]
+  }
+});
+
+// attach to app so controllers can access it via req.app.get('io')
+app.set('io', io);
 
 // Serve images statically from 'uploads' folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -94,6 +106,6 @@ async function testAchievements() {
 // Run test only once on startup
 // testAchievements();
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Server running with Socket.IO on port ${PORT}`);
 });

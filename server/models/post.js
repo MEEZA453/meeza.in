@@ -3,13 +3,9 @@ import mongoose from "mongoose";
 
 const voteSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  creativity: { type: Number, min: 0, max: 10 },
-  aesthetics: { type: Number, min: 0, max: 10 },
-  composition: { type: Number, min: 0, max: 10 },
-  emotion: { type: Number, min: 0, max: 10 },
-  totalVote: { type: Number },
+  fields: { type: mongoose.Schema.Types.Mixed, default: {} }, 
+  totalVote: Number,
 }, { _id: false });
-
 
 const achievementSchema = new mongoose.Schema({ 
   type: { type: String }, // e.g. "design_of_the_day"
@@ -33,8 +29,7 @@ const postSchema = new mongoose.Schema({
   category: [{ type: String, required: true }],
   hashtags: [String],
   images: [],
-  
-  voteFields: [{ type: String, enum: ["creativity", "aesthetics", "composition", "emotion"] }],
+  voteFields: [{ type: String }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],
   isHighlighted: { type: Boolean, default: false },
@@ -45,6 +40,10 @@ highlightedBy: [
   }
 ]
 ,
+  score: {
+    averages: { type: mongoose.Schema.Types.Mixed, default: {} }, 
+    totalScore: { type: Number, default: 0 }
+  },
   appreciations: [
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

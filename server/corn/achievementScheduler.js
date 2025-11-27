@@ -4,6 +4,9 @@ import Post from "../models/post.js";
 import Notification from "../models/notification.js";
 import { calculateAverageScore } from "../utils/caltulateAvgScore.js"; 
 import User from "../models/user.js";
+import Vote from "../models/vote.js";
+import mongoose from "mongoose";
+import { calculateScore } from "../utils/calculateScore.js";
 const thresholds = {
   day: { minNormal: 3, minJuryDev: 1 },
   week: { minNormal: 5, minJuryDev: 2 },
@@ -27,20 +30,48 @@ cron.schedule("0 0 1 * *", async () => {
   console.log("🏁 Running monthly achievement nomination...");
   await generatePendingAchievements("month", thresholds.month.minNormal, thresholds.month.minJuryDev);
 });
-const countVotesByRole = async (post) => {
-  let normalVotes = 0;
-  let juryDevVotes = 0;
+// const countVotesByRole = async (post) => {
+//   let normalVotes = 0;
+//   let juryDevVotes = 0;
 
-  for (const vote of post.votes) {
-    const user = await User.findById(vote.user).select("role");
-    if (!user) continue;
-    if (user.role === "normal") normalVotes++;
-    else if (["jury", "dev"].includes(user.role)) juryDevVotes++;
-  }
+//   for (const vote of post.votes) {
+//     const user = await User.findById(vote.user).select("role");
+//     if (!user) continue;
+//     if (user.role === "normal") normalVotes++;
+//     else if (["jury", "dev"].includes(user.role)) juryDevVotes++;
+//   }
 
-  return { normalVotes, juryDevVotes };
+//   return { normalVotes, juryDevVotes };
+// };
+const countVotesByRole = async (postId) => {
+  const votes = await Vote.aggregate([
+    { $match: { post: new mongoose.Types.ObjectId(postId) } },
+
+    {
+      $lookup: {
+        from: "users",
+        localField: "user",
+        foreignField: "_id",
+        as: "userDoc"
+      }
+    },
+    { $unwind: "$userDoc" },
+
+    {
+      $group: {
+        _id: null,
+        normalVotes: {
+          $sum: { $cond: [{ $eq: ["$userDoc.role", "normal"] }, 1, 0] }
+        },
+        juryDevVotes: {
+          $sum: { $cond: [{ $in: ["$userDoc.role", ["jury", "dev"]] }, 1, 0] }
+        }
+      }
+    }
+  ]);
+
+  return votes[0] || { normalVotes: 0, juryDevVotes: 0 };
 };
-
 // Utility: get parent category
 function getParentCategory(post) {
   // post.category = ["Design", "Graphic Design"]
@@ -86,17 +117,34 @@ export async function generatePendingAchievements(period, minNormal = 1, minJury
   for (const [parent, categoryPosts] of Object.entries(postsByCategory)) {
       const scored = [];
 
-      for (const post of categoryPosts) {
-          const { normalVotes, juryDevVotes } = await countVotesByRole(post);
-          if (normalVotes >= minNormal && juryDevVotes >= minJuryDev) {
-             const avgScore = calculateAverageScore(post);
-scored.push({ post, avgScore });
-post.totalScore = avgScore; // ← add this
-await post.save();
+for (const post of categoryPosts) {
+  const { normalVotes, juryDevVotes } = await countVotesByRole(post._id);
 
-              console.log(`Post: ${post.name}, Parent: ${parent}, AvgScore: ${avgScore}`);
-          }
-      }
+  if (normalVotes >= minNormal && juryDevVotes >= minJuryDev) {
+
+    const scoreData = await calculateScore(post._id);
+    const avgScore = scoreData.totalScore;
+
+    scored.push({ post, avgScore });
+
+    post.totalScore = avgScore;
+    await post.save();
+
+    console.log(`Post: ${post.name}, Parent: ${parent}, AvgScore: ${avgScore}`);
+  }
+}
+
+//       for (const post of categoryPosts) {
+//           const { normalVotes, juryDevVotes } = await countVotesByRole(post);
+//           if (normalVotes >= minNormal && juryDevVotes >= minJuryDev) {
+//              const avgScore = calculateAverageScore(post);
+// scored.push({ post, avgScore });
+// post.totalScore = avgScore; // ← add this
+// await post.save();
+
+//               console.log(`Post: ${post.name}, Parent: ${parent}, AvgScore: ${avgScore}`);
+//           }
+//       }
 
       if (!scored.length) continue; // no post passed threshold
 

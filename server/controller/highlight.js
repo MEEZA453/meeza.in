@@ -104,42 +104,25 @@ export const getAllHighlights = async (req, res) => {
       },
       { $unwind: "$createdBy" },
 
-      // ---- take only last 2 recent votes ----
-      {
-        $addFields: {
-          recentVotes: {
-            $slice: [
-              {
-                $sortArray: {
-                  input: "$votes",
-                  sortBy: { _id: -1 }   // newest first
-                }
-              },
-              4
-            ]
-          }
-        }
-      },
-
-      // ---- populate users of recentVotes ----
+      // ---- populate all vote users with role ----
       {
         $lookup: {
           from: "users",
-          localField: "recentVotes.user",
+          localField: "votes.user",
           foreignField: "_id",
           as: "voteUsers",
           pipeline: [
-            { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
+            { $project: { name: 1, profile: 1, handle: 1, passion: 1, role: 1 } }
           ]
         }
       },
 
-      // ---- merge populated users back into votes ----
+      // ---- merge user info into votes and sort by newest first ----
       {
         $addFields: {
           votes: {
             $map: {
-              input: "$recentVotes",
+              input: { $sortArray: { input: "$votes", sortBy: { _id: -1 } } },
               as: "v",
               in: {
                 creativity: "$$v.creativity",
@@ -165,8 +148,38 @@ export const getAllHighlights = async (req, res) => {
         }
       },
 
-      // remove temp fields
-      { $unset: ["recentVotes", "voteUsers"] }
+      // ---- split votes by role and limit 6 each ----
+      {
+        $addFields: {
+          normalVotes: {
+            $slice: [
+              {
+                $filter: {
+                  input: "$votes",
+                  as: "v",
+                  cond: { $eq: ["$$v.user.role", "normal"] }
+                }
+              },
+              6
+            ]
+          },
+          juryVotes: {
+            $slice: [
+              {
+                $filter: {
+                  input: "$votes",
+                  as: "v",
+                  cond: { $eq: ["$$v.user.role", "jury"] }
+                }
+              },
+              6
+            ]
+          }
+        }
+      },
+
+      // ---- remove temp fields ----
+      { $unset: ["votes", "voteUsers"] }
     ]);
 
     return res.status(200).json({
@@ -179,5 +192,122 @@ export const getAllHighlights = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// export const getAllHighlights = async (req, res) => {
+//   try {
+//     const { category } = req.query;
+
+//     const categoryFilter = category
+//       ? { category: { $in: category.split(",") } }
+//       : {};
+
+//     const highlights = await Post.aggregate([
+//       // Match highlighted posts
+//       {
+//         $match: {
+//           isHighlighted: true,
+//           ...categoryFilter
+//         }
+//       },
+
+//       // Add lastHighlightedAt (for sorting)
+//       {
+//         $addFields: {
+//           lastHighlightedAt: { $max: "$highlightedBy.highlightedAt" }
+//         }
+//       },
+
+//       // Sort by latest highlight
+//       { $sort: { lastHighlightedAt: -1 } },
+
+//       // ---- populate createdBy ----
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "createdBy",
+//           foreignField: "_id",
+//           as: "createdBy",
+//           pipeline: [
+//             { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
+//           ]
+//         }
+//       },
+//       { $unwind: "$createdBy" },
+
+//       // ---- take only last 2 recent votes ----
+//       {
+//         $addFields: {
+//           recentVotes: {
+//             $slice: [
+//               {
+//                 $sortArray: {
+//                   input: "$votes",
+//                   sortBy: { _id: -1 }   // newest first
+//                 }
+//               },
+//               4
+//             ]
+//           }
+//         }
+//       },
+
+//       // ---- populate users of recentVotes ----
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "recentVotes.user",
+//           foreignField: "_id",
+//           as: "voteUsers",
+//           pipeline: [
+//             { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
+//           ]
+//         }
+//       },
+
+//       // ---- merge populated users back into votes ----
+//       {
+//         $addFields: {
+//           votes: {
+//             $map: {
+//               input: "$recentVotes",
+//               as: "v",
+//               in: {
+//                 creativity: "$$v.creativity",
+//                 aesthetics: "$$v.aesthetics",
+//                 composition: "$$v.composition",
+//                 emotion: "$$v.emotion",
+//                 totalVote: "$$v.totalVote",
+//                 user: {
+//                   $arrayElemAt: [
+//                     {
+//                       $filter: {
+//                         input: "$voteUsers",
+//                         as: "u",
+//                         cond: { $eq: ["$$u._id", "$$v.user"] }
+//                       }
+//                     },
+//                     0
+//                   ]
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       },
+
+//       // remove temp fields
+//       { $unset: ["recentVotes", "voteUsers"] }
+//     ]);
+
+//     return res.status(200).json({
+//       success: true,
+//       highlights
+//     });
+
+//   } catch (err) {
+//     console.log(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 
 
