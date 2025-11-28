@@ -298,7 +298,10 @@ export const createPost = async (req, res) => {
       voteFields: voteFields ? JSON.parse(voteFields) : [], // ✅ parse from frontend
       images: uploadedImages,
       createdBy: req.user.id,
+        recentNormalVotes: [],
+  recentJuryVotes: [],
         score: { averages: {}, totalScore: 0 }    
+        
     });
 console.log(post)
     const savedPost = await post.save();
