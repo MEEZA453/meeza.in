@@ -1014,7 +1014,6 @@ export const votePost = async (req, res) => {
     // 5) REALTIME SOCKET EMIT
     // -----------------------------------
     const io = req.app.get("io");
-console.log('current updated postis', updatedPost)
 io.emit("vote:update", {
   updatedPost,               // full post
   recentNormalVotes,
@@ -1025,6 +1024,7 @@ io.emit("vote:update", {
 
     console.log("📡 EMITTED vote:update for post:", postId);
 
+console.log('current updated postis', recentJuryVotes, recentNormalVotes);
 
     // -----------------------------------
     // 6) SEND RESPONSE
