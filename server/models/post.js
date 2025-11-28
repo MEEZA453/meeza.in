@@ -53,6 +53,18 @@ highlightedBy: [
     appreciatedAt: { type: Date, default: Date.now }
   }
 ],
+recentNormalVotes: [{
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  fields: mongoose.Schema.Types.Mixed,
+  totalVote: Number,
+  votedAt: { type: Date, default: Date.now }
+}],
+recentJuryVotes: [{
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  fields: mongoose.Schema.Types.Mixed,
+  totalVote: Number,
+  votedAt: { type: Date, default: Date.now }
+}],
 appreciationCount: { type: Number, default: 0 },
 currentAchievement: achievementSchema,
   achievementHistory: [achievementSchema],

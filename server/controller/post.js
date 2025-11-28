@@ -915,7 +915,6 @@ export const deletePost = async (req, res) => {
 };
 
 
-
 export const votePost = async (req, res) => {
   try {
     const postId = req.params.id;
@@ -923,9 +922,9 @@ export const votePost = async (req, res) => {
 
     console.log("🔥 Voting:", postId, "by:", userId);
 
-    // -----------------------------------
-    // 1) DYNAMIC FIELDS (any structure)
-    // -----------------------------------
+    // -----------------------------
+    // 1) Parse dynamic vote fields
+    // -----------------------------
     const fields = {};
     for (const key in req.body) {
       const val = Number(req.body[key]);
@@ -938,18 +937,18 @@ export const votePost = async (req, res) => {
         ? values.reduce((a, b) => a + b, 0) / values.length
         : null;
 
-    // -----------------------------------
-    // 2) UPSERT VOTE
-    // -----------------------------------
+    // -----------------------------
+    // 2) Upsert vote
+    // -----------------------------
     await Vote.findOneAndUpdate(
       { post: postId, user: userId },
       { $set: { fields, totalVote } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // -----------------------------------
-    // 3) RECALCULATE SCORE
-    // -----------------------------------
+    // -----------------------------
+    // 3) Recalculate score
+    // -----------------------------
     const calc = await calculateScore(postId);
 
     const post = await Post.findById(postId);
@@ -962,23 +961,21 @@ export const votePost = async (req, res) => {
 
     await post.save();
 
-    // -----------------------------------
-    // 4) GET UPDATED POST + 4 NORMAL + 4 JURY
-    // -----------------------------------
+    // -----------------------------
+    // 4) Get updated post + votes
+    // -----------------------------
     const updatedPost = await Post.findById(postId)
       .populate("createdBy", "name profile handle")
       .lean();
 
-
-    // 📌 4.1 4 recent normal votes
+    // 4.1) Recent normal votes
     const recentNormalVotes = await Vote.find({ post: postId })
       .populate("user", "name profile handle role")
       .sort({ createdAt: -1 })
       .limit(4)
       .lean();
 
-
-    // 📌 4.2 4 recent jury votes (fastest & clean)
+    // 4.2) Recent jury votes
     const recentJuryVotes = await Vote.aggregate([
       { $match: { post: new mongoose.Types.ObjectId(postId) } },
       {
@@ -1009,42 +1006,162 @@ export const votePost = async (req, res) => {
       },
     ]);
 
-    // Attach into post object so frontend receives 1 payload
+    // ✅ Attach directly to post object
     updatedPost.recentNormalVotes = recentNormalVotes;
     updatedPost.recentJuryVotes = recentJuryVotes;
+    updatedPost.score = post.score;
 
-    // -----------------------------------
-    // 5) REALTIME SOCKET EMIT
-    // -----------------------------------
+    // -----------------------------
+    // 5) Emit via socket
+    // -----------------------------
     const io = req.app.get("io");
-io.emit("vote:update", {
-  updatedPost,               // full post
-  recentNormalVotes,
-  recentJuryVotes,
-  newScore: updatedPost.score
-});
-
-
-    console.log("📡 EMITTED vote:update for post:", postId);
-
-console.log('current updated postis', recentJuryVotes, recentNormalVotes);
-
-    // -----------------------------------
-    // 6) SEND RESPONSE
-    // -----------------------------------
-    return res.json({
-      post: updatedPost,
-      overview: {
-        recentNormalVotes,
-        recentJuryVotes,
-      },
+    io.emit("vote:update", {
+      updatedPost, // contains everything now
     });
 
+    console.log("📡 EMITTED vote:update for post:", updatedPost);
+
+    // -----------------------------
+    // 6) Send response
+    // -----------------------------
+    return res.json({
+      post: updatedPost,
+    });
   } catch (err) {
     console.error("votePost error:", err);
     return res.status(500).json({ message: err.message });
   }
 };
+
+// export const votePost = async (req, res) => {
+//   try {
+//     const postId = req.params.id;
+//     const userId = req.user.id;
+
+//     console.log("🔥 Voting:", postId, "by:", userId);
+
+//     // -----------------------------------
+//     // 1) DYNAMIC FIELDS (any structure)
+//     // -----------------------------------
+//     const fields = {};
+//     for (const key in req.body) {
+//       const val = Number(req.body[key]);
+//       if (!Number.isNaN(val)) fields[key] = val;
+//     }
+
+//     const values = Object.values(fields);
+//     const totalVote =
+//       values.length > 0
+//         ? values.reduce((a, b) => a + b, 0) / values.length
+//         : null;
+
+//     // -----------------------------------
+//     // 2) UPSERT VOTE
+//     // -----------------------------------
+//     await Vote.findOneAndUpdate(
+//       { post: postId, user: userId },
+//       { $set: { fields, totalVote } },
+//       { upsert: true, new: true, setDefaultsOnInsert: true }
+//     );
+
+//     // -----------------------------------
+//     // 3) RECALCULATE SCORE
+//     // -----------------------------------
+//     const calc = await calculateScore(postId);
+
+//     const post = await Post.findById(postId);
+//     if (!post) return res.status(404).json({ message: "Post not found" });
+
+//     post.score = {
+//       averages: calc.averages,
+//       totalScore: calc.totalScore,
+//     };
+
+//     await post.save();
+
+//     // -----------------------------------
+//     // 4) GET UPDATED POST + 4 NORMAL + 4 JURY
+//     // -----------------------------------
+//     const updatedPost = await Post.findById(postId)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+
+//     // 📌 4.1 4 recent normal votes
+//     const recentNormalVotes = await Vote.find({ post: postId })
+//       .populate("user", "name profile handle role")
+//       .sort({ createdAt: -1 })
+//       .limit(4)
+//       .lean();
+
+
+//     // 📌 4.2 4 recent jury votes (fastest & clean)
+//     const recentJuryVotes = await Vote.aggregate([
+//       { $match: { post: new mongoose.Types.ObjectId(postId) } },
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "user",
+//           foreignField: "_id",
+//           as: "user",
+//         },
+//       },
+//       { $unwind: "$user" },
+//       { $match: { "user.role": "jury" } },
+//       { $sort: { createdAt: -1 } },
+//       { $limit: 4 },
+//       {
+//         $project: {
+//           fields: 1,
+//           totalVote: 1,
+//           createdAt: 1,
+//           user: {
+//             _id: "$user._id",
+//             name: "$user.name",
+//             profile: "$user.profile",
+//             handle: "$user.handle",
+//             role: "$user.role",
+//           },
+//         },
+//       },
+//     ]);
+
+//     // Attach into post object so frontend receives 1 payload
+//     updatedPost.recentNormalVotes = recentNormalVotes;
+//     updatedPost.recentJuryVotes = recentJuryVotes;
+
+//     // -----------------------------------
+//     // 5) REALTIME SOCKET EMIT
+//     // -----------------------------------
+//     const io = req.app.get("io");
+// io.emit("vote:update", {
+//   updatedPost,               // full post
+//   recentNormalVotes,
+//   recentJuryVotes,
+//   newScore: updatedPost.score
+// });
+
+
+//     console.log("📡 EMITTED vote:update for post:", postId);
+
+// console.log('current updated postis', recentJuryVotes, recentNormalVotes);
+
+//     // -----------------------------------
+//     // 6) SEND RESPONSE
+//     // -----------------------------------
+//     return res.json({
+//       post: updatedPost,
+//       overview: {
+//         recentNormalVotes,
+//         recentJuryVotes,
+//       },
+//     });
+
+//   } catch (err) {
+//     console.error("votePost error:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
 
 
 // export const votePost = async (req, res) => {
