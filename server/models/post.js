@@ -54,17 +54,40 @@ highlightedBy: [
   }
 ],
 recentNormalVotes: [{
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  user: {
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    name: String,
+    profile: String,
+    handle: String,
+    role: String
+  },
   fields: mongoose.Schema.Types.Mixed,
   totalVote: Number,
   votedAt: { type: Date, default: Date.now }
 }],
+
 recentJuryVotes: [{
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  user: {
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    name: String,
+    profile: String,
+    handle: String,
+    role: String
+  },
   fields: mongoose.Schema.Types.Mixed,
   totalVote: Number,
   votedAt: { type: Date, default: Date.now }
 }],
+voteStats: {
+  normal: {
+    count: { type: Number, default: 0 },
+    sums: { type: mongoose.Schema.Types.Mixed, default: {} } // { creativity: 123.4, aesthetics: 98.2, ... }
+  },
+  jury: {
+    count: { type: Number, default: 0 },
+    sums: { type: mongoose.Schema.Types.Mixed, default: {} }
+  }
+},
 appreciationCount: { type: Number, default: 0 },
 currentAchievement: achievementSchema,
   achievementHistory: [achievementSchema],

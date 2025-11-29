@@ -91,21 +91,17 @@ app.use('/cart' , cartRoute)
 connectDB();
 async function testAchievements() {
   console.log("🏁 Testing achievement generation...");
-//   await generatePendingAchievements("day", 1, 1); // for quick test
-//       await finalizePendingAchievements();
-     await generatePendingAchievements("month", 0, 0); // for quick test
-      await finalizePendingAchievements();
-  await generatePendingAchievements("week", 0, 0); // for quick test
-      await finalizePendingAchievements();
-        await generatePendingAchievements("day", 0, 0); // for quick test
-      await finalizePendingAchievements();
-        
+// await generatePendingAchievements("day", 1, 1); // for quick test
+// await finalizePendingAchievements();
+ await generatePendingAchievements("month", 0, 0); // for quick test
+ await finalizePendingAchievements();
+ await generatePendingAchievements("week", 0, 0); // for quick test
+ await finalizePendingAchievements();
+ await generatePendingAchievements("day", 0, 0); // for quick test
+ await finalizePendingAchievements();
   console.log("✅ Achievement test completed");
 }
-
-// Run test only once on startup
 // testAchievements();
-
 server.listen(PORT, () => {
   console.log(`🚀 Server running with Socket.IO on port ${PORT}`);
 });

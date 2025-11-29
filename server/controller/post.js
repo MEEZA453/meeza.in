@@ -5,7 +5,7 @@ import Notification from "../models/notification.js";
 import Product from "../models/designs.js"
 import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 import { handleVoteNotification } from "../utils/handleVoteNotification.js";
-import { calculateScore } from "../utils/calculateScore.js";
+// import { calculateScore } from "../utils/calculateScore.js";
 import Vote from "../models/vote.js";
 import mongoose from "mongoose";
 // controllers/assetController.js
@@ -820,63 +820,574 @@ export const getPostById = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 export const getPostsByHandle = async (req, res) => {
-  console.log("Getting posts by handle:", req.params.handle);
-
   try {
     const { handle } = req.params;
-    const limit = parseInt(req.query.limit || "10", 10);
-    const page = parseInt(req.query.page || "1", 10);
+    const limit = Math.max(1, parseInt(req.query.limit || "10"));
+    const page = Math.max(1, parseInt(req.query.page || "1"));
 
-    // Find user
-    const user = await User.findOne({ handle });
+    const user = await User.findOne({ handle })
+      .select("_id name profile handle")
+      .lean();
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Get total count first
     const total = await Post.countDocuments({ createdBy: user._id });
 
-    if (total === 0) {
-      return res.json({
-        success: true,
-        results: [],
-        page,
-        limit,
-        count: 0,
-        hasMore: false,
-      });
-    }
-
-    // Pagination calculation
-    const skip = (page - 1) * limit;
-
-    // Fetch only required posts
-    const results = await Post.find({ createdBy: user._id })
+    const posts = await Post.find({ createdBy: user._id })
       .sort({ createdAt: -1 })
-      .skip(skip)
+      .skip((page - 1) * limit)
       .limit(limit)
       .populate("createdBy", "name profile handle")
-      .populate("votes.user", "name profile handle")
+      .select("-__v")
       .lean();
 
-    res.json({
+    // POSTS ALREADY CONTAIN recentNormalVotes & recentJuryVotes
+    return res.json({
       success: true,
-      results,
+      results: posts,
       page,
       limit,
       count: total,
       hasMore: page * limit < total,
     });
 
-    console.log(`Returned page ${page} (${results.length} posts) for:`, handle);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
 };
 
+// export const getPostsByHandle = async (req, res) => {
+//   try {
+//     const { handle } = req.params;
+//     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+//     const page = Math.max(1, parseInt(req.query.page || "1", 10));
+
+//     // 1) Find user
+//     const user = await User.findOne({ handle })
+//       .select("_id name profile handle")
+//       .lean();
+
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // 2) Count total posts
+//     const total = await Post.countDocuments({ createdBy: user._id });
+
+//     if (total === 0) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: 0,
+//         hasMore: false,
+//       });
+//     }
+
+//     const skip = (page - 1) * limit;
+
+//     // 3) Fetch posts (only Post collection — high performance)
+//     const posts = await Post.find({ createdBy: user._id })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     const postIds = posts.map(p => p._id);
+
+//     // ----------------------------------------------------
+//     // 4) Fetch ONLY last 4 normal votes per post
+//     // ----------------------------------------------------
+//     const normalVotes = await Vote.aggregate([
+//       { $match: { post: { $in: postIds }, } },
+//       { $lookup: {
+//           from: "users",
+//           localField: "user",
+//           foreignField: "_id",
+//           as: "user",
+//           pipeline: [{ $project: { name: 1, profile: 1, handle: 1, role: 1 }}]
+//       }},
+//       { $unwind: "$user" },
+//       { $match: { "user.role": { $ne: "jury" }}},
+//       { $sort: { createdAt: -1 }},
+//       {
+//         $group: {
+//           _id: "$post",
+//           votes: { $push: "$$ROOT" }
+//         }
+//       },
+//       {
+//         $project: {
+//           votes: { $slice: ["$votes", 4] }
+//         }
+//       }
+//     ]);
+
+//     // ----------------------------------------------------
+//     // 5) Fetch ONLY last 4 jury votes per post
+//     // ----------------------------------------------------
+//     const juryVotes = await Vote.aggregate([
+//       { $match: { post: { $in: postIds }, } },
+//       { $lookup: {
+//           from: "users",
+//           localField: "user",
+//           foreignField: "_id",
+//           as: "user",
+//           pipeline: [{ $project: { name: 1, profile: 1, handle: 1, role: 1 }}]
+//       }},
+//       { $unwind: "$user" },
+//       { $match: { "user.role": "jury" }},
+//       { $sort: { createdAt: -1 }},
+//       {
+//         $group: {
+//           _id: "$post",
+//           votes: { $push: "$$ROOT" }
+//         }
+//       },
+//       {
+//         $project: {
+//           votes: { $slice: ["$votes", 4] }
+//         }
+//       }
+//     ]);
+
+//     // Convert arrays into lookup objects
+//     const normalByPost = Object.fromEntries(normalVotes.map(v => [String(v._id), v.votes]));
+//     const juryByPost   = Object.fromEntries(juryVotes.map(v => [String(v._id), v.votes]));
+
+//     // ----------------------------------------------------
+//     // 6) Attach votes and return final response
+//     // ----------------------------------------------------
+//     const results = posts.map(post => {
+//       const pid = String(post._id);
+
+//       const recentNormalVotes = normalByPost[pid] || [];
+//       const recentJuryVotes   = juryByPost[pid] || [];
+
+//       return {
+//         ...post,
+//         recentNormalVotes,
+//         recentJuryVotes,
+//         totalVotesCount: recentNormalVotes.length
+//       };
+//     });
+
+//     return res.json({
+//       success: true,
+//       results,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < total,
+//     });
+
+//   } catch (err) {
+//     console.error("Error in getPostsByHandle:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
+// export const getPostsByHandle = async (req, res) => {
+//   console.log("Getting posts by handle:", req.params.handle);
+
+//   try {
+//     const { handle } = req.params;
+//     const limit = parseInt(req.query.limit || "10", 10);
+//     const page = parseInt(req.query.page || "1", 10);
+
+//     // Find user
+//     const user = await User.findOne({ handle });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Total posts
+//     const total = await Post.countDocuments({ createdBy: user._id });
+//     if (total === 0) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: 0,
+//         hasMore: false,
+//       });
+//     }
+
+//     const skip = (page - 1) * limit;
+
+//     // -------- Fetch posts --------
+//     const posts = await Post.find({ createdBy: user._id })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     const postIds = posts.map(p => String(p._id)); // force strings for consistent keys
+
+//     // -------- Fetch votes for these posts --------
+//     const votes = await Vote.find({ post: { $in: postIds } })
+//       .populate("user", "name profile handle role")
+//       .sort({ createdAt: -1 })
+//       .lean();
+
+//     // -------- Group votes per post (separate normal/jury) --------
+//     const votesByPost = {};
+//     postIds.forEach(id => {
+//       votesByPost[id] = { recentNormalVotes: [], recentJuryVotes: [] };
+//     });
+
+//     for (const v of votes) {
+//       const pid = String(v.post);
+//       if (!votesByPost[pid]) continue;
+
+//       // DEFENSIVE role extraction:
+//       const role = v.user && v.user.role ? String(v.user.role).trim().toLowerCase() : null;
+
+//       if (role === "jury") {
+//         if (votesByPost[pid].recentJuryVotes.length < 4) {
+//           votesByPost[pid].recentJuryVotes.push(v);
+//         }
+//       } else {
+//         // If role is missing (null) we'll treat as non-jury — but log briefly if needed
+//         // If you want to treat missing role as jury, change this behavior accordingly.
+//         if (votesByPost[pid].recentNormalVotes.length < 4) {
+//           votesByPost[pid].recentNormalVotes.push(v);
+//         }
+//       }
+//     }
+
+//     // -------- Attach votes into posts --------
+//     const final = posts.map(p => {
+//       const pid = String(p._id);
+//       return {
+//         ...p,
+//         recentNormalVotes: votesByPost[pid].recentNormalVotes,
+//         recentJuryVotes: votesByPost[pid].recentJuryVotes,
+//         totalVotesCount: votesByPost[pid].recentNormalVotes.length,
+//       };
+//     });
+
+//     return res.json({
+//       success: true,
+//       results: final,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < total,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+
+// export const getPostsByHandle = async (req, res) => {
+//   console.log("Getting posts by handle:", req.params.handle);
+
+//   try {
+//     const { handle } = req.params;
+//     const limit = parseInt(req.query.limit || "10", 10);
+//     const page = parseInt(req.query.page || "1", 10);
+
+//     // Find user
+//     const user = await User.findOne({ handle });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Total posts
+//     const total = await Post.countDocuments({ createdBy: user._id });
+//     if (total === 0) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: 0,
+//         hasMore: false,
+//       });
+//     }
+
+//     const skip = (page - 1) * limit;
+
+//     // -------- Fetch posts (fast) --------
+//     const posts = await Post.find({ createdBy: user._id })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     const postIds = posts.map(p => p._id);
+
+//     // -------- Fetch ALL votes for these posts (in 1 query!) --------
+//     const votes = await Vote.find({ post: { $in: postIds } })
+//       .populate("user", "name profile handle role")
+//       .sort({ createdAt: -1 }) // newest first
+//       .lean();
+
+//     // -------- Group votes per post --------
+//     const votesByPost = {};
+//     postIds.forEach(id => {
+//       votesByPost[id] = { normal: [], jury: [] };
+//     });
+
+//     for (const v of votes) {
+//       const pid = String(v.post);
+//       if (!votesByPost[pid]) continue;
+
+//       if (v.user.role === "jury") {
+//           if (votesByPost[pid].jury.length < 4)
+//             votesByPost[pid].jury.push(v);
+//       } else {
+//           if (votesByPost[pid].normal.length < 4)
+//             votesByPost[pid].normal.push(v);
+//       }
+//     }
+
+//     // -------- Attach votes into posts --------
+//     const final = posts.map(p => {
+//       const pid = String(p._id);
+//       return {
+//         ...p,
+//         recentNormalVotes: votesByPost[pid].normal,
+//         recentJuryVotes: votesByPost[pid].jury,
+//         totalVotesCount: votesByPost[pid].normal.length,
+//       };
+//     });
+
+//     return res.json({
+//       success: true,
+//       results: final,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < total,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+
+// export const getPostsByHandle = async (req, res) => {
+//   console.log("Getting posts by handle:", req.params.handle);
+
+//   try {
+//     const { handle } = req.params;
+//     const limit = parseInt(req.query.limit || "10", 10);
+//     const page = parseInt(req.query.page || "1", 10);
+
+//     // Find user
+//     const user = await User.findOne({ handle });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Count posts
+//     const total = await Post.countDocuments({ createdBy: user._id });
+
+//     if (total === 0) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: 0,
+//         hasMore: false,
+//       });
+//     }
+
+//     const skip = (page - 1) * limit;
+
+//     // ------- NEW PIPELINE (same as getPosts) -------
+//     const results = await Post.aggregate([
+//       { $match: { createdBy: user._id } },
+//       { $sort: { createdAt: -1 } },
+//       { $skip: skip },
+//       { $limit: limit },
+
+//       // populate createdBy
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "createdBy",
+//           foreignField: "_id",
+//           as: "createdBy"
+//         }
+//       },
+//       { $unwind: "$createdBy" },
+
+//       // recent normal votes
+//       {
+//         $lookup: {
+//           from: "votes",
+//           let: { postId: "$_id" },
+//           pipeline: [
+//             { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
+//             {
+//               $lookup: {
+//                 from: "users",
+//                 localField: "user",
+//                 foreignField: "_id",
+//                 as: "userDoc"
+//               }
+//             },
+//             { $unwind: "$userDoc" },
+//             { $match: { "userDoc.role": { $ne: "jury" } } },
+//             { $sort: { createdAt: -1 } },
+//             { $limit: 4 },
+//             {
+//               $project: {
+//                 _id: 1,
+//                 fields: 1,
+//                 totalVote: 1,
+//                 createdAt: 1,
+//                 user: {
+//                   _id: "$userDoc._id",
+//                   name: "$userDoc.name",
+//                   profile: "$userDoc.profile",
+//                   handle: "$userDoc.handle",
+//                   role: "$userDoc.role"
+//                 }
+//               }
+//             }
+//           ],
+//           as: "recentNormalVotes"
+//         }
+//       },
+
+//       // recent jury votes
+//       {
+//         $lookup: {
+//           from: "votes",
+//           let: { postId: "$_id" },
+//           pipeline: [
+//             { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
+//             {
+//               $lookup: {
+//                 from: "users",
+//                 localField: "user",
+//                 foreignField: "_id",
+//                 as: "userDoc"
+//               }
+//             },
+//             { $unwind: "$userDoc" },
+//             { $match: { "userDoc.role": "jury" } },
+//             { $sort: { createdAt: -1 } },
+//             { $limit: 4 },
+//             {
+//               $project: {
+//                 _id: 1,
+//                 fields: 1,
+//                 totalVote: 1,
+//                 createdAt: 1,
+//                 user: {
+//                   _id: "$userDoc._id",
+//                   name: "$userDoc.name",
+//                   profile: "$userDoc.profile",
+//                   handle: "$userDoc.handle",
+//                   role: "$userDoc.role"
+//                 }
+//               }
+//             }
+//           ],
+//           as: "recentJuryVotes"
+//         }
+//       },
+
+//       // add counts
+//       {
+//         $addFields: {
+//           totalVotesCount: { $size: { $ifNull: ["$recentNormalVotes", []] } }
+//         }
+//       },
+
+//       { $project: { votes: 0 } }
+//     ]);
+
+//     return res.json({
+//       success: true,
+//       results,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < total,
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// export const getPostsByHandle = async (req, res) => {
+//   console.log("Getting posts by handle:", req.params.handle);
+
+//   try {
+//     const { handle } = req.params;
+//     const limit = parseInt(req.query.limit || "10", 10);
+//     const page = parseInt(req.query.page || "1", 10);
+
+//     // Find user
+//     const user = await User.findOne({ handle });
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Get total count first
+//     const total = await Post.countDocuments({ createdBy: user._id });
+
+//     if (total === 0) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: 0,
+//         hasMore: false,
+//       });
+//     }
+
+//     // Pagination calculation
+//     const skip = (page - 1) * limit;
+
+//     // Fetch only required posts
+//     const results = await Post.find({ createdBy: user._id })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .populate("createdBy", "name profile handle")
+//       .populate("votes.user", "name profile handle")
+//       .lean();
+
+//     res.json({
+//       success: true,
+//       results,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < total,
+//     });
+
+//     console.log(`Returned page ${page} (${results.length} posts) for:`, handle);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 
 // ✅ Delete post by postId
 export const deletePost = async (req, res) => {
@@ -916,122 +1427,492 @@ export const deletePost = async (req, res) => {
 
 
 export const votePost = async (req, res) => {
+  const session = await mongoose.startSession();
   try {
     const postId = req.params.id;
     const userId = req.user.id;
 
-    console.log("🔥 Voting:", postId, "by:", userId);
-
-    // -----------------------------
-    // 1) Parse dynamic vote fields
-    // -----------------------------
+    // 1) parse fields & compute totalVote
     const fields = {};
-    for (const key in req.body) {
-      const val = Number(req.body[key]);
-      if (!Number.isNaN(val)) fields[key] = val;
+    for (const k in req.body) {
+      const v = Number(req.body[k]);
+      if (!Number.isNaN(v)) fields[k] = v;
+    }
+    const values = Object.values(fields);
+    const totalVote = values.length ? values.reduce((a,b) => a+b,0) / values.length : null;
+
+    // start transaction (recommended)
+    session.startTransaction();
+
+    // 2) load post (with voteFields & voteStats)
+    const post = await Post.findById(postId).session(session);
+    if (!post) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Post not found" });
     }
 
-    const values = Object.values(fields);
-    const totalVote =
-      values.length > 0
-        ? values.reduce((a, b) => a + b, 0) / values.length
-        : null;
+    const voteFields = post.voteFields || [];
 
-    // -----------------------------
-    // 2) Upsert vote
-    // -----------------------------
-    await Vote.findOneAndUpdate(
+    // 3) find existing vote (if any)
+    const existingVote = await Vote.findOne({ post: postId, user: userId }).session(session);
+
+    // 4) upsert the Vote (we'll use findOneAndUpdate)
+    const upsertedVote = await Vote.findOneAndUpdate(
       { post: postId, user: userId },
       { $set: { fields, totalVote } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+      { upsert: true, new: true, setDefaultsOnInsert: true, session }
+    ).populate("user", "name profile handle role");
 
-    // -----------------------------
-    // 3) Recalculate score
-    // -----------------------------
-    const calc = await calculateScore(postId);
+    // 5) Update post.voteStats (incremental)
+    const role = (upsertedVote.user && upsertedVote.user.role) ? upsertedVote.user.role : "normal";
+    const roleKey = role === "jury" ? "jury" : "normal";
 
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: "Post not found" });
+    // Ensure sums objects exist
+    post.voteStats = post.voteStats || { normal: { count: 0, sums: {} }, jury: { count: 0, sums: {} } };
+    post.voteStats.normal = post.voteStats.normal || { count: 0, sums: {} };
+    post.voteStats.jury = post.voteStats.jury || { count: 0, sums: {} };
 
-    post.score = {
-      averages: calc.averages,
-      totalScore: calc.totalScore,
+    if (!existingVote) {
+      // increment count ONCE per vote
+      post.voteStats[roleKey].count = (post.voteStats[roleKey].count || 0) + 1;
+
+      // add sums per field
+      for (const fieldName of voteFields) {
+        const newVal = typeof fields[fieldName] === "number" ? fields[fieldName] : 0;
+        const prev = post.voteStats[roleKey].sums[fieldName] || 0;
+        post.voteStats[roleKey].sums[fieldName] = prev + newVal;
+      }
+    } else {
+      // update sums for each field
+      for (const fieldName of voteFields) {
+        const newVal = typeof fields[fieldName] === "number" ? fields[fieldName] : 0;
+        const oldVal = existingVote?.fields?.[fieldName] ?? 0;
+        const delta = newVal - oldVal;
+        const prev = post.voteStats[roleKey].sums[fieldName] || 0;
+        post.voteStats[roleKey].sums[fieldName] = prev + delta;
+      }
+    }
+
+    // 6) Update recent votes array (update existing entry or unshift)
+    const voteData = {
+      user: {
+        _id: upsertedVote.user._id,
+        name: upsertedVote.user.name,
+        profile: upsertedVote.user.profile,
+        handle: upsertedVote.user.handle,
+        role: upsertedVote.user.role
+      },
+      fields: upsertedVote.fields,
+      totalVote: upsertedVote.totalVote,
+      votedAt: new Date()
     };
 
-    await post.save();
+    const arr = roleKey === "jury" ? post.recentJuryVotes : post.recentNormalVotes;
+    const idx = arr.findIndex(v => String(v.user._id) === String(upsertedVote.user._id));
+    if (idx !== -1) {
+      arr[idx].fields = voteData.fields;
+      arr[idx].totalVote = voteData.totalVote;
+      arr[idx].votedAt = voteData.votedAt;
+    } else {
+      arr.unshift(voteData);
+      if (arr.length > 4) arr.pop();
+    }
 
-    // -----------------------------
-    // 4) Get updated post + votes
-    // -----------------------------
+    // 7) Recompute score from post.voteStats
+    const averages = {};
+    for (const f of voteFields) {
+      const juryCount = post.voteStats.jury.count || 0;
+      const normalCount = post.voteStats.normal.count || 0;
+
+      const jurySum = post.voteStats.jury.sums?.[f] ?? 0;
+      const normalSum = post.voteStats.normal.sums?.[f] ?? 0;
+
+      const juryAvg = juryCount > 0 ? jurySum / juryCount : null;
+      const normalAvg = normalCount > 0 ? normalSum / normalCount : null;
+
+      let weighted = 0;
+      if (juryAvg !== null && normalAvg !== null) weighted = juryAvg * 0.6 + normalAvg * 0.4;
+      else if (juryAvg !== null) weighted = juryAvg;
+      else if (normalAvg !== null) weighted = normalAvg;
+      else weighted = 0;
+
+      averages[f] = Number(weighted.toFixed(2));
+    }
+
+    const totalScore = Number((Object.values(averages).reduce((s, v) => s + v, 0) / (voteFields.length || 1)).toFixed(1));
+    post.score = { averages, totalScore };
+
+    // 8) Save post (inside transaction)
+    await post.save({ session });
+
+    // commit
+    await session.commitTransaction();
+    session.endSession();
+
+    // 9) Return populated updated post (quick read)
     const updatedPost = await Post.findById(postId)
       .populate("createdBy", "name profile handle")
       .lean();
 
-    // 4.1) Recent normal votes
-    const recentNormalVotes = await Vote.find({ post: postId })
-      .populate("user", "name profile handle role")
-      .sort({ createdAt: -1 })
-      .limit(4)
-      .lean();
-
-    // 4.2) Recent jury votes
-    const recentJuryVotes = await Vote.aggregate([
-      { $match: { post: new mongoose.Types.ObjectId(postId) } },
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      { $match: { "user.role": "jury" } },
-      { $sort: { createdAt: -1 } },
-      { $limit: 4 },
-      {
-        $project: {
-          fields: 1,
-          totalVote: 1,
-          createdAt: 1,
-          user: {
-            _id: "$user._id",
-            name: "$user.name",
-            profile: "$user.profile",
-            handle: "$user.handle",
-            role: "$user.role",
-          },
-        },
-      },
-    ]);
-
-    // ✅ Attach directly to post object
-    updatedPost.recentNormalVotes = recentNormalVotes;
-    updatedPost.recentJuryVotes = recentJuryVotes;
-    updatedPost.score = post.score;
-
-    // -----------------------------
-    // 5) Emit via socket
-    // -----------------------------
+    // emit socket (outside txn)
     const io = req.app.get("io");
-    io.emit("vote:update", {
-      updatedPost, // contains everything now
-    });
+    io.emit("vote:update", { updatedPost });
 
-    console.log("📡 EMITTED vote:update for post:", updatedPost);
+    return res.json({ post: updatedPost });
 
-    // -----------------------------
-    // 6) Send response
-    // -----------------------------
-    return res.json({
-      post: updatedPost,
-    });
   } catch (err) {
+    try { await session.abortTransaction(); } catch (e) {}
+    session.endSession();
     console.error("votePost error:", err);
     return res.status(500).json({ message: err.message });
   }
 };
+
+// export const votePost = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   try {
+//     const postId = req.params.id;
+//     const userId = req.user.id;
+
+//     // 1) parse fields & compute totalVote
+//     const fields = {};
+//     for (const k in req.body) {
+//       const v = Number(req.body[k]);
+//       if (!Number.isNaN(v)) fields[k] = v;
+//     }
+//     const values = Object.values(fields);
+//     const totalVote = values.length ? values.reduce((a,b) => a+b,0) / values.length : null;
+
+//     // start transaction (recommended)
+//     session.startTransaction();
+
+//     // 2) load post (with voteFields & voteStats)
+//     const post = await Post.findById(postId).session(session);
+//     if (!post) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Post not found" });
+//     }
+
+//     const voteFields = post.voteFields || [];
+
+//     // 3) find existing vote (if any)
+//     const existingVote = await Vote.findOne({ post: postId, user: userId }).session(session);
+
+//     // 4) upsert the Vote (we'll use findOneAndUpdate)
+//     const upsertedVote = await Vote.findOneAndUpdate(
+//       { post: postId, user: userId },
+//       { $set: { fields, totalVote } },
+//       { upsert: true, new: true, setDefaultsOnInsert: true, session }
+//     ).populate("user", "name profile handle role");
+
+//     // 5) Update post.voteStats (incremental)
+//     const role = (upsertedVote.user && upsertedVote.user.role) ? upsertedVote.user.role : "normal";
+//     const roleKey = role === "jury" ? "jury" : "normal";
+
+//     // Ensure sums objects exist
+//     post.voteStats = post.voteStats || { normal: { count: 0, sums: {} }, jury: { count: 0, sums: {} } };
+//     post.voteStats.normal = post.voteStats.normal || { count: 0, sums: {} };
+//     post.voteStats.jury = post.voteStats.jury || { count: 0, sums: {} };
+
+//     // For each vote field, compute delta = new - old (old 0 if missing)
+//     for (const fieldName of voteFields) {
+//       const newVal = typeof fields[fieldName] === "number" ? fields[fieldName] : 0;
+//       const oldVal = existingVote?.fields?.[fieldName] ?? null;
+
+//       if (existingVote) {
+//         // update (counts unchanged) — adjust sums by delta
+//         const delta = newVal - (oldVal === null ? 0 : oldVal);
+//         const prev = post.voteStats[roleKey].sums[fieldName] || 0;
+//         post.voteStats[roleKey].sums[fieldName] = prev + delta;
+//       } else {
+//         // insert — increment count & add sum
+//         post.voteStats[roleKey].count = (post.voteStats[roleKey].count || 0) + 1;
+//         const prev = post.voteStats[roleKey].sums[fieldName] || 0;
+//         post.voteStats[roleKey].sums[fieldName] = prev + newVal;
+//       }
+//     }
+
+//     // If the user changed role (very rare), you'd need to move counts between normal/jury.
+//     // That scenario isn't handled here; if you support role changes, handle accordingly.
+
+//     // 6) Update recent votes array (update existing entry or unshift)
+//     const voteData = {
+//       user: {
+//         _id: upsertedVote.user._id,
+//         name: upsertedVote.user.name,
+//         profile: upsertedVote.user.profile,
+//         handle: upsertedVote.user.handle,
+//         role: upsertedVote.user.role
+//       },
+//       fields: upsertedVote.fields,
+//       totalVote: upsertedVote.totalVote,
+//       votedAt: new Date()
+//     };
+
+//     const arr = roleKey === "jury" ? post.recentJuryVotes : post.recentNormalVotes;
+
+//     const idx = arr.findIndex(v => String(v.user._id) === String(upsertedVote.user._id));
+//     if (idx !== -1) {
+//       // update existing entry
+//       arr[idx].fields = voteData.fields;
+//       arr[idx].totalVote = voteData.totalVote;
+//       arr[idx].votedAt = voteData.votedAt;
+//     } else {
+//       arr.unshift(voteData);
+//       if (arr.length > 4) arr.pop();
+//     }
+
+//     // 7) Recompute score from post.voteStats (cheap)
+//     const averages = {};
+//     for (const f of voteFields) {
+//       const juryCount = post.voteStats.jury.count || 0;
+//       const normalCount = post.voteStats.normal.count || 0;
+
+//       const jurySum = post.voteStats.jury.sums?.[f] ?? 0;
+//       const normalSum = post.voteStats.normal.sums?.[f] ?? 0;
+
+//       const juryAvg = juryCount > 0 ? jurySum / juryCount : null;
+//       const normalAvg = normalCount > 0 ? normalSum / normalCount : null;
+
+//       let weighted = 0;
+//       if (juryAvg !== null && normalAvg !== null) weighted = juryAvg * 0.6 + normalAvg * 0.4;
+//       else if (juryAvg !== null) weighted = juryAvg;
+//       else if (normalAvg !== null) weighted = normalAvg;
+//       else weighted = 0;
+
+//       averages[f] = Number(weighted.toFixed(2));
+//     }
+
+//     const totalScore = Number((Object.values(averages).reduce((s, v) => s + v, 0) / (voteFields.length || 1)).toFixed(1));
+//     post.score = { averages, totalScore };
+
+//     // 8) Save post (inside transaction)
+//     await post.save({ session });
+
+//     // commit
+//     await session.commitTransaction();
+//     session.endSession();
+
+//     // 9) Return populated updated post (quick read)
+//     const updatedPost = await Post.findById(postId)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     // emit socket (outside txn)
+//     const io = req.app.get("io");
+//     io.emit("vote:update", { updatedPost });
+
+//     return res.json({ post: updatedPost });
+
+//   } catch (err) {
+//     try { await session.abortTransaction(); } catch (e) {}
+//     session.endSession();
+//     console.error("votePost error:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
+// export const votePost = async (req, res) => {
+//   try {
+//     const postId = req.params.id;
+//     const userId = req.user.id;
+
+//     // -----------------------------
+//     // 1) Parse dynamic vote fields
+//     // -----------------------------
+//     const fields = {};
+//     for (const key in req.body) {
+//       const val = Number(req.body[key]);
+//       if (!isNaN(val)) fields[key] = val;
+//     }
+
+//     const values = Object.values(fields);
+//     const totalVote = values.length > 0
+//       ? values.reduce((a, b) => a + b, 0) / values.length
+//       : null;
+
+//     // -----------------------------
+//     // 2) Upsert vote & populate user
+//     // -----------------------------
+//     const savedVote = await Vote.findOneAndUpdate(
+//       { post: postId, user: userId },
+//       { $set: { fields, totalVote } },
+//       { upsert: true, new: true, setDefaultsOnInsert: true }
+//     ).populate("user", "name profile handle role");
+
+//     // -----------------------------
+//     // 3) Recalculate score
+//     // -----------------------------
+//     const post = await Post.findById(postId);
+//     if (!post) return res.status(404).json({ message: "Post not found" });
+
+//     const calc = await calculateScore(postId);
+//     post.score = { averages: calc.averages, totalScore: calc.totalScore };
+
+//     // -----------------------------
+//     // 4) Prepare vote object
+//     // -----------------------------
+//     const voteData = {
+//       user: {
+//         _id: savedVote.user._id,
+//         name: savedVote.user.name,
+//         profile: savedVote.user.profile,
+//         handle: savedVote.user.handle,
+//         role: savedVote.user.role
+//       },
+//       fields: savedVote.fields,
+//       totalVote: savedVote.totalVote,
+//       votedAt: new Date()
+//     };
+
+//     // -----------------------------
+//     // 5) Insert or update in recent votes
+//     // -----------------------------
+//     const voteArray = savedVote.user.role === "jury"
+//       ? post.recentJuryVotes
+//       : post.recentNormalVotes;
+
+//     const existingIndex = voteArray.findIndex(
+//       v => v.user._id.toString() === savedVote.user._id.toString()
+//     );
+
+//     if (existingIndex !== -1) {
+//       // Update existing vote
+//       voteArray[existingIndex].fields = savedVote.fields;
+//       voteArray[existingIndex].totalVote = savedVote.totalVote;
+//       voteArray[existingIndex].votedAt = new Date();
+//     } else {
+//       // Insert new vote at the front
+//       voteArray.unshift(voteData);
+//       if (voteArray.length > 4) voteArray.pop();
+//     }
+
+//     await post.save();
+
+//     // -----------------------------
+//     // 6) Fetch updated post with creator populated
+//     // -----------------------------
+//     const updatedPost = await Post.findById(postId)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     // -----------------------------
+//     // 7) Emit via socket
+//     // -----------------------------
+//     const io = req.app.get("io");
+//     io.emit("vote:update", { updatedPost });
+
+//     // -----------------------------
+//     // 8) Send response
+//     // -----------------------------
+//     return res.json({ post: updatedPost });
+
+//   } catch (err) {
+//     console.error("votePost error:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
+
+
+// export const votePost = async (req, res) => {
+//   try {
+//     const postId = req.params.id;
+//     const userId = req.user.id;
+
+//     console.log("🔥 Voting:", postId, "by:", userId);
+
+//     // -----------------------------
+//     // 1) Parse dynamic vote fields
+//     // -----------------------------
+//     const fields = {};
+//     for (const key in req.body) {
+//       const val = Number(req.body[key]);
+//       if (!Number.isNaN(val)) fields[key] = val;
+//     }
+
+//     const values = Object.values(fields);
+//     const totalVote =
+//       values.length > 0
+//         ? values.reduce((a, b) => a + b, 0) / values.length
+//         : null;
+
+//     // -----------------------------
+//     // 2) Upsert vote
+//     // -----------------------------
+//     await Vote.findOneAndUpdate(
+//       { post: postId, user: userId },
+//       { $set: { fields, totalVote } },
+//       { upsert: true, new: true, setDefaultsOnInsert: true }
+//     );
+
+//     // -----------------------------
+//     // 3) Recalculate score
+//     // -----------------------------
+//     const calc = await calculateScore(postId);
+
+//     const post = await Post.findById(postId);
+//     if (!post) return res.status(404).json({ message: "Post not found" });
+
+//     post.score = {
+//       averages: calc.averages,
+//       totalScore: calc.totalScore,
+//     };
+
+//     await post.save();
+
+//     // -----------------------------
+//     // 4) Get updated post + votes
+//     // -----------------------------
+//     const updatedPost = await Post.findById(postId)
+//       .populate("createdBy", "name profile handle")
+//       .lean();
+
+//     // 4.1) Recent normal votes (exclude jury)
+//     const recentNormalVotes = await Vote.find({ post: postId })
+//       .populate("user", "name profile handle role")
+//       .where("user.role").ne("jury") // exclude jury
+//       .sort({ createdAt: -1 })
+//       .limit(4)
+//       .lean();
+
+//     // 4.2) Recent jury votes
+//     const recentJuryVotes = await Vote.find({ post: postId })
+//       .populate("user", "name profile handle role")
+//       .where("user.role").equals("jury") // only jury
+//       .sort({ createdAt: -1 })
+//       .limit(4)
+//       .lean();
+
+//     // ✅ Attach directly to post object
+//     updatedPost.recentNormalVotes = recentNormalVotes;
+//     updatedPost.recentJuryVotes = recentJuryVotes;
+//     updatedPost.score = post.score;
+
+//     // -----------------------------
+//     // 5) Emit via socket
+//     // -----------------------------
+//     const io = req.app.get("io");
+//     io.emit("vote:update", {
+//       updatedPost,
+//     });
+
+//     console.log("📡 EMITTED vote:update for post:", updatedPost);
+
+//     // -----------------------------
+//     // 6) Send response
+//     // -----------------------------
+//     return res.json({
+//       post: updatedPost,
+//     });
+//   } catch (err) {
+//     console.error("votePost error:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
 
 // export const votePost = async (req, res) => {
 //   try {
@@ -1331,6 +2212,80 @@ export const getVotesForPost = async (req, res) => {
     console.log("got votes for post");
   } catch (err) {
     console.error("getVotesForPost", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+export const getNonJuryVotesForPost = async (req, res) => {
+  console.log("getting NON-JURY votes for post");
+  try {
+    const postId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+    const skip = (page - 1) * limit;
+
+    const filter = { post: postId };
+
+    const [votes, total] = await Promise.all([
+      Vote.find(filter)
+        .populate({
+          path: "user",
+          match: { role: { $in: ["normal", "dev"] } }, // filter OUT jury users
+          select: "name profile handle role"
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Vote.countDocuments(filter)
+    ]);
+
+    const filteredVotes = votes.filter(v => v.user); // remove null matched users
+
+    res.json({
+      results: filteredVotes,
+      page,
+      limit,
+      count: filteredVotes.length
+    });
+  } catch (err) {
+    console.error("getNonJuryVotesForPost", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+export const getJuryVotesForPost = async (req, res) => {
+  console.log("getting JURY votes for post");
+  try {
+    const postId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+    const skip = (page - 1) * limit;
+
+    const filter = { post: postId };
+
+    const [votes, total] = await Promise.all([
+      Vote.find(filter)
+        .populate({
+          path: "user",
+          match: { role: "jury" },
+          select: "name profile handle role"
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Vote.countDocuments(filter)
+    ]);
+
+    const filteredVotes = votes.filter(v => v.user);
+
+    res.json({
+      results: filteredVotes,
+      page,
+      limit,
+      count: filteredVotes.length
+    });
+  } catch (err) {
+    console.error("getJuryVotesForPost", err);
     res.status(500).json({ message: err.message });
   }
 };
