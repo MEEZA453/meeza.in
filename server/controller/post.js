@@ -415,6 +415,119 @@ export const getDefaultPosts = async (req, res) => {
 
 // ✅ Get all posts (with votes & creator populated)
 // controllers/postController.js
+
+
+
+export const getPosts = async (req, res) => {
+  try {
+    const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+    let cursor = req.query.cursor || null;
+    const categoryQuery = req.query.category || "";
+    const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
+
+    const total = await Post.countDocuments({});
+
+    console.log("category filter:", parts.join(", ") || "none", "cursor:", cursor, "limit:", limit);
+
+    // ---- CASE 1: NO CATEGORY FILTER ----
+    if (!parts.length) {
+      // Validate cursor first
+      const findQuery = (cursor && mongoose.isValidObjectId(cursor))
+        ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+        : {};
+
+      const posts = await Post.find(findQuery)
+        .sort({ _id: -1 })
+        .limit(limit)
+        .populate("createdBy", "name profile handle")
+        .select("-__v")
+        .lean();
+
+      const nextCursor = posts.length ? posts[posts.length - 1]._id.toString() : null;
+      const hasMore = posts.length === limit;
+
+      return res.json({
+        success: true,
+        results: posts,
+        limit,
+        nextCursor,
+        count: total,
+        hasMore,
+      });
+    }
+
+    // ---- CASE 2: CATEGORY FILTER ----
+    const filteredDocs = await Post.find({ category: { $in: parts } })
+      .sort({ createdAt: -1 })
+      .select("_id")
+      .lean();
+
+    const nonFilteredDocs = await Post.find({ category: { $nin: parts } })
+      .sort({ createdAt: -1 })
+      .select("_id")
+      .lean();
+
+    const combinedIds = [
+      ...filteredDocs.map(d => d._id.toString()),
+      ...nonFilteredDocs.map(d => d._id.toString()),
+    ];
+
+    const totalCombined = combinedIds.length;
+
+    // If cursor supplied but not valid, treat it as null (start from 0)
+    const startIndex = (cursor && combinedIds.includes(cursor))
+      ? combinedIds.indexOf(cursor) + 1
+      : 0;
+
+    if (startIndex >= totalCombined) {
+      return res.json({
+        success: true,
+        results: [],
+        limit,
+        nextCursor: null,
+        count: total,
+        hasMore: false,
+      });
+    }
+
+    const pagedIdStrings = combinedIds.slice(startIndex, startIndex + limit);
+    if (!pagedIdStrings.length) {
+      return res.json({
+        success: true,
+        results: [],
+        limit,
+        nextCursor: null,
+        count: total,
+        hasMore: false,
+      });
+    }
+
+    // map to ObjectId safely (we built these from real _id strings so they are valid)
+    const objectIds = pagedIdStrings.map(id => new mongoose.Types.ObjectId(id));
+    const posts = await Post.find({ _id: { $in: objectIds } })
+      .populate("createdBy", "name profile handle")
+      .select("-__v")
+      .lean();
+
+    const orderedPosts = pagedIdStrings.map(id => posts.find(p => p._id.toString() === id));
+
+    const nextCursor = pagedIdStrings.length ? pagedIdStrings[pagedIdStrings.length - 1] : null;
+    const hasMore = startIndex + limit < totalCombined;
+
+    return res.json({
+      success: true,
+      results: orderedPosts,
+      limit,
+      nextCursor,
+      count: total,
+      hasMore,
+    });
+
+  } catch (err) {
+    console.error("Error getting posts:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
 // export const getPosts = async (req, res) => {
 //   try {
 //     const page = Math.max(1, parseInt(req.query.page || '1', 10));
@@ -502,256 +615,98 @@ export const getDefaultPosts = async (req, res) => {
 // controllers/postController.js (update getPosts)
 
 
-export const getPosts = async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page || "1", 10));
-    const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
-    const skip = (page - 1) * limit;
+// export const getPosts = async (req, res) => {
+//   try {
+//     const page = Math.max(1, parseInt(req.query.page || "1"));
+//     const limit = Math.max(1, parseInt(req.query.limit || "10"));
+//     const skip = (page - 1) * limit;
 
-    const categoryQuery = req.query.category || "";
-    const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
+//     const categoryQuery = req.query.category || "";
+//     const parts = categoryQuery
+//       ? categoryQuery.split(",").map(c => c.trim())
+//       : [];
 
-    // total of all posts (keeps previous behavior)
-    const totalAll = await Post.countDocuments({});
+//     // total posts count
+//     const total = await Post.countDocuments({});
 
-    // ---- CASE: no filter (fast path) ----
-    if (!parts.length) {
-      const pipeline = [
-        { $sort: { createdAt: -1 } },
-        { $skip: skip },
-        { $limit: limit },
+//     // ---- CASE 1: NO CATEGORY FILTER ----
+//     if (!parts.length) {
+//       const posts = await Post.find({})
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .populate("createdBy", "name profile handle")
+//         .select("-__v")
+//         .lean();
 
-        // populate createdBy
-        {
-          $lookup: {
-            from: "users",
-            localField: "createdBy",
-            foreignField: "_id",
-            as: "createdBy"
-          }
-        },
-        { $unwind: "$createdBy" },
+//       return res.json({
+//         success: true,
+//         results: posts,
+//         page,
+//         limit,
+//         count: total,
+//         hasMore: page * limit < total,
+//       });
+//     }
 
-        // recent normal votes
-        {
-          $lookup: {
-            from: "votes",
-            let: { postId: "$_id" },
-            pipeline: [
-              { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-              { $lookup: { from: "users", localField: "user", foreignField: "_id", as: "userDoc" } },
-              { $unwind: "$userDoc" },
-              { $match: { "userDoc.role": { $ne: "jury" } } },
-              { $sort: { createdAt: -1 } },
-              { $limit: 4 },
-              {
-                $project: {
-                  _id: 1,
-                  fields: 1,
-                  totalVote: 1,
-                  createdAt: 1,
-                  user: {
-                    _id: "$userDoc._id",
-                    name: "$userDoc.name",
-                    profile: "$userDoc.profile",
-                    handle: "$userDoc.handle",
-                    role: "$userDoc.role"
-                  }
-                }
-              }
-            ],
-            as: "recentNormalVotes"
-          }
-        },
+//     // ---- CASE 2: CATEGORY FILTER PRESENT ----
 
-        // recent jury votes
-        {
-          $lookup: {
-            from: "votes",
-            let: { postId: "$_id" },
-            pipeline: [
-              { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-              { $lookup: { from: "users", localField: "user", foreignField: "_id", as: "userDoc" } },
-              { $unwind: "$userDoc" },
-              { $match: { "userDoc.role": "jury" } },
-              { $sort: { createdAt: -1 } },
-              { $limit: 4 },
-              {
-                $project: {
-                  _id: 1,
-                  fields: 1,
-                  totalVote: 1,
-                  createdAt: 1,
-                  user: {
-                    _id: "$userDoc._id",
-                    name: "$userDoc.name",
-                    profile: "$userDoc.profile",
-                    handle: "$userDoc.handle",
-                    role: "$userDoc.role"
-                  }
-                }
-              }
-            ],
-            as: "recentJuryVotes"
-          }
-        },
+//     // filtered first
+//     const filtered = await Post.find({ category: { $in: parts } })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
 
-        {
-          $addFields: {
-            totalVotesCount: { $size: { $ifNull: ["$recentNormalVotes", []] } }
-          }
-        },
+//     // then non-filtered
+//     const nonFiltered = await Post.find({ category: { $nin: parts } })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
 
-        { $project: { votes: 0 } }
-      ];
+//     const combinedIds = [
+//       ...filtered.map(d => d._id),
+//       ...nonFiltered.map(d => d._id),
+//     ];
 
-      const posts = await Post.aggregate(pipeline);
-      return res.json({ results: posts, page, limit, count: totalAll });
-    }
+//     const pagedIds = combinedIds.slice(skip, skip + limit);
 
-    // ---- CASE: filter present: compose ordered id list (filtered first) ----
+//     if (!pagedIds.length) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         page,
+//         limit,
+//         count: total,
+//         hasMore: false,
+//       });
+//     }
 
-    // 1) fetch filtered IDs sorted by createdAt desc
-    const filteredDocs = await Post.find({ category: { $in: parts } })
-      .sort({ createdAt: -1 })
-      .select("_id")
-      .lean();
+//     // fetch posts in original filtered-first sorted order
+//     const posts = await Post.find({ _id: { $in: pagedIds } })
+//       .populate("createdBy", "name profile handle")
+//       .select("-__v")
+//       .lean();
 
-    // 2) fetch non-filtered IDs sorted by createdAt desc
-    const nonFilteredDocs = await Post.find({ category: { $nin: parts } })
-      .sort({ createdAt: -1 })
-      .select("_id")
-      .lean();
+//     // reorder manually to match pagedIds order
+//     const orderedPosts = pagedIds.map(id =>
+//       posts.find(p => p._id.toString() === id.toString())
+//     );
 
-    // 3) make combined ordered ID array (filtered first)
-    const combinedIds = [
-      ...filteredDocs.map(d => d._id),
-      ...nonFilteredDocs.map(d => d._id)
-    ];
+//     return res.json({
+//       success: true,
+//       results: orderedPosts,
+//       page,
+//       limit,
+//       count: total,
+//       hasMore: page * limit < combinedIds.length,
+//     });
 
-    const totalCombined = combinedIds.length;
+//   } catch (err) {
+//     console.error("Error getting posts:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 
-    // 4) slice for requested page
-    const pagedIds = combinedIds.slice(skip, skip + limit);
-
-    // if nothing on this page, return empty array
-    if (!pagedIds.length) {
-      return res.json({ results: [], page, limit, count: totalAll });
-    }
-
-    // 5) fetch full posts for pagedIds and preserve original order
-    // We'll use aggregation: match _id in pagedIds, then compute order index using $indexOfArray and sort by it
-    const pipelineForPaged = [
-      { $match: { _id: { $in: pagedIds } } },
-
-      // ensure createdBy populated
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdBy",
-          foreignField: "_id",
-          as: "createdBy"
-        }
-      },
-      { $unwind: "$createdBy" },
-
-      // recent normal votes
-      {
-        $lookup: {
-          from: "votes",
-          let: { postId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-            { $lookup: { from: "users", localField: "user", foreignField: "_id", as: "userDoc" } },
-            { $unwind: "$userDoc" },
-            { $match: { "userDoc.role": { $ne: "jury" } } },
-            { $sort: { createdAt: -1 } },
-            { $limit: 4 },
-            {
-              $project: {
-                _id: 1,
-                fields: 1,
-                totalVote: 1,
-                createdAt: 1,
-                user: {
-                  _id: "$userDoc._id",
-                  name: "$userDoc.name",
-                  profile: "$userDoc.profile",
-                  handle: "$userDoc.handle",
-                  role: "$userDoc.role"
-                }
-              }
-            }
-          ],
-          as: "recentNormalVotes"
-        }
-      },
-
-      // recent jury votes
-      {
-        $lookup: {
-          from: "votes",
-          let: { postId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-            { $lookup: { from: "users", localField: "user", foreignField: "_id", as: "userDoc" } },
-            { $unwind: "$userDoc" },
-            { $match: { "userDoc.role": "jury" } },
-            { $sort: { createdAt: -1 } },
-            { $limit: 4 },
-            {
-              $project: {
-                _id: 1,
-                fields: 1,
-                totalVote: 1,
-                createdAt: 1,
-                user: {
-                  _id: "$userDoc._id",
-                  name: "$userDoc.name",
-                  profile: "$userDoc.profile",
-                  handle: "$userDoc.handle",
-                  role: "$userDoc.role"
-                }
-              }
-            }
-          ],
-          as: "recentJuryVotes"
-        }
-      },
-
-      {
-        $addFields: {
-          totalVotesCount: { $size: { $ifNull: ["$recentNormalVotes", []] } }
-        }
-      },
-
-      // compute order index using the combinedIds array:
-      {
-        $addFields: {
-          __orderIdx: { $indexOfArray: [combinedIds, "$_id"] }
-        }
-      },
-
-      // sort by the computed order index
-      { $sort: { __orderIdx: 1 } },
-
-      { $project: { votes: 0, __orderIdx: 0 } }
-    ];
-
-    const posts = await Post.aggregate(pipelineForPaged);
-
-    return res.json({
-      results: posts,
-      page,
-      limit,
-      count: totalAll
-    });
-
-  } catch (err) {
-    console.error("Error getting posts:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
 
 export const searchPosts = async (req, res) => {
   try {

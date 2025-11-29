@@ -71,120 +71,20 @@ export const getAllHighlights = async (req, res) => {
       ? { category: { $in: category.split(",") } }
       : {};
 
-    const highlights = await Post.aggregate([
-      // Match highlighted posts
-      {
-        $match: {
-          isHighlighted: true,
-          ...categoryFilter
-        }
-      },
+    // get all highlighted posts
+    const posts = await Post.find({
+      isHighlighted: true,
+      ...categoryFilter
+    })
+      // sort by latest highlightedAt
+      .sort({ lastHighlightedAt: -1 }) // you should store this field in schema
+      .populate("createdBy", "name profile handle passion")
+      .select("-__v")
+      .lean();
 
-      // Add lastHighlightedAt (for sorting)
-      {
-        $addFields: {
-          lastHighlightedAt: { $max: "$highlightedBy.highlightedAt" }
-        }
-      },
-
-      // Sort by latest highlight
-      { $sort: { lastHighlightedAt: -1 } },
-
-      // ---- populate createdBy ----
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdBy",
-          foreignField: "_id",
-          as: "createdBy",
-          pipeline: [
-            { $project: { name: 1, profile: 1, handle: 1, passion: 1 } }
-          ]
-        }
-      },
-      { $unwind: "$createdBy" },
-
-      // ---- populate all vote users with role ----
-      {
-        $lookup: {
-          from: "users",
-          localField: "votes.user",
-          foreignField: "_id",
-          as: "voteUsers",
-          pipeline: [
-            { $project: { name: 1, profile: 1, handle: 1, passion: 1, role: 1 } }
-          ]
-        }
-      },
-
-      // ---- merge user info into votes and sort by newest first ----
-      {
-        $addFields: {
-          votes: {
-            $map: {
-              input: { $sortArray: { input: "$votes", sortBy: { _id: -1 } } },
-              as: "v",
-              in: {
-                creativity: "$$v.creativity",
-                aesthetics: "$$v.aesthetics",
-                composition: "$$v.composition",
-                emotion: "$$v.emotion",
-                totalVote: "$$v.totalVote",
-                user: {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: "$voteUsers",
-                        as: "u",
-                        cond: { $eq: ["$$u._id", "$$v.user"] }
-                      }
-                    },
-                    0
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
-
-      // ---- split votes by role and limit 6 each ----
-      {
-        $addFields: {
-          normalVotes: {
-            $slice: [
-              {
-                $filter: {
-                  input: "$votes",
-                  as: "v",
-                  cond: { $eq: ["$$v.user.role", "normal"] }
-                }
-              },
-              6
-            ]
-          },
-          juryVotes: {
-            $slice: [
-              {
-                $filter: {
-                  input: "$votes",
-                  as: "v",
-                  cond: { $eq: ["$$v.user.role", "jury"] }
-                }
-              },
-              6
-            ]
-          }
-        }
-      },
-
-      // ---- remove temp fields ----
-      { $unset: ["votes", "voteUsers"] }
-    ]);
-
-    return res.status(200).json({
+    return res.json({
       success: true,
-      highlights
+      highlights: posts
     });
 
   } catch (err) {

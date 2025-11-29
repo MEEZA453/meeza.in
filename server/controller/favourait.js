@@ -111,20 +111,27 @@ export const getPostAppreciations = async (req, res) => {
 // controllers/favController.js (or wherever you keep it)
 export const getFavoritesByHandle = async (req, res) => {
   try {
+    console.log("getFavoritesByHandle called");
     const { handle } = req.params;
     const requesterUserId = req.user?.id || null;
 
-    const limit = parseInt(req.query.limit || "10", 10);
-    const page = parseInt(req.query.page || "1", 10);
+    const limit = Math.max(1, parseInt(req.query.limit || "10"));
+    const page = Math.max(1, parseInt(req.query.page || "1"));
     const skip = (page - 1) * limit;
 
-    const user = await User.findOne({ handle }).select("favourites");
-    if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+    // get favourites array only
+    const user = await User.findOne({ handle })
+      .select("_id favourites")
+      .lean();
 
-    const favouriteIds = user.favourites;  // already ordered (latest first)
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const favouriteIds = user.favourites; // already ordered (latest first)
     const total = favouriteIds.length;
 
+    // empty
     if (total === 0) {
       return res.json({
         success: true,
@@ -137,10 +144,10 @@ export const getFavoritesByHandle = async (req, res) => {
       });
     }
 
-    // Apply pagination on array
+    // paginate on array
     const paginatedIds = favouriteIds.slice(skip, skip + limit);
 
-    if (!paginatedIds.length) {
+    if (paginatedIds.length === 0) {
       return res.json({
         success: true,
         favourites: [],
@@ -152,123 +159,22 @@ export const getFavoritesByHandle = async (req, res) => {
       });
     }
 
-    // ---- AGGREGATION JUST LIKE getPosts ----
-    const pipeline = [
-      { $match: { _id: { $in: paginatedIds } } },
+    // ---------- MAIN QUERY (FIXED: Post.find, NOT post.find) ----------
+    const posts = await post.find({ _id: { $in: paginatedIds } })
+      .populate("createdBy", "name profile handle")
+      .select("-__v")
+      .lean();
 
-      // populate createdBy
-      {
-        $lookup: {
-          from: "users",
-          localField: "createdBy",
-          foreignField: "_id",
-          as: "createdBy"
-        }
-      },
-      { $unwind: "$createdBy" },
+    // preserve favourite order
+    const ordered = paginatedIds.map(id =>
+      posts.find(p => String(p._id) === String(id))
+    );
 
-      // recent normal votes
-      {
-        $lookup: {
-          from: "votes",
-          let: { postId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-            {
-              $lookup: {
-                from: "users",
-                localField: "user",
-                foreignField: "_id",
-                as: "userDoc"
-              }
-            },
-            { $unwind: "$userDoc" },
-            { $match: { "userDoc.role": { $ne: "jury" } } },
-            { $sort: { createdAt: -1 } },
-            { $limit: 4 },
-            {
-              $project: {
-                _id: 1,
-                fields: 1,
-                totalVote: 1,
-                createdAt: 1,
-                user: {
-                  _id: "$userDoc._id",
-                  name: "$userDoc.name",
-                  profile: "$userDoc.profile",
-                  handle: "$userDoc.handle",
-                  role: "$userDoc.role"
-                }
-              }
-            }
-          ],
-          as: "recentNormalVotes"
-        }
-      },
-
-      // recent jury votes
-      {
-        $lookup: {
-          from: "votes",
-          let: { postId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$post", "$$postId"] } } },
-            {
-              $lookup: {
-                from: "users",
-                localField: "user",
-                foreignField: "_id",
-                as: "userDoc"
-              }
-            },
-            { $unwind: "$userDoc" },
-            { $match: { "userDoc.role": "jury" } },
-            { $sort: { createdAt: -1 } },
-            { $limit: 4 },
-            {
-              $project: {
-                _id: 1,
-                fields: 1,
-                totalVote: 1,
-                createdAt: 1,
-                user: {
-                  _id: "$userDoc._id",
-                  name: "$userDoc.name",
-                  profile: "$userDoc.profile",
-                  handle: "$userDoc.handle",
-                  role: "$userDoc.role"
-                }
-              }
-            }
-          ],
-          as: "recentJuryVotes"
-        }
-      },
-
-      // totalVotesCount (like getPosts)
-      {
-        $addFields: {
-          totalVotesCount: { $size: { $ifNull: ["$recentNormalVotes", []] } }
-        }
-      },
-
-      // Preserve the order from paginatedIds
-      {
-        $addFields: {
-          __orderIdx: { $indexOfArray: [paginatedIds, "$_id"] }
-        }
-      },
-
-      { $sort: { __orderIdx: 1 } },
-
-      { $project: { __orderIdx: 0 } }
-    ];
-
-    const favourites = await post.aggregate(pipeline);
+    console.log("got this shit ", ordered.length);
 
     return res.json({
       success: true,
-      favourites,
+      favourites: ordered,
       count: total,
       page,
       limit,
@@ -281,6 +187,8 @@ export const getFavoritesByHandle = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
 
 // export const getFavoritesByHandle = async (req, res) => {
   
