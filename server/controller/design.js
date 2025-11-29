@@ -7,7 +7,7 @@ import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 import Order from "../models/Order.js";
 import user from "../models/user.js";
 dotenv.config();
-
+import mongoose from "mongoose";
 export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
@@ -52,20 +52,17 @@ export const getDefaultDesigns = async (req, res) => {
 
 
 export const getDesign = async (req, res) => {
-  console.log('getting design')
   try {
+    console.log('getting design called')
     const userId = req.user?.id || null;
-    const page = Math.max(1, parseInt(req.query.page || '1', 10));
     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
-    const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {}; // filters JSON
-console.log(userId, page, limit , rawFilters)
+    const cursor = req.query.cursor || null; // <-- new
+    const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {};
+
     // Build Mongo query
     const andClauses = [];
-
-    // For each filter key, create an $elemMatch against sections array
     Object.entries(rawFilters).forEach(([key, values]) => {
       if (!Array.isArray(values) || values.length === 0) return;
-      // Match a section with title == key (case-insensitive) and content contains any of the values
       andClauses.push({
         sections: {
           $elemMatch: {
@@ -75,54 +72,42 @@ console.log(userId, page, limit , rawFilters)
         },
       });
     });
-
     const baseQuery = andClauses.length ? { $and: andClauses } : {};
 
-    // OPTIONAL: additional filters, search, ownership etc. could be added here
-
-    // Count total matching docs (for client to know total)
+    // Count total matching docs
     const total = await Product.countDocuments(baseQuery);
 
-    // Pagination
-    const skip = (page - 1) * limit;
+    // Cursor query
+    const findQuery = cursor && mongoose.isValidObjectId(cursor)
+      ? { ...baseQuery, _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+      : baseQuery;
 
     // Fetch page results
-    let designs = await Product.find(baseQuery)
-      .sort({ createdAt: -1 })
-      .skip(skip)
+    let designs = await Product.find(findQuery)
+      .sort({ _id: -1 })
       .limit(limit)
-     .populate('postedBy', 'name profile handle followers')
+      .populate('postedBy', 'name profile handle followers')
       .lean();
 
-    // sanitize and add isMyProduct flag
-designs = designs.map((product) => {
-  const base = sanitizeProduct(product);
+    // sanitize + flags
+    designs = designs.map(product => {
+      const base = sanitizeProduct(product);
+      const isMyProduct = userId ? product.postedBy?._id.toString() === userId.toString() : false;
+      const isFollowing = userId && !isMyProduct
+        ? product.postedBy?.followers?.some(f => f.toString() === userId.toString())
+        : false;
+      return { ...base, isMyProduct, isFollowing };
+    });
 
-  const isMyProduct =
-    userId ? product.postedBy?._id.toString() === userId.toString() : false;
+    const nextCursor = designs.length ? designs[designs.length - 1]._id.toString() : null;
+    const hasMore = designs.length === limit;
 
-  let isFollowing = false;
-
-  if (userId && !isMyProduct) {
-    // postedBy.followers is array of ObjectIds
-    isFollowing = product.postedBy?.followers?.some(
-      (f) => f.toString() === userId.toString()
-    );
-  }
-
-  return {
-    ...base,
-    isMyProduct,
-    isFollowing, // 🔥 added
-  };
-});
-
-console.log('got post page:', page,'limit:', limit, rawFilters, 'total matches:', total);
     res.status(200).json({
-      count: total,         // total matching items
-      page,
-      limit,
       results: designs,
+      limit,
+      nextCursor,
+      count: total,
+      hasMore,
     });
   } catch (error) {
     console.error('Error in getDesign:', error);
