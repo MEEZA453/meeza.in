@@ -16,7 +16,7 @@ export const verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET); // { id, iat, exp }
 
     // Fetch the user from DB
-    const user = await User.findById(decoded.id).select("id email name"); // include any fields you want
+    const user = await User.findById(decoded.id).select("id email name role"); // include any fields you want
     if (!user) return res.status(401).json({ success: false, message: "User not found" });
 
     req.user = user; // now req.user has id, email, name

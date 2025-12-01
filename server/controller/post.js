@@ -1386,7 +1386,7 @@ export const votePost = async (req, res) => {
   try {
     const postId = req.params.id;
     const userId = req.user.id;
-
+console.log(req.user)
     // 1) parse fields & compute totalVote
     const fields = {};
     for (const k in req.body) {
@@ -1415,7 +1415,7 @@ export const votePost = async (req, res) => {
     // 4) upsert the Vote (we'll use findOneAndUpdate)
     const upsertedVote = await Vote.findOneAndUpdate(
       { post: postId, user: userId },
-      { $set: { fields, totalVote } },
+      { $set: { fields, totalVote, userRole: req.user.role  } },
       { upsert: true, new: true, setDefaultsOnInsert: true, session }
     ).populate("user", "name profile handle role");
 
@@ -1458,11 +1458,12 @@ export const votePost = async (req, res) => {
         handle: upsertedVote.user.handle,
         role: upsertedVote.user.role
       },
+      userRole: upsertedVote.user.role,
       fields: upsertedVote.fields,
       totalVote: upsertedVote.totalVote,
       votedAt: new Date()
     };
-
+console.log("voteData:", voteData);
     const arr = roleKey === "jury" ? post.recentJuryVotes : post.recentNormalVotes;
     const idx = arr.findIndex(v => String(v.user._id) === String(upsertedVote.user._id));
     if (idx !== -1) {
@@ -2171,73 +2172,68 @@ export const getVotesForPost = async (req, res) => {
   }
 };
 export const getNonJuryVotesForPost = async (req, res) => {
-  console.log("getting NON-JURY votes for post");
+
   try {
     const postId = req.params.id;
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
     const skip = (page - 1) * limit;
-
-    const filter = { post: postId };
+console.log("Fetching non-jury votes for post:", postId, "page:", page, "limit:", limit);
+    const filter = {
+      post: postId,
+      userRole: { $in: ["normal", "dev"] }   // 🔥 only non-jury stored in Vote
+    };
 
     const [votes, total] = await Promise.all([
       Vote.find(filter)
-        .populate({
-          path: "user",
-          match: { role: { $in: ["normal", "dev"] } }, // filter OUT jury users
-          select: "name profile handle role"
-        })
+        .populate("user", "name profile handle role")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       Vote.countDocuments(filter)
     ]);
-
-    const filteredVotes = votes.filter(v => v.user); // remove null matched users
-
+console.log(`Fetched ${votes.length} non-jury votes out of ${total} total for post:`, postId);
     res.json({
-      results: filteredVotes,
+      results: votes,
       page,
       limit,
-      count: filteredVotes.length
+      count: total
     });
+
   } catch (err) {
     console.error("getNonJuryVotesForPost", err);
     res.status(500).json({ message: err.message });
   }
 };
+
 export const getJuryVotesForPost = async (req, res) => {
-  console.log("getting JURY votes for post");
   try {
     const postId = req.params.id;
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
     const skip = (page - 1) * limit;
-
-    const filter = { post: postId };
+console.log("Fetching jury votes for post:", postId, "page:", page, "limit:", limit);
+    const filter = {
+      post: postId,
+      userRole: "jury"
+    };
 
     const [votes, total] = await Promise.all([
       Vote.find(filter)
-        .populate({
-          path: "user",
-          match: { role: "jury" },
-          select: "name profile handle role"
-        })
+        .populate("user", "name profile handle role")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       Vote.countDocuments(filter)
     ]);
-
-    const filteredVotes = votes.filter(v => v.user);
-
+console.log("Found jury votes:", votes.length, "total:", total);
     res.json({
-      results: filteredVotes,
+      results: votes,
       page,
       limit,
-      count: filteredVotes.length
+      count: total
     });
   } catch (err) {
     console.error("getJuryVotesForPost", err);

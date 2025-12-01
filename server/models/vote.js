@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 const voteSchema = new mongoose.Schema({
   post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true, index: true },
+   userRole: { type: String, index: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
   fields: { type: mongoose.Schema.Types.Mixed, default: {} }, // { creativity: 8.5, ... }
   totalVote: { type: Number },
