@@ -58,7 +58,7 @@ export const getDesign = async (req, res) => {
     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
     const cursor = req.query.cursor || null; // <-- new
     const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {};
-
+console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters)
     // Build Mongo query
     const andClauses = [];
     Object.entries(rawFilters).forEach(([key, values]) => {
@@ -99,8 +99,11 @@ export const getDesign = async (req, res) => {
       return { ...base, isMyProduct, isFollowing };
     });
 
-    const nextCursor = designs.length ? designs[designs.length - 1]._id.toString() : null;
     const hasMore = designs.length === limit;
+    // set nextCursor only if there actually is more to fetch
+    const nextCursor = hasMore && designs.length ? designs[designs.length - 1]._id.toString() : null;
+
+    console.log('fetched designs:', designs.length, 'nextCursor:', nextCursor, 'hasMore:', hasMore);
 
     res.status(200).json({
       results: designs,

@@ -4,9 +4,8 @@ import jwt from "jsonwebtoken";
 import User from "../models/user.js"; // your user model
 
 export const verifyToken = async (req, res, next) => {
-  console.log("reached authentication");
+
   const token = req.headers.authorization?.split(" ")[1]; // Expecting "Bearer <token>"
-  console.log("token is", token);
 
   if (!token) {
     return res.status(401).json({ success: false, message: "Access Denied: No Token Provided" });
