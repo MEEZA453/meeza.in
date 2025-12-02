@@ -417,24 +417,47 @@ export const getDefaultPosts = async (req, res) => {
 // controllers/postController.js
 
 
-
 export const getPosts = async (req, res) => {
   try {
     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
     let cursor = req.query.cursor || null;
     const categoryQuery = req.query.category || "";
+    const query = req.query.query?.trim() || "";   // 🔥 added search
     const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
 
     const total = await Post.countDocuments({});
 
-    console.log("category filter:", parts.join(", ") || "none", "cursor:", cursor, "limit:", limit);
+    console.log(
+      "category filter:", parts.join(", ") || "none",
+      "query:", query || "none",
+      "cursor:", cursor,
+      "limit:", limit
+    );
 
-    // ---- CASE 1: NO CATEGORY FILTER ----
+    // 🔥 Build search conditions
+    let searchCondition = {};
+    if (query) {
+      const regex = { $regex: query, $options: "i" };
+      searchCondition = {
+        $or: [
+          { name: regex },
+          { description: regex },
+          { category: regex },
+          { hashtags: regex },
+        ]
+      };
+    }
+
+    // ------------------------------------------------------------
+    // CASE 1: NO CATEGORY FILTER
+    // ------------------------------------------------------------
     if (!parts.length) {
-      // Validate cursor first
-      const findQuery = (cursor && mongoose.isValidObjectId(cursor))
-        ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
-        : {};
+      const findQuery = {
+        ...searchCondition, // 🔥 apply search
+        ...(cursor && mongoose.isValidObjectId(cursor)
+          ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+          : {})
+      };
 
       const posts = await Post.find(findQuery)
         .sort({ _id: -1 })
@@ -456,13 +479,23 @@ export const getPosts = async (req, res) => {
       });
     }
 
-    // ---- CASE 2: CATEGORY FILTER ----
-    const filteredDocs = await Post.find({ category: { $in: parts } })
+    // ------------------------------------------------------------
+    // CASE 2: CATEGORY FILTER
+    // ------------------------------------------------------------
+
+    // 🔥 apply search inside filtered docs
+    const filteredDocs = await Post.find({
+      category: { $in: parts },
+      ...searchCondition, // 🔥 added
+    })
       .sort({ createdAt: -1 })
       .select("_id")
       .lean();
 
-    const nonFilteredDocs = await Post.find({ category: { $nin: parts } })
+    const nonFilteredDocs = await Post.find({
+      category: { $nin: parts },
+      ...searchCondition, // 🔥 added
+    })
       .sort({ createdAt: -1 })
       .select("_id")
       .lean();
@@ -474,10 +507,10 @@ export const getPosts = async (req, res) => {
 
     const totalCombined = combinedIds.length;
 
-    // If cursor supplied but not valid, treat it as null (start from 0)
-    const startIndex = (cursor && combinedIds.includes(cursor))
-      ? combinedIds.indexOf(cursor) + 1
-      : 0;
+    const startIndex =
+      cursor && combinedIds.includes(cursor)
+        ? combinedIds.indexOf(cursor) + 1
+        : 0;
 
     if (startIndex >= totalCombined) {
       return res.json({
@@ -491,6 +524,7 @@ export const getPosts = async (req, res) => {
     }
 
     const pagedIdStrings = combinedIds.slice(startIndex, startIndex + limit);
+
     if (!pagedIdStrings.length) {
       return res.json({
         success: true,
@@ -502,16 +536,21 @@ export const getPosts = async (req, res) => {
       });
     }
 
-    // map to ObjectId safely (we built these from real _id strings so they are valid)
     const objectIds = pagedIdStrings.map(id => new mongoose.Types.ObjectId(id));
+
     const posts = await Post.find({ _id: { $in: objectIds } })
       .populate("createdBy", "name profile handle")
       .select("-__v")
       .lean();
 
-    const orderedPosts = pagedIdStrings.map(id => posts.find(p => p._id.toString() === id));
+    const orderedPosts = pagedIdStrings.map(id =>
+      posts.find(p => p._id.toString() === id)
+    );
 
-    const nextCursor = pagedIdStrings.length ? pagedIdStrings[pagedIdStrings.length - 1] : null;
+    const nextCursor = pagedIdStrings.length
+      ? pagedIdStrings[pagedIdStrings.length - 1]
+      : null;
+
     const hasMore = startIndex + limit < totalCombined;
 
     return res.json({
@@ -528,6 +567,117 @@ export const getPosts = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// export const getPosts = async (req, res) => {
+//   try {
+//     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+//     let cursor = req.query.cursor || null;
+//     const categoryQuery = req.query.category || "";
+//     const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
+
+//     const total = await Post.countDocuments({});
+
+//     console.log("category filter:", parts.join(", ") || "none", "cursor:", cursor, "limit:", limit);
+
+//     // ---- CASE 1: NO CATEGORY FILTER ----
+//     if (!parts.length) {
+//       // Validate cursor first
+//       const findQuery = (cursor && mongoose.isValidObjectId(cursor))
+//         ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+//         : {};
+
+//       const posts = await Post.find(findQuery)
+//         .sort({ _id: -1 })
+//         .limit(limit)
+//         .populate("createdBy", "name profile handle")
+//         .select("-__v")
+//         .lean();
+
+//       const nextCursor = posts.length ? posts[posts.length - 1]._id.toString() : null;
+//       const hasMore = posts.length === limit;
+
+//       return res.json({
+//         success: true,
+//         results: posts,
+//         limit,
+//         nextCursor,
+//         count: total,
+//         hasMore,
+//       });
+//     }
+
+//     // ---- CASE 2: CATEGORY FILTER ----
+//     const filteredDocs = await Post.find({ category: { $in: parts } })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
+
+//     const nonFilteredDocs = await Post.find({ category: { $nin: parts } })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
+
+//     const combinedIds = [
+//       ...filteredDocs.map(d => d._id.toString()),
+//       ...nonFilteredDocs.map(d => d._id.toString()),
+//     ];
+
+//     const totalCombined = combinedIds.length;
+
+//     // If cursor supplied but not valid, treat it as null (start from 0)
+//     const startIndex = (cursor && combinedIds.includes(cursor))
+//       ? combinedIds.indexOf(cursor) + 1
+//       : 0;
+
+//     if (startIndex >= totalCombined) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         limit,
+//         nextCursor: null,
+//         count: total,
+//         hasMore: false,
+//       });
+//     }
+
+//     const pagedIdStrings = combinedIds.slice(startIndex, startIndex + limit);
+//     if (!pagedIdStrings.length) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         limit,
+//         nextCursor: null,
+//         count: total,
+//         hasMore: false,
+//       });
+//     }
+
+//     // map to ObjectId safely (we built these from real _id strings so they are valid)
+//     const objectIds = pagedIdStrings.map(id => new mongoose.Types.ObjectId(id));
+//     const posts = await Post.find({ _id: { $in: objectIds } })
+//       .populate("createdBy", "name profile handle")
+//       .select("-__v")
+//       .lean();
+
+//     const orderedPosts = pagedIdStrings.map(id => posts.find(p => p._id.toString() === id));
+
+//     const nextCursor = pagedIdStrings.length ? pagedIdStrings[pagedIdStrings.length - 1] : null;
+//     const hasMore = startIndex + limit < totalCombined;
+
+//     return res.json({
+//       success: true,
+//       results: orderedPosts,
+//       limit,
+//       nextCursor,
+//       count: total,
+//       hasMore,
+//     });
+
+//   } catch (err) {
+//     console.error("Error getting posts:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
 // export const getPosts = async (req, res) => {
 //   try {
 //     const page = Math.max(1, parseInt(req.query.page || '1', 10));

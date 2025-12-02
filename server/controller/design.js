@@ -49,18 +49,20 @@ export const getDefaultDesigns = async (req, res) => {
   }
 };
 
-
-
 export const getDesign = async (req, res) => {
   try {
-    console.log('getting design called')
+    console.log('getting design called');
     const userId = req.user?.id || null;
     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
-    const cursor = req.query.cursor || null; // <-- new
+    const cursor = req.query.cursor || null;
     const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {};
-console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters)
-    // Build Mongo query
+    const searchQuery = req.query.query || ""; // 🔥 new search query
+    console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters, 'query:', searchQuery);
+
+    // ---------- BUILD BASE QUERY ----------
     const andClauses = [];
+
+    // 1️⃣ Existing FILTER logic (unchanged)
     Object.entries(rawFilters).forEach(([key, values]) => {
       if (!Array.isArray(values) || values.length === 0) return;
       andClauses.push({
@@ -72,38 +74,71 @@ console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters)
         },
       });
     });
+
+    // 2️⃣ Add SEARCH logic (only if searchQuery is provided)
+    if (searchQuery.trim()) {
+      const regex = new RegExp(searchQuery, "i");
+
+      andClauses.push({
+        $or: [
+          { name: regex },
+          { description: regex },
+          { category: regex },
+          { tags: regex },
+          { hashtags: regex },
+          { "sections.title": regex },
+          { "sections.content": regex },
+        ]
+      });
+    }
+
+    // Final combined base query
     const baseQuery = andClauses.length ? { $and: andClauses } : {};
 
-    // Count total matching docs
+    // ---------- COUNT ----------
     const total = await Product.countDocuments(baseQuery);
 
-    // Cursor query
-    const findQuery = cursor && mongoose.isValidObjectId(cursor)
-      ? { ...baseQuery, _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
-      : baseQuery;
+    // ---------- CURSOR PAGINATION ----------
+    const findQuery =
+      cursor && mongoose.isValidObjectId(cursor)
+        ? { ...baseQuery, _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+        : baseQuery;
 
-    // Fetch page results
+    // ---------- FETCH DATA ----------
     let designs = await Product.find(findQuery)
       .sort({ _id: -1 })
       .limit(limit)
-      .populate('postedBy', 'name profile handle followers')
+      .populate("postedBy", "name profile handle followers")
       .lean();
 
-    // sanitize + flags
-    designs = designs.map(product => {
+    // ---------- SANITIZE + FLAGS ----------
+    designs = designs.map((product) => {
       const base = sanitizeProduct(product);
-      const isMyProduct = userId ? product.postedBy?._id.toString() === userId.toString() : false;
-      const isFollowing = userId && !isMyProduct
-        ? product.postedBy?.followers?.some(f => f.toString() === userId.toString())
+      const isMyProduct = userId
+        ? product.postedBy?._id.toString() === userId.toString()
         : false;
+      const isFollowing =
+        userId && !isMyProduct
+          ? product.postedBy?.followers?.some((f) => f.toString() === userId.toString())
+          : false;
+
       return { ...base, isMyProduct, isFollowing };
     });
 
     const hasMore = designs.length === limit;
-    // set nextCursor only if there actually is more to fetch
-    const nextCursor = hasMore && designs.length ? designs[designs.length - 1]._id.toString() : null;
+    const nextCursor =
+      hasMore && designs.length
+        ? designs[designs.length - 1]._id.toString()
+        : null;
 
-    console.log('fetched designs:', designs.length, 'nextCursor:', nextCursor, 'hasMore:', hasMore);
+    console.log(
+      "fetched designs:",
+      designs.length,
+      "nextCursor:",
+      nextCursor,
+      "hasMore:",
+      hasMore
+    );
 
     res.status(200).json({
       results: designs,
@@ -113,10 +148,80 @@ console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters)
       hasMore,
     });
   } catch (error) {
-    console.error('Error in getDesign:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error("Error in getDesign:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
+
+
+// export const getDesign = async (req, res) => {
+//   try {
+//     console.log('getting design called')
+//     const userId = req.user?.id || null;
+//     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
+//     const cursor = req.query.cursor || null; // <-- new
+//     const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {};
+// console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters)
+//     // Build Mongo query
+//     const andClauses = [];
+//     Object.entries(rawFilters).forEach(([key, values]) => {
+//       if (!Array.isArray(values) || values.length === 0) return;
+//       andClauses.push({
+//         sections: {
+//           $elemMatch: {
+//             title: new RegExp(`^${key}$`, 'i'),
+//             content: { $in: values },
+//           },
+//         },
+//       });
+//     });
+//     const baseQuery = andClauses.length ? { $and: andClauses } : {};
+
+//     // Count total matching docs
+//     const total = await Product.countDocuments(baseQuery);
+
+//     // Cursor query
+//     const findQuery = cursor && mongoose.isValidObjectId(cursor)
+//       ? { ...baseQuery, _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+//       : baseQuery;
+
+//     // Fetch page results
+//     let designs = await Product.find(findQuery)
+//       .sort({ _id: -1 })
+//       .limit(limit)
+//       .populate('postedBy', 'name profile handle followers')
+//       .lean();
+
+//     // sanitize + flags
+//     designs = designs.map(product => {
+//       const base = sanitizeProduct(product);
+//       const isMyProduct = userId ? product.postedBy?._id.toString() === userId.toString() : false;
+//       const isFollowing = userId && !isMyProduct
+//         ? product.postedBy?.followers?.some(f => f.toString() === userId.toString())
+//         : false;
+//       return { ...base, isMyProduct, isFollowing };
+//     });
+
+//     const hasMore = designs.length === limit;
+//     // set nextCursor only if there actually is more to fetch
+//     const nextCursor = hasMore && designs.length ? designs[designs.length - 1]._id.toString() : null;
+
+//     console.log('fetched designs:', designs.length, 'nextCursor:', nextCursor, 'hasMore:', hasMore);
+
+//     res.status(200).json({
+//       results: designs,
+//       limit,
+//       nextCursor,
+//       count: total,
+//       hasMore,
+//     });
+//   } catch (error) {
+//     console.error('Error in getDesign:', error);
+//     res.status(500).json({ success: false, message: 'Internal server error' });
+//   }
+// };
 
 
 // ✅ Get product by ID
