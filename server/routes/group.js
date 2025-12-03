@@ -22,6 +22,7 @@ import {
   addMultipleProductsToGroup,
   updateGroupSubscription,
   searchGroups,
+  getSubscribedGroups,
 } from "../controller/group.js";
 import { upload } from "../config/cloudinery.js";
 
@@ -32,6 +33,7 @@ router.get("/all", getAllGroups);
 router.get("/:id",verifyToken,  getGroupById);
 router.get("/search/search", verifyToken, searchGroups);
 router.get("/by-product/:productId", getGroupsByProductId);
+router.get("/myGroup/subscribed", verifyToken, getSubscribedGroups)
 // group products & contributors
 router.get("/:id/products", getProductsByGroupId); // ?page=1&limit=10
 router.get("/:id/contributors", getContributorsByGroupId);

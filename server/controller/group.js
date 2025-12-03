@@ -1296,19 +1296,48 @@ export const addMultipleProductsToGroup = async (req, res) => {
 export const getSubscribedGroups = async (req, res) => {
   try {
     const userId = req.user.id;
+
+    // 1️⃣ Fetch groups CREATED by the user
+    const myGroups = await Group.find({ owner: userId })
+      .select("name profile about owner createdAt");
+
+    // 2️⃣ Fetch groups SUBSCRIBED by the user
     const user = await User.findById(userId)
-      .populate("subscribedGroups.group", "name profile about")
+      .populate("subscribedGroups.group", "name profile about owner createdAt")
       .select("subscribedGroups");
+
+    const subscribed = user.subscribedGroups.map((entry) => ({
+      ...entry.group._doc,
+      notificationsEnabled: entry.notificationsEnabled,
+      isSubscribed: true,
+      isOwner: String(entry.group.owner) === userId,
+    }));
+
+    // 3️⃣ Convert myGroups to same structure
+    const myGroupsFormatted = myGroups.map((g) => ({
+      ...g._doc,
+      isOwner: true,
+      isSubscribed: false, // creator does not automatically subscribe
+    }));
+
+    // 4️⃣ Merge them (avoid duplicates if user subscribed to own group)
+    const allGroups = [
+      ...myGroupsFormatted,
+      ...subscribed.filter(
+        (g) => !myGroupsFormatted.some((m) => String(m._id) === String(g._id))
+      ),
+    ];
 
     res.status(200).json({
       success: true,
-      groups: user.subscribedGroups,
+      groups: allGroups,
     });
   } catch (error) {
     console.error("getSubscribedGroups error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 // List pending contribution requests for a group (admin/owner)
 export const listContributionRequests = async (req, res) => {
   try {
