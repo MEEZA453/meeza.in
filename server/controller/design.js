@@ -8,6 +8,7 @@ import Order from "../models/Order.js";
 import user from "../models/user.js";
 dotenv.config();
 import mongoose from "mongoose";
+import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.js";
 export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
@@ -515,7 +516,8 @@ console.log(sections  )
           hashtags: parsedHashtags, // ✅ correct spelling matches schema
           postedBy: req.user.id,
         });
-
+  const keywords = extractKeywordsProduct(product);
+    await saveKeywords(keywords);
         await product.save();
         console.log("Product added successfully:", product);
         res.status(201).json({ success: true, product });

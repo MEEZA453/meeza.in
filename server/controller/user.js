@@ -14,6 +14,21 @@ import Notification from  '../models/notification.js'
 const JWT_SECRET = process.env.JWT_SECRET 
 const OTP_TTL_MINUTES = 10;
 
+async function saveRecentlyVisitedUser(viewerId, visitedUserId) {
+  if (!viewerId || !visitedUserId) return;
+
+  await User.findByIdAndUpdate(viewerId, {
+    $pull: { recentlyVisitedUsers: visitedUserId }
+  });
+
+  await User.findByIdAndUpdate(viewerId, {
+    $push: { recentlyVisitedUsers: { $each: [visitedUserId], $position: 0 } }
+  });
+
+  await User.findByIdAndUpdate(viewerId, {
+    $push: { recentlyVisitedUsers: { $each: [], $slice: 10 } }
+  });
+}
 
 export const getUserByHandle = async (req, res) => {
   const { handle } = req.params;
@@ -34,7 +49,9 @@ export const getUserByHandle = async (req, res) => {
       const isFollowing = user.followers.some(f => f._id.toString() === requesterUserId);
       response.isFollowing = isFollowing;
     }
-
+if (requesterUserId && requesterUserId !== user._id.toString()) {
+  saveRecentlyVisitedUser(requesterUserId, user._id);
+}
     return res.status(200).json(response);
   } catch (error) {
     console.error("Error in getUserByHandle:", error);

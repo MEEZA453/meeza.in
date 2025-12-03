@@ -55,7 +55,21 @@ normalApplied: {
 },
   // Followers / Following
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-  following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  recentSearches: {
+    type: [String],
+    default: [],
+  },
+
+  // recently opened user profiles
+  recentlyVisitedUsers: [
+    { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+  ],
+
+  // recently visited groups
+  recentlyVisitedGroups: [
+    { type: mongoose.Schema.Types.ObjectId, ref: "Group" }
+  ],
 });
 
 // Virtuals

@@ -362,6 +362,21 @@ export const searchGroups = async (req, res) => {
   }
 };
 
+async function saveRecentlyVisitedGroup(userId, groupId) {
+  if (!userId || !groupId) return;
+
+  await User.findByIdAndUpdate(userId, {
+    $pull: { recentlyVisitedGroups: groupId }
+  });
+
+  await User.findByIdAndUpdate(userId, {
+    $push: { recentlyVisitedGroups: { $each: [groupId], $position: 0 } }
+  });
+
+  await User.findByIdAndUpdate(userId, {
+    $push: { recentlyVisitedGroups: { $each: [], $slice: 10 } }
+  });
+}
 
 // Get group by id (all group details but not listing products)
 export const getGroupById = async (req, res) => {
@@ -369,7 +384,9 @@ export const getGroupById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user?.id;
     console.log('getting one group ', userId);
-
+if (userId) {
+  saveRecentlyVisitedGroup(userId, id);
+}
     const group = await Group.findById(id)
       .populate({ path: "owner", select: "handle profile _id" })
       .populate({ path: "admins", select: "handle profile _id" })

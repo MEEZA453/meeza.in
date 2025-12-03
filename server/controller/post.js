@@ -8,6 +8,7 @@ import { handleVoteNotification } from "../utils/handleVoteNotification.js";
 // import { calculateScore } from "../utils/calculateScore.js";
 import Vote from "../models/vote.js";
 import mongoose from "mongoose";
+import { extractKeywordsPost, saveKeywords } from "../utils/extractKeywords.js";
 // controllers/assetController.js
 
 
@@ -303,7 +304,8 @@ export const createPost = async (req, res) => {
         score: { averages: {}, totalScore: 0 }    
         
     });
-console.log(post)
+  const keywords = extractKeywordsPost(post);
+    await saveKeywords(keywords);
     const savedPost = await post.save();
     console.log('post created successfully')
     res.status(201).json(savedPost);

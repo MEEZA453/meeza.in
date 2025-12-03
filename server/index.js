@@ -21,6 +21,7 @@ import notificationRoute from './routes/notification.js'
 import achivementRoute from './routes/achivement.js'
 import folderRoute from './routes/folder.js'
 import groupRoute from './routes/group.js'
+import searchRoute from './routes/search.js'
 import { generatePendingAchievements } from './corn/achievementScheduler.js';
 import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
 // Define the server port
@@ -76,7 +77,7 @@ app.use('/notification', notificationRoute)
 app.use('/achievement', achivementRoute)
 app.use('/folder', folderRoute)
 app.use('/group', groupRoute)
-
+app.use('/search', searchRoute)
 
 
 app.use('/promotion', promotionRoute);
