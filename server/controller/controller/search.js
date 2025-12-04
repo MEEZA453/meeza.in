@@ -153,14 +153,13 @@ console.log('searchEverything called with query:', query, 'by user:', userId)
     // ================================
     // 1) KEYWORD AUTOCOMPLETE
     // ================================
-const keywordDocs = await keyword
-  .find({ text: { $regex: "^" + query, $options: "i" } })
-  .sort({ popularity: -1 })
-  .limit(4)
-  .select("text")
-  .lean(); // ensures plain JS objects, not mongoose docs
-
-const keywords = keywordDocs.map(k => k.text);  // << extract only text
+    const keywords = await keyword.find({
+      text: { $regex: "^" + query, $options: "i" }
+    })
+      .sort({ popularity: -1 })
+      .limit(10)
+      .select("text")
+        .map(k => k.text); 
 
     // ================================
     // 2) USERS SEARCH
