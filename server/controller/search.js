@@ -158,7 +158,8 @@ console.log('searchEverything called with query:', query, 'by user:', userId)
     })
       .sort({ popularity: -1 })
       .limit(10)
-      .select("text");
+      .select("text")
+        .map(k => k.text); 
 
     // ================================
     // 2) USERS SEARCH

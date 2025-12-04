@@ -52,7 +52,6 @@ export const getDefaultDesigns = async (req, res) => {
 
 export const getDesign = async (req, res) => {
   try {
-    console.log('getting design called');
     const userId = req.user?.id || null;
     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
     const cursor = req.query.cursor || null;
@@ -138,7 +137,8 @@ export const getDesign = async (req, res) => {
       "nextCursor:",
       nextCursor,
       "hasMore:",
-      hasMore
+      hasMore,
+      'total products:' ,total
     );
 
     res.status(200).json({

@@ -225,8 +225,6 @@ console.log('done')
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-// Delete group (owner only)
 export const deleteGroup = async (req, res) => {
   try {
     const { id } = req.params;
@@ -243,10 +241,21 @@ export const deleteGroup = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Forbidden" });
 
-    // Delete all related contribution requests
+    // Delete related contribution requests
     await ContributionRequest.deleteMany({ group: group._id });
 
-    // ✅ Correct deletion
+    // 🧹 REMOVE group ID from all users
+    await User.updateMany(
+      {},
+      {
+        $pull: {
+          subscribedGroups: { group: group._id },     // remove from subscriptions
+          recentlyVisitedGroups: group._id,           // remove from visited
+        }
+      }
+    );
+
+    // Now delete the group document
     await group.deleteOne();
 
     return res.status(200).json({ success: true, message: "Group deleted" });
@@ -257,6 +266,38 @@ export const deleteGroup = async (req, res) => {
       .json({ success: false, message: error.message });
   }
 };
+
+// Delete group (owner only)
+// export const deleteGroup = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     console.log('Deleting a group', id);
+
+//     const group = await Group.findById(id);
+//     if (!group)
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Group not found" });
+
+//     if (!isOwner(group, req.user.id))
+//       return res
+//         .status(403)
+//         .json({ success: false, message: "Forbidden" });
+
+//     // Delete all related contribution requests
+//     await ContributionRequest.deleteMany({ group: group._id });
+
+//     // ✅ Correct deletion
+//     await group.deleteOne();
+
+//     return res.status(200).json({ success: true, message: "Group deleted" });
+//   } catch (error) {
+//     console.error("deleteGroup:", error);
+//     return res
+//       .status(500)
+//       .json({ success: false, message: error.message });
+//   }
+// };
 
 // Get all groups (lightweight fields)
 export const getAllGroups = async (req, res) => {
@@ -1296,7 +1337,7 @@ export const addMultipleProductsToGroup = async (req, res) => {
 export const getSubscribedGroups = async (req, res) => {
   try {
     const userId = req.user.id;
-
+console.log(userId)
     // 1️⃣ Fetch groups CREATED by the user
     const myGroups = await Group.find({ owner: userId })
       .select("name profile about owner createdAt");
@@ -1306,12 +1347,14 @@ export const getSubscribedGroups = async (req, res) => {
       .populate("subscribedGroups.group", "name profile about owner createdAt")
       .select("subscribedGroups");
 
-    const subscribed = user.subscribedGroups.map((entry) => ({
-      ...entry.group._doc,
-      notificationsEnabled: entry.notificationsEnabled,
-      isSubscribed: true,
-      isOwner: String(entry.group.owner) === userId,
-    }));
+const subscribed = user.subscribedGroups
+  .filter(entry => entry.group)  // ⭐ skip null groups
+  .map((entry) => ({
+    ...entry.group._doc,
+    notificationsEnabled: entry.notificationsEnabled,
+    isSubscribed: true,
+    isOwner: String(entry.group.owner) === userId,
+  }));
 
     // 3️⃣ Convert myGroups to same structure
     const myGroupsFormatted = myGroups.map((g) => ({
