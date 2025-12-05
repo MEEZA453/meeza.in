@@ -57,7 +57,16 @@ export const getDesign = async (req, res) => {
     const cursor = req.query.cursor || null;
     const rawFilters = req.query.filters ? JSON.parse(req.query.filters) : {};
     const searchQuery = req.query.query || ""; // 🔥 new search query
-    console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters, 'query:', searchQuery);
+    const isAssetQuery = typeof req.query.isAsset !== 'undefined' ? req.query.isAsset : null;
+    console.log('limit:', limit, 'cursor:', cursor, 'filters:', rawFilters, 'query:', searchQuery, 'isAssetQuery', isAssetQuery);
+let isAsset = null;
+if (isAssetQuery !== null) {
+  if (typeof isAssetQuery === 'string') {
+    isAsset = isAssetQuery === 'true' ? true : isAssetQuery === 'false' ? false : null;
+  } else if (typeof isAssetQuery === 'boolean') {
+    isAsset = isAssetQuery;
+  }
+}
 
     // ---------- BUILD BASE QUERY ----------
     const andClauses = [];
@@ -74,7 +83,9 @@ export const getDesign = async (req, res) => {
         },
       });
     });
-
+if (isAsset !== null) {
+  andClauses.push({ isAsset: isAsset });
+}
     // 2️⃣ Add SEARCH logic (only if searchQuery is provided)
     if (searchQuery.trim()) {
       const regex = new RegExp(searchQuery, "i");
@@ -503,6 +514,10 @@ console.log(sections  )
         const parsedFaq = faq ? JSON.parse(faq) : [];
 
         const imagePaths = req.files ? req.files.map((file) => file.path) : [];
+const hasOrigin = parsedSections.some(s => {
+  if (!s || !s.title) return false;
+  return String(s.title).trim().toLowerCase() === 'origin';
+});
 
         const product = new Product({
           name,
@@ -513,6 +528,7 @@ console.log(sections  )
           sections: parsedSections,
           sources : parsedSources,
           faq: parsedFaq,
+            isAsset: hasOrigin, 
           hashtags: parsedHashtags, // ✅ correct spelling matches schema
           postedBy: req.user.id,
         });

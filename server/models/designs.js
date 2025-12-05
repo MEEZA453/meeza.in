@@ -8,6 +8,7 @@ const productSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+      isAsset: { type: Boolean, default: false }, // <-- new
     name: { type: String, required: true },
     image: [],
     driveLink: { type: String, required: false },

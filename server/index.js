@@ -24,6 +24,8 @@ import groupRoute from './routes/group.js'
 import searchRoute from './routes/search.js'
 import { generatePendingAchievements } from './corn/achievementScheduler.js';
 import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
+import mongoose from 'mongoose';
+import Product from './models/designs.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -103,6 +105,8 @@ async function testAchievements() {
   console.log("✅ Achievement test completed");
 }
 // testAchievements();
+
+
 server.listen(PORT, () => {
   console.log(`🚀 Server running with Socket.IO on port ${PORT}`);
 });
