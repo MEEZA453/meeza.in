@@ -135,13 +135,17 @@ if (isAsset !== null) {
 
       return { ...base, isMyProduct, isFollowing };
     });
+const hasMore = cursor
+  ? (await Product.countDocuments({
+      ...baseQuery,
+      _id: { $lt: new mongoose.Types.ObjectId(cursor) },
+    })) > designs.length
+  : designs.length + 0 < total;
 
-    const hasMore = designs.length === limit;
-    const nextCursor =
-      hasMore && designs.length
-        ? designs[designs.length - 1]._id.toString()
-        : null;
-
+const nextCursor =
+  hasMore && designs.length
+    ? designs[designs.length - 1]._id.toString()
+    : null;
     console.log(
       "fetched designs:",
       designs.length,
