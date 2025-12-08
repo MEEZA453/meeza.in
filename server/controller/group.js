@@ -357,7 +357,8 @@ export const searchGroups = async (req, res) => {
   try {
     const { query } = req.query;
     const userId = req.user?.id;
-
+    
+    console.log('searching groups', query, userId)
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Search query is required" });
     }
@@ -375,7 +376,6 @@ export const searchGroups = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .lean();
-
     // ✅ Same shape as getAllGroups
     const shaped = groups.map((g) => ({
       _id: g._id,
@@ -388,7 +388,7 @@ export const searchGroups = async (req, res) => {
       createdAt: g.createdAt,
       isMyGroup: userId ? g.owner?._id.toString() === userId.toString() : false,
     }));
-
+console.log('shaped groups ',shaped,  shaped.length)
     return res.status(200).json({
       success: true,
       groups: shaped, // ✅ same key as getAllGroups
@@ -792,7 +792,132 @@ if (existing) {
   }
 };
 
+export const sendContributionRequestToMultipleGroups = async (req, res) => {
+  try {
+    const { productId, groupIds = [], message = "" } = req.body;
+    const requester = req.user.id;
+console.log('sending contro',productId, groupIds)
+    if (!productId || !Array.isArray(groupIds) || groupIds.length === 0) {
+      return res.status(400).json({ success: false, message: "productId and groupIds array required" });
+    }
 
+    const product = await Product.findById(productId).lean();
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    const results = [];
+    const eqId = (a, b) => (a && b) ? a.toString() === b.toString() : false;
+
+    // iterate each group id
+    for (const gId of groupIds) {
+      const group = await Group.findById(gId);
+      if (!group) {
+        results.push({ groupId: gId, status: "group_not_found" });
+        continue;
+      }
+
+      // already in group?
+      const alreadyInGroup = (group.products || []).some(p => eqId(p, productId));
+      if (alreadyInGroup) {
+        results.push({ groupId: group._id, status: "already_in_group" });
+        continue;
+      }
+
+      // can direct add?
+      if (canUserAddDirectly(group, requester)) {
+        // add product to group.products
+        group.products = group.products || [];
+        if (!group.products.some(p => eqId(p, productId))) group.products.push(productId);
+
+        // add contributor
+        group.contributors = group.contributors || [];
+        if (!group.contributors.some(c => eqId(c, requester))) group.contributors.push(requester);
+
+        await group.save();
+
+        // update product.groups (push minimal meta) — update via Product model
+        await Product.findByIdAndUpdate(productId, {
+          $addToSet: {
+            groups: {
+              _id: group._id,
+              name: group.name,
+              profile: group.profile || "",
+              noOfContributors: group.contributors.length,
+              noOfProducts: group.products.length,
+              createdAt: group.createdAt,
+            }
+          }
+        });
+
+        // notify the requester that contribution was approved (optional)
+        await Notification.create({
+          recipient: requester,
+          sender: requester,
+          type: "group_contribution_approved",
+          message: `Your product was added to group ${group.name}`,
+          meta: { assetId: productId, groupId: group._id }
+        });
+
+        results.push({ groupId: group._id, status: "direct_added" });
+        continue;
+      }
+
+      // otherwise, check for existing pending contribution request
+      const existing = await ContributionRequest.findOne({
+        group: group._id,
+        product: productId,
+        requester,
+        status: "pending"
+      });
+
+      if (existing) {
+        // already pending
+        results.push({ groupId: group._id, status: "already_pending", requestId: existing._id });
+        continue;
+      }
+
+      // create new contribution request
+      const reqDoc = new ContributionRequest({
+        group: group._id,
+        product: productId,
+        requester,
+        message
+      });
+      await reqDoc.save();
+
+      // notify owner + admins
+      const recipients = [group.owner, ...(group.admins || [])].filter(Boolean);
+      const notifications = recipients.map(r => ({
+        recipient: r,
+        sender: requester,
+        type: "group_contribution_request",
+        message: `${req.user?.handle || "A user"} wants to contribute a product to ${group.name}`,
+        meta: {
+          assetId: productId,
+          assetImage: Array.isArray(product.image) ? product.image[0] : product.image || null,
+          groupId: group._id,
+          groupName: group.name,
+          groupProfile: group.profile || null,
+          contributorHandle: req.user?.handle || null,
+          contributorProfile: req.user?.profile || null,
+          extra: { requestId: reqDoc._id }
+        }
+      }));
+
+      if (notifications.length) {
+        await Notification.insertMany(notifications);
+      }
+
+      results.push({ groupId: group._id, status: "request_created", requestId: reqDoc._id });
+    } // end for
+console.log('donene')
+    return res.status(200).json({ success: true, results });
+  } catch (error) {
+    console.error("sendContributionRequestToMultipleGroups error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Server error" });
+  }
+};
 
 // Accept contribution (admin or owner)
 export const acceptContribution = async (req, res) => {
@@ -1331,6 +1456,149 @@ export const addMultipleProductsToGroup = async (req, res) => {
   }
 };
 
+export const addProductToMultipleGroups = async (req, res) => {
+  try {
+    const { productId, groupIds } = req.body;
+    const userId = req.user.id;
+console.log('adding product to multiple groups', productId, groupIds)
+    if (!productId || !Array.isArray(groupIds) || groupIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "productId and array of groupIds are required",
+      });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    const addedGroups = [];
+    const groupsRequiringRequest = [];
+    const notifications = [];
+
+    // We'll update product.groups in memory and save once at the end
+    for (const groupId of groupIds) {
+      const group = await Group.findById(groupId);
+      if (!group) continue; // skip invalid groupId
+
+      // if product already in group, skip
+      if (group.products?.some((p) => p.toString() === product._id.toString())) {
+        continue;
+      }
+
+      // check permission
+const canDirectAdd = canUserAddDirectly(group, userId);
+if (!canDirectAdd) {
+  console.log("🔒 Direct add blocked → request required");
+groupsRequiringRequest.push(groupId);
+continue; // go to next group
+}
+
+      // direct add -> update group
+      group.products = group.products || [];
+      group.contributors = group.contributors || [];
+
+      if (!group.products.some((p) => p.toString() === product._id.toString())) {
+        group.products.push(product._id);
+      }
+
+      // add contributor (the user performing the add)
+      if (!group.contributors.some((c) => c.toString() === userId.toString())) {
+        group.contributors.push(userId);
+      }
+
+      await group.save();
+
+      // add the group metadata to product.groups if not present
+      const groupAlreadyInProduct = (product.groups || []).some(
+        (g) => g._id && g._id.toString() === group._id.toString()
+      );
+      if (!groupAlreadyInProduct) {
+        product.groups.push({
+          _id: group._id,
+          name: group.name,
+          profile: group.profile,
+          noOfContributors: group.contributors.length,
+          noOfProducts: group.products.length,
+          createdAt: group.createdAt,
+        });
+      }
+
+      addedGroups.push(group._id.toString());
+
+      // Prepare notifications for this group (send after product save)
+      const contributor = await User.findById(userId).select("handle profile");
+      const recipientsDocs = await User.find({
+        "subscribedGroups.group": group._id,
+        "subscribedGroups.notificationsEnabled": true,
+      }).select("_id");
+
+      const recipients = recipientsDocs
+        .map((u) => u._id.toString())
+        .filter((id) => id !== userId.toString());
+
+      if (recipients.length > 0) {
+        // get minimal product info for notification meta
+        const productLean = await Product.findById(product._id)
+          .select("image name postedBy createdAt")
+          .populate("postedBy", "handle profile")
+          .lean();
+
+        const productImage =
+          Array.isArray(productLean?.image) && productLean.image.length > 0
+            ? productLean.image[0]
+            : "";
+
+        const isMultiple = groupIds.length > 1;
+
+        recipients.forEach((recipientId) => {
+          notifications.push({
+            recipient: recipientId,
+            sender: userId,
+            type: "group_post",
+            message: `New product added in ${group.name}`,
+            meta: {
+              groupId: group._id,
+              groupName: group.name,
+              groupProfile: group.profile,
+              assetId: productLean._id,
+              assetImage: productImage,
+              contributorHandle: contributor?.handle || "",
+              contributorProfile: contributor?.profile || "",
+              isMultiple,
+            },
+          });
+        });
+      }
+    } // end for
+
+    // save product once
+    await product.save();
+
+    // bulk insert notifications if any
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+      console.log(`📢 Notified ${notifications.length} recipients (may include duplicates)`);
+    }
+
+const requiresRequest = groupsRequiringRequest.length > 0;
+
+return res.status(200).json({
+  success: true,
+  message: `Added product to ${addedGroups.length} groups`,
+  addedGroups,
+  groupsRequiringRequest,
+  requiresRequest,
+});
+
+  } catch (error) {
+    console.error("❌ addProductToMultipleGroups error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Server error" });
+  }
+};
 
 
 

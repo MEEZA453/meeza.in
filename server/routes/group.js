@@ -23,6 +23,8 @@ import {
   updateGroupSubscription,
   searchGroups,
   getSubscribedGroups,
+  addProductToMultipleGroups,
+  sendContributionRequestToMultipleGroups,
 } from "../controller/group.js";
 import { upload } from "../config/cloudinery.js";
 
@@ -59,6 +61,7 @@ router.post("/subscription", verifyToken, updateGroupSubscription);
 router.put("/add-product", verifyToken, addProductToGroupDirect); // body: groupId, productId (admin/owner)
 router.put("/remove-product", verifyToken, removeProductFromGroup); // body: groupId, productId
 router.put("/remove-multiple-products", verifyToken, removeMultipleProductsFromGroup); // body: groupId, productId
-
+router.post("/add-product-to-multiple-groups", verifyToken, addProductToMultipleGroups)
+router.post("/contribute-multiple", verifyToken, sendContributionRequestToMultipleGroups);
 
 export default router;

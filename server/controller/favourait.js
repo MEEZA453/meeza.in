@@ -166,9 +166,20 @@ export const getFavoritesByHandle = async (req, res) => {
       .lean();
 
     // preserve favourite order
-    const ordered = paginatedIds.map(id =>
-      posts.find(p => String(p._id) === String(id))
-    );
+ let ordered = paginatedIds
+  .map(id => posts.find(p => String(p._id) === String(id)))
+  .filter(p => p !== undefined); // remove nulls
+
+// if any deleted posts were found, clean them from DB favourites
+if (ordered.length !== paginatedIds.length) {
+  const existingIds = posts.map(p => String(p._id));
+
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { favourites: user.favourites.filter(id => existingIds.includes(String(id))) } }
+  );
+}
+
 
     console.log("got this shit ", ordered.length);
 

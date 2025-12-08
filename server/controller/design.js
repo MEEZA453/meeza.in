@@ -510,11 +510,11 @@ function getCloudinaryPublicId(imageUrl) {
 
       try {
         const { name, amount, driveLink, sections, faq, hashtags, sources, description } = req.body;
-console.log(sections  )
+
         const parsedSections = sections ? JSON.parse(sections) : [];
         const parsedSources = sources ? JSON.parse(sources): []
         const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
-        console.log(hashtags)
+
         const parsedFaq = faq ? JSON.parse(faq) : [];
 
         const imagePaths = req.files ? req.files.map((file) => file.path) : [];
@@ -539,7 +539,7 @@ const hasOrigin = parsedSections.some(s => {
   const keywords = extractKeywordsProduct(product);
     await saveKeywords(keywords);
         await product.save();
-        console.log("Product added successfully:", product);
+
         res.status(201).json({ success: true, product });
       } catch (error) {
         console.error("Error:", error.message);
