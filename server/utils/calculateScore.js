@@ -3,6 +3,7 @@ import Vote from "../models/vote.js";
 import Post from "../models/post.js";
 export const calculateScore = (voteFields = [], voteStats = {}) => {
   const averages = {};
+  console.log("Calculating score with voteFields:", voteFields, "and voteStats:", voteStats);
   for (const f of voteFields) {
     const juryCount = voteStats?.jury?.count || 0;
     const normalCount = voteStats?.normal?.count || 0;

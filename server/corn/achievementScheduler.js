@@ -122,7 +122,7 @@ for (const post of categoryPosts) {
 
   if (normalVotes >= minNormal && juryDevVotes >= minJuryDev) {
 
-    const scoreData = await calculateScore(post._id);
+    const scoreData = await calculateScore(post.voteFields, post.voteStats);
     const avgScore = scoreData.totalScore;
 
     scored.push({ post, avgScore });

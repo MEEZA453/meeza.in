@@ -1618,15 +1618,17 @@ console.log(req.user)
 console.log("voteData:", voteData);
     const arr = roleKey === "jury" ? post.recentJuryVotes : post.recentNormalVotes;
     const idx = arr.findIndex(v => String(v.user._id) === String(upsertedVote.user._id));
-    if (idx !== -1) {
-      arr[idx].fields = voteData.fields;
-      arr[idx].totalVote = voteData.totalVote;
-      arr[idx].votedAt = voteData.votedAt;
-    } else {
-      arr.unshift(voteData);
-      if (arr.length > 4) arr.pop();
-    }
+if (idx !== -1) {
 
+  arr[idx].user = voteData.user;   // ✅ THIS LINE FIXES EVERYTHING
+
+  arr[idx].fields = voteData.fields;
+  arr[idx].totalVote = voteData.totalVote;
+  arr[idx].votedAt = voteData.votedAt;
+} else {
+  arr.unshift(voteData);
+  if (arr.length > 4) arr.pop();
+}
     // 7) Recompute score from post.voteStats
     const averages = {};
     for (const f of voteFields) {
@@ -1666,6 +1668,13 @@ console.log("voteData:", voteData);
     // emit socket (outside txn)
     const io = req.app.get("io");
     io.emit("vote:update", { updatedPost });
+  if (String(updatedPost.createdBy._id) !== String(userId)) {
+      await handleVoteNotification(
+        updatedPost.createdBy._id,
+        updatedPost._id,
+        userId
+      );
+    }
 
     return res.json({ post: updatedPost });
 

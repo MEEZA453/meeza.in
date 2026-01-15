@@ -1,6 +1,7 @@
 // utils/handleVoteNotification.js
 import Notification from "../models/notification.js";
 import Post from "../models/post.js";
+import Vote from "../models/vote.js";
 
 export const handleVoteNotification = async (recipientId, postId, senderId) => {
   try {
@@ -13,30 +14,36 @@ export const handleVoteNotification = async (recipientId, postId, senderId) => {
       .populate("meta.voters", "handle profile")
       .exec();
 
-    // get latest post to count total unique voters
-    const post = await Post.findById(postId).populate("votes.user", "handle profile");
+    // get post (no heavy votes array)
+    const post = await Post.findById(postId);
     if (!post) return null;
 
-    // total unique voters (count of votes array)
-    const totalVotes = post.votes.length;
+    // ✅ total votes (O(1), production-safe)
+    const totalVotes =
+      (post.voteStats?.normal?.count || 0) +
+      (post.voteStats?.jury?.count || 0);
 
-    // prepare latest two voters (including this sender)
-    // find latest two unique voter IDs sorted by vote time (last updated)
-    const latestTwo = post.votes
-      .slice(-2) // get latest two
-      .map((v) => v.user?._id)
+    // ✅ latest two voters (indexed query)
+    const latestTwoVotes = await Vote.find({ post: postId })
+      .sort({ updatedAt: -1 })
+      .limit(2)
+      .populate("user", "handle profile")
+      .lean();
+
+    const latestTwo = latestTwoVotes
+      .map(v => v.user?._id)
       .filter(Boolean);
 
     if (existingNotification) {
-      // update it instead of creating new
+      // update grouped notification
       existingNotification.meta = {
         voters: latestTwo,
         totalVotes,
       };
-      existingNotification.isRead = false; // mark unread on update
+      existingNotification.isRead = false;
       await existingNotification.save();
     } else {
-      // create a new notification
+      // create new notification
       existingNotification = await Notification.create({
         recipient: recipientId,
         sender: senderId,
