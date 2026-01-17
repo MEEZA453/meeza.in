@@ -62,14 +62,7 @@ normalApplied: {
   },
 
   // recently opened user profiles
-  recentlyVisitedUsers: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "User" }
-  ],
-
-  // recently visited groups
-  recentlyVisitedGroups: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "Group" }
-  ],
+folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
 });
 
 // Virtuals

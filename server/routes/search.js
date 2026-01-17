@@ -4,7 +4,7 @@ import {
   getSearchDefaults,
   deleteRecentKeyword,
   deleteRecentVisitedUser,
-  deleteRecentVisitedGroup,
+  // deleteRecentVisitedGroup,
   saveRecentKeyword
 } from "../controller/search.js";
 
@@ -19,6 +19,6 @@ router.get("/", verifyToken, searchEverything);
 router.post("/delete-keyword", verifyToken, deleteRecentKeyword);
 router.post("/delete-visited-user", verifyToken, deleteRecentVisitedUser);
 router.post("/save", verifyToken, saveRecentKeyword);
-router.post("/delete-visited-group", verifyToken, deleteRecentVisitedGroup);
+// router.post("/delete-visited-group", verifyToken, deleteRecentVisitedGroup);
 
 export default router;

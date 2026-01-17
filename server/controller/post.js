@@ -1675,7 +1675,7 @@ if (idx !== -1) {
         userId
       );
     }
-
+    
     return res.json({ post: updatedPost });
 
   } catch (err) {

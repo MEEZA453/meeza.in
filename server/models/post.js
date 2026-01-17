@@ -88,6 +88,7 @@ voteStats: {
     sums: { type: mongoose.Schema.Types.Mixed, default: {} }
   }
 },
+savedIn: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
 appreciationCount: { type: Number, default: 0 },
 currentAchievement: achievementSchema,
   achievementHistory: [achievementSchema],

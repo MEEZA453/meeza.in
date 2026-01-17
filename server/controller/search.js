@@ -1,5 +1,5 @@
 import User from "../models/user.js";
-import Group from "../models/group.js";
+// import Group from "../models/group.js";
 import keyword from "../models/keyword.js";
 
 // ===========================
@@ -66,24 +66,24 @@ export const deleteRecentVisitedUser = async (req, res) => {
     res.status(500).json({ success: false });
   }
 };
-export const deleteRecentVisitedGroup = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    const { removeGroupId } = req.body;
+// export const deleteRecentVisitedGroup = async (req, res) => {
+//   try {
+//     const userId = req.user?.id;
+//     const { removeGroupId } = req.body;
 
-    if (!userId || !removeGroupId)
-      return res.status(400).json({ success: false, message: "removeGroupId missing" });
+//     if (!userId || !removeGroupId)
+//       return res.status(400).json({ success: false, message: "removeGroupId missing" });
 
-    await User.findByIdAndUpdate(userId, {
-      $pull: { recentlyVisitedGroups: removeGroupId }
-    });
+//     await User.findByIdAndUpdate(userId, {
+//       $pull: { recentlyVisitedGroups: removeGroupId }
+//     });
 
-    res.json({ success: true, removed: removeGroupId });
-  } catch (err) {
-    console.error("❌ Error deleting visited group:", err);
-    res.status(500).json({ success: false });
-  }
-};
+//     res.json({ success: true, removed: removeGroupId });
+//   } catch (err) {
+//     console.error("❌ Error deleting visited group:", err);
+//     res.status(500).json({ success: false });
+//   }
+// };
 
 // ===========================
 // GET DEFAULT RESULTS
@@ -94,16 +94,12 @@ export const getSearchDefaults = async (req, res) => {
 
     const user = userId
       ? await User.findById(userId)
-          .select("recentSearches recentlyVisitedUsers recentlyVisitedGroups")
+          .select("recentSearches recentlyVisitedUsers ")
           .populate({
             path: "recentlyVisitedUsers",
             select: "handle name profile"
           })
-          .populate({
-            path: "recentlyVisitedGroups",
-            select: "name profile owner",
-            populate: { path: "owner", select: "handle profile" }
-          })
+     
       : null;
 
     const trendingUsers = await User.find({})
@@ -111,11 +107,11 @@ export const getSearchDefaults = async (req, res) => {
       .limit(10)
       .select("handle name profile");
 
-    const trendingGroups = await Group.find({})
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .select("name profile owner")
-      .populate({ path: "owner", select: "handle profile" });
+    // const trendingGroups = await Group.find({})
+    //   .sort({ createdAt: -1 })
+    //   .limit(10)
+    //   .select("name profile owner")
+    //   .populate({ path: "owner", select: "handle profile" });
 
     return res.status(200).json({
       success: true,
@@ -123,10 +119,10 @@ export const getSearchDefaults = async (req, res) => {
       // 👉 only return the latest 4
       recentKeywords: user?.recentSearches?.slice(0, 4) || [],
       recentUsers: user?.recentlyVisitedUsers?.slice(0, 4) || [],
-      recentGroups: user?.recentlyVisitedGroups?.slice(0, 4) || [],
+      // recentGroups: user?.recentlyVisitedGroups?.slice(0, 4) || [],
 
       trendingUsers,
-      trendingGroups
+      // trendingGroups
     });
 
   } catch (err) {
@@ -178,13 +174,13 @@ const keywords = keywordDocs.map(k => k.text);  // << extract only text
     // ================================
     // 3) GROUPS SEARCH
     // ================================
-    const groups = await Group.find({
-      name: { $regex: query, $options: "i" }
-    })
-      .limit(20)
-      .select("name profile owner subscribers contributors")
-      .populate({ path: "owner", select: "handle profile" })
-      .lean();
+    // const groups = await Group.find({
+    //   name: { $regex: query, $options: "i" }
+    // })
+    //   .limit(20)
+    //   .select("name profile owner subscribers contributors")
+    //   .populate({ path: "owner", select: "handle profile" })
+    //   .lean();
 
     const formattedGroups = groups.map(g => ({
       _id: g._id,
@@ -200,7 +196,7 @@ const keywords = keywordDocs.map(k => k.text);  // << extract only text
       query,
       keywords,
       users,
-      groups: formattedGroups
+      // groups: formattedGroups
     });
 
   } catch (err) {
