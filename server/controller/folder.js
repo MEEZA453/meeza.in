@@ -127,15 +127,15 @@ export const editFolder = async (req, res) => {
     if (!folder) {
       return res.status(404).json({
         success: false,
-        message: "Folder not found"
+        message: "Folder not found",
       });
     }
 
-    // ownership check
+    // ✅ ownership check
     if (folder.owner.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden"
+        message: "Forbidden",
       });
     }
 
@@ -149,35 +149,42 @@ export const editFolder = async (req, res) => {
       }
 
       const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "folders"
+        folder: "folders",
       });
 
       folder.profile = result.secure_url;
     }
 
-    // update fields safely
+    // ✅ update fields safely
     if (name !== undefined) folder.name = name;
     if (description !== undefined) folder.description = description;
     if (visibility !== undefined) folder.visibility = visibility;
 
     await folder.save();
 
+    // 🔥 IMPORTANT: re-fetch & populate owner
+    const populatedFolder = await Folder.findById(folder._id)
+      .populate("owner", "_id handle profile");
+
+    console.log("done editing", populatedFolder);
+
     return res.status(200).json({
       success: true,
-      folder
+      folder: populatedFolder,
     });
-
   } catch (error) {
     console.error("editFolder error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
 
 
+
 export const deleteFolder = async (req, res) => {
+  console.log('deleting folder')
   try {
     const { id } = req.params;
     console.log("Deleting a folder", id);
@@ -220,6 +227,7 @@ export const deleteFolder = async (req, res) => {
 
     // ❌ Finally delete folder
     await folder.deleteOne();
+  console.log(' folder deleted')
 
     return res.status(200).json({
       success: true,
