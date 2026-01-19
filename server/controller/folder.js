@@ -457,10 +457,7 @@ export const getFolderById = async (req, res) => {
       isMyFolder: isOwner
     };
 
-    return res.status(200).json({
-      success: true,
-      folder: result
-    });
+    return res.status(200).json(folder);
 
   } catch (error) {
     console.error("getFolderById error:", error);
@@ -575,7 +572,7 @@ export const getProductsByFolderId = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-
+console.log('getting products by folder id', id , userId)
     const limit = parseInt(req.query.limit || "10", 10);
     const page = parseInt(req.query.page || "1", 10);
 
@@ -627,7 +624,8 @@ export const getProductsByFolderId = async (req, res) => {
         select: "profile handle _id"
       })
       .lean();
-
+ 
+      console.log('products found' , products.length)
     return res.status(200).json({
       success: true,
       products,
@@ -701,7 +699,7 @@ export const getPostsByFolderId = async (req, res) => {
         select: "profile handle _id"
       })
       .lean();
-
+ console.log('posts found' , posts.length)
     return res.status(200).json({
       success: true,
       posts,
@@ -760,7 +758,7 @@ export const removeProductFromFolder = async (req, res) => {
   try {
     const { folderId, productId } = req.body;
     const userId = req.user.id;
-
+console.log('removing product from folder', folderId, productId)
     const folder = await Folder.findById(folderId);
     if (!folder)
       return res.status(404).json({ success: false, message: "Folder not found" });
@@ -775,7 +773,7 @@ export const removeProductFromFolder = async (req, res) => {
     await Product.findByIdAndUpdate(productId, {
       $pull: { parent: folderId }
     });
-
+console.log('removed product from folder')
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("removeProductFromFolder:", error);
@@ -868,7 +866,7 @@ export const addProductToFolder = async (req, res) => {
   try {
     const { folderId, productId } = req.body;
     const userId = req.user.id;
-
+console.log('adding product to folder' , folderId , productId)
     const folder = await Folder.findById(folderId);
     if (!folder)
       return res.status(404).json({ success: false, message: "Folder not found" });
@@ -881,9 +879,9 @@ export const addProductToFolder = async (req, res) => {
     });
 
     await Product.findByIdAndUpdate(productId, {
-      $addToSet: { parent: folderId }
+      $addToSet: { savedIn: folderId }
     });
-
+console.log('added product to folder')
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("addProductToFolder:", error);
