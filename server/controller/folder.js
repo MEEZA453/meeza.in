@@ -8,6 +8,7 @@ import Notification from "../models/notification.js";
 import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
 import notification from "../models/notification.js";
 import Folder from "../models/folder.js";
+import mongoose from "mongoose";
 // helper to check if user is owner
 // const isOwner = (group, userId) => group.owner.toString() === userId.toString();
 // // helper to check if admin (owner included)
@@ -317,13 +318,13 @@ export const getMyFolders = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-
     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const skip = (page - 1) * limit;
-    console.log("getting my folders", owner, page, limit);
-    const filter = { owner };
 
+    console.log("getting my folders", owner, page, limit);
+
+    const filter = { owner };
     const totalCount = await Folder.countDocuments(filter);
 
     if (totalCount === 0) {
@@ -337,7 +338,7 @@ export const getMyFolders = async (req, res) => {
       });
     }
 
-    // Fetch folders with minimal fields
+    // Fetch folders
     const folders = await Folder.find(filter)
       .select("name profile posts products createdAt")
       .sort({ createdAt: -1 })
@@ -345,54 +346,97 @@ export const getMyFolders = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // For each folder fetch up to 4 recent posts and 4 recent products (DB-side limits),
-    // merge and pick top 4 by createdAt.
     const processed = await Promise.all(
       folders.map(async (f) => {
-        // Limit the ids we pass to the DB so the $in list isn't huge
-        // (if arrays can be huge consider storing addedAt on folder items)
-        const postIds = (f.posts || []).slice(-200);      // keep sane length
-        const productIds = (f.products || []).slice(-200);
+        // 🔥 merge posts & products with savedAt
+        const mergedItems = [
+      ...(f.posts || [])
+  .map(p => {
+    // support old ObjectId format
+    if (typeof p === "string" || p instanceof mongoose.Types.ObjectId) {
+      return null;
+    }
+    if (!p?.post) return null;
+
+    return {
+      type: "post",
+      itemId: p.post,
+      savedAt: p.savedAt
+    };
+  })
+  .filter(Boolean),
+       ...(f.products || [])
+  .map(p => {
+    if (typeof p === "string" || p instanceof mongoose.Types.ObjectId) {
+      return null;
+    }
+    if (!p?.product) return null;
+
+    return {
+      type: "product",
+      itemId: p.product,
+      savedAt: p.savedAt
+    };
+  })
+  .filter(Boolean),
+        ];
+
+        // sort by recently added to folder
+        mergedItems.sort(
+          (a, b) => new Date(b.savedAt) - new Date(a.savedAt)
+        );
+
+        // take top 4
+        const recent = mergedItems.slice(0, 4);
+
+        const postIds = recent
+          .filter(i => i.type === "post")
+          .map(i => i.itemId);
+
+        const productIds = recent
+          .filter(i => i.type === "product")
+          .map(i => i.itemId);
 
         const [postsData, productsData] = await Promise.all([
           Post.find({ _id: { $in: postIds } })
-            .select("images image cover thumbnail createdAt") // common fields for an image
-            .sort({ createdAt: -1 })
-            .limit(4)
+            .select("images image cover thumbnail")
             .lean(),
           Product.find({ _id: { $in: productIds } })
-            .select("images image cover thumbnail createdAt")
-            .sort({ createdAt: -1 })
-            .limit(4)
+            .select("images image cover thumbnail")
             .lean()
         ]);
 
-        // helper to pick an image url from document
         const pickImage = (doc) =>
           doc?.image ||
-          (Array.isArray(doc?.images) && doc.images.length ? doc.images[0] : undefined) ||
+          (Array.isArray(doc?.images) && doc.images[0]) ||
           doc?.cover ||
           doc?.thumbnail ||
           "";
 
         const normalized = [
-          ...postsData.map((d) => ({
+          ...postsData.map(d => ({
             _id: d._id,
             type: "post",
-            image: pickImage(d),
-            createdAt: d.createdAt
+            image: pickImage(d)
           })),
-          ...productsData.map((d) => ({
+          ...productsData.map(d => ({
             _id: d._id,
             type: "product",
-            image: pickImage(d),
-            createdAt: d.createdAt
+            image: pickImage(d)
           }))
         ];
 
-        // sort by createdAt desc and take top 4
-        normalized.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const recentItems = normalized.slice(0, 4);
+        // keep same saved order
+        const recentItems = recent
+          .map(r =>
+            normalized.find(
+          n =>
+  n?._id &&
+  r?.itemId &&
+  n._id.toString() === r.itemId.toString()
+            )
+          )
+          .filter(Boolean);
 
         return {
           _id: f._id,
@@ -406,7 +450,9 @@ export const getMyFolders = async (req, res) => {
         };
       })
     );
-console.log('i got my folders ')
+
+    console.log("i got my folders");
+
     return res.status(200).json({
       success: true,
       folders: processed,
@@ -580,7 +626,6 @@ export const getProductsByFolderId = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-console.log('getting products by folder id', id , userId)
     const limit = parseInt(req.query.limit || "10", 10);
     const page = parseInt(req.query.page || "1", 10);
 
@@ -609,6 +654,7 @@ console.log('getting products by folder id', id , userId)
     }
 
     const totalCount = folder.products.length;
+    console.log("total products in folder", totalCount);
 
     if (totalCount === 0) {
       return res.status(200).json({
@@ -621,22 +667,40 @@ console.log('getting products by folder id', id , userId)
       });
     }
 
+    // ✅ SORT BY SAVED TIME (folder logic)
+    const sortedProducts = [...folder.products].sort(
+      (a, b) => new Date(b.savedAt) - new Date(a.savedAt)
+    );
+
     const startIndex = (page - 1) * limit;
     const endIndex = Math.min(page * limit, totalCount);
-    const productIds = folder.products.slice(startIndex, endIndex);
 
+    const sliced = sortedProducts.slice(startIndex, endIndex);
+    const productIds = sliced.map(p => p.product);
+
+    // ❌ NO SORT HERE
     const products = await Product.find({ _id: { $in: productIds } })
-      .sort({ createdAt: -1 })
       .populate({
         path: "postedBy",
         select: "profile handle _id"
       })
       .lean();
- 
-      console.log('products found' , products.length)
+
+    // ✅ MAP FOR FAST LOOKUP
+    const productMap = new Map(
+      products.map(p => [p._id.toString(), p])
+    );
+
+    // ✅ KEEP FOLDER SAVED ORDER
+    const orderedProducts = sliced
+      .map(p => productMap.get(p.product.toString()))
+      .filter(Boolean);
+
+    console.log("products found", orderedProducts.length);
+
     return res.status(200).json({
       success: true,
-      products,
+      products: orderedProducts,
       page,
       limit,
       count: totalCount,
@@ -651,6 +715,7 @@ console.log('getting products by folder id', id , userId)
     });
   }
 };
+
 export const getPostsByFolderId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -658,8 +723,6 @@ export const getPostsByFolderId = async (req, res) => {
 
     const limit = parseInt(req.query.limit || "10", 10);
     const page = parseInt(req.query.page || "1", 10);
-
-    console.log("getting posts by folder id", id, page, limit);
 
     const folder = await Folder.findById(id)
       .select("owner visibility posts")
@@ -675,7 +738,6 @@ export const getPostsByFolderId = async (req, res) => {
     const isOwner =
       userId && folder.owner?.toString() === userId.toString();
 
-    // 🔒 private folder protection
     if (folder.visibility === "private" && !isOwner) {
       return res.status(403).json({
         success: false,
@@ -684,7 +746,6 @@ export const getPostsByFolderId = async (req, res) => {
     }
 
     const totalCount = folder.posts.length;
-
     if (totalCount === 0) {
       return res.status(200).json({
         success: true,
@@ -696,21 +757,36 @@ export const getPostsByFolderId = async (req, res) => {
       });
     }
 
+    // ✅ sort by savedAt (folder time)
+    const sortedPosts = [...folder.posts].sort(
+      (a, b) => new Date(b.savedAt) - new Date(a.savedAt)
+    );
+
     const startIndex = (page - 1) * limit;
     const endIndex = Math.min(page * limit, totalCount);
-    const postIds = folder.posts.slice(startIndex, endIndex);
+
+    const sliced = sortedPosts.slice(startIndex, endIndex);
+    const postIds = sliced.map(p => p.post);
 
     const posts = await Post.find({ _id: { $in: postIds } })
-      .sort({ createdAt: -1 })
       .populate({
         path: "createdBy",
         select: "profile handle _id"
       })
       .lean();
- console.log('posts found' , posts.length)
+
+    // ✅ keep folder saved order
+    const postMap = new Map(
+      posts.map(p => [p._id.toString(), p])
+    );
+
+    const orderedPosts = sliced
+      .map(p => postMap.get(p.post.toString()))
+      .filter(Boolean);
+
     return res.status(200).json({
       success: true,
-      posts,
+      posts: orderedPosts,
       page,
       limit,
       count: totalCount,
@@ -725,6 +801,7 @@ export const getPostsByFolderId = async (req, res) => {
     });
   }
 };
+
 
 export const removeMultipleProductsFromFolder = async (req, res) => {
   try {
@@ -766,26 +843,47 @@ export const removeProductFromFolder = async (req, res) => {
   try {
     const { folderId, productId } = req.body;
     const userId = req.user.id;
-console.log('removing product from folder', folderId, productId)
-    const folder = await Folder.findById(folderId);
+
+    console.log("removing product from folder", folderId, productId);
+
+    const folder = await Folder.findOne({
+      _id: folderId,
+      owner: userId
+    });
+
     if (!folder)
-      return res.status(404).json({ success: false, message: "Folder not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found or forbidden"
+      });
 
-    if (folder.owner.toString() !== userId.toString())
-      return res.status(403).json({ success: false, message: "Forbidden" });
+    // ✅ REMOVE FROM FOLDER (embedded object)
+    await Folder.updateOne(
+      { _id: folderId },
+      {
+        $pull: {
+          products: { product: new mongoose.Types.ObjectId(productId) }
+        }
+      }
+    );
 
-    await Folder.findByIdAndUpdate(folderId, {
-      $pull: { products: productId }
-    });
+    // ✅ REMOVE FROM PRODUCT.savedIn (or parent if that’s your field)
+    await Product.updateOne(
+      { _id: productId },
+      {
+        $pull: { savedIn: new mongoose.Types.ObjectId(folderId) }
+      }
+    );
 
-    await Product.findByIdAndUpdate(productId, {
-      $pull: { parent: folderId }
-    });
-console.log('removed product from folder')
+    console.log("removed product from folder");
+
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("removeProductFromFolder:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -828,44 +926,35 @@ export const removePostFromFolder = async (req, res) => {
   try {
     const { folderId, postId } = req.body;
     const userId = req.user.id;
-    
-    console.log('removing post from folder')
-    const folder = await Folder.findById(folderId);
-    if (!folder) {
-      return res.status(404).json({
-        success: false,
-        message: "Folder not found"
-      });
-    }
 
-    if (folder.owner.toString() !== userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden"
-      });
-    }
+    const folder = await Folder.findOne({
+      _id: folderId,
+      owner: userId
+    });
 
-    folder.posts = (folder.posts || []).filter(
-      (id) => id.toString() !== postId.toString()
+    if (!folder)
+      return res.status(404).json({ success: false, message: "Folder not found or forbidden" });
+
+    await Folder.updateOne(
+      { _id: folderId },
+      {
+        $pull: {
+          posts: { post: new mongoose.Types.ObjectId(postId) }
+        }
+      }
     );
-console.log('removed')
-    await folder.save();
 
-    await Post.findByIdAndUpdate(postId, {
-      $pull: { savedIn: folder._id }
-    });
+    await Post.updateOne(
+      { _id: postId },
+      {
+        $pull: { savedIn: new mongoose.Types.ObjectId(folderId) }
+      }
+    );
 
-    return res.status(200).json({
-      success: true,
-      folder
-    });
-
+    return res.status(200).json({ success: true });
   } catch (error) {
     console.error("removePostFromFolder:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 const isFolderOwner = (folder, userId) =>
@@ -882,10 +971,14 @@ console.log('adding product to folder' , folderId , productId)
     if (folder.owner.toString() !== userId.toString())
       return res.status(403).json({ success: false, message: "Forbidden" });
 
-    await Folder.findByIdAndUpdate(folderId, {
-      $addToSet: { products: productId }
-    });
-
+await Folder.findByIdAndUpdate(folderId, {
+  $addToSet: {
+    products: {
+      product: productId,
+      savedAt: new Date()
+    }
+  }
+});
     await Product.findByIdAndUpdate(productId, {
       $addToSet: { savedIn: folderId }
     });
@@ -937,13 +1030,25 @@ export const addPostToFolder = async (req, res) => {
     if (folder.owner.toString() !== userId.toString())
       return res.status(403).json({ success: false, message: "Forbidden" });
 
-    // ✅ prevent duplicates
-    const alreadyInFolder = folder.posts.some(
-      p => p.toString() === postId
-    );
+    // ✅ prevent duplicates (supports old + new format)
+    const alreadyInFolder = folder.posts.some(p => {
+      // old format: ObjectId
+      if (typeof p === "string" || p instanceof mongoose.Types.ObjectId) {
+        return p.toString() === postId;
+      }
+      // new format
+      if (p?.post) {
+        return p.post.toString() === postId;
+      }
+      return false;
+    });
 
     if (!alreadyInFolder) {
-      folder.posts.push(postId);
+      folder.posts.push({
+        post: postId,
+        savedAt: new Date()
+      });
+
       await folder.save();
 
       // 🔥 ALSO UPDATE POST
@@ -958,11 +1063,13 @@ export const addPostToFolder = async (req, res) => {
       folderId,
       postId
     });
+
   } catch (error) {
     console.error("addPostToFolder:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 export const addMultiplePostsToFolder = async (req, res) => {
   try {
     const { folderId, postIds } = req.body;
