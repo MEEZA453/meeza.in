@@ -1,5 +1,4 @@
 import User from "../models/user.js";
-import Group from "../models/group.js";
 import keyword from "../models/keyword.js";
 
 // ===========================
@@ -94,15 +93,10 @@ export const getSearchDefaults = async (req, res) => {
 
     const user = userId
       ? await User.findById(userId)
-          .select("recentSearches recentlyVisitedUsers recentlyVisitedGroups")
+          .select("recentSearches recentlyVisitedUsers ")
           .populate({
             path: "recentlyVisitedUsers",
             select: "handle name profile"
-          })
-          .populate({
-            path: "recentlyVisitedGroups",
-            select: "name profile owner",
-            populate: { path: "owner", select: "handle profile" }
           })
       : null;
 
@@ -111,11 +105,6 @@ export const getSearchDefaults = async (req, res) => {
       .limit(10)
       .select("handle name profile");
 
-    const trendingGroups = await Group.find({})
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .select("name profile owner")
-      .populate({ path: "owner", select: "handle profile" });
 
     return res.status(200).json({
       success: true,
@@ -123,10 +112,8 @@ export const getSearchDefaults = async (req, res) => {
       // 👉 only return the latest 4
       recentKeywords: user?.recentSearches?.slice(0, 4) || [],
       recentUsers: user?.recentlyVisitedUsers?.slice(0, 4) || [],
-      recentGroups: user?.recentlyVisitedGroups?.slice(0, 4) || [],
 
-      trendingUsers,
-      trendingGroups
+      trendingUsers
     });
 
   } catch (err) {
@@ -177,29 +164,11 @@ console.log('searchEverything called with query:', query, 'by user:', userId)
     // ================================
     // 3) GROUPS SEARCH
     // ================================
-    const groups = await Group.find({
-      name: { $regex: query, $options: "i" }
-    })
-      .limit(20)
-      .select("name profile owner subscribers contributors")
-      .populate({ path: "owner", select: "handle profile" })
-      .lean();
-
-    const formattedGroups = groups.map(g => ({
-      _id: g._id,
-      name: g.name,
-      profile: g.profile,
-      owner: g.owner,
-      totalSubscribers: (g.subscribers || []).length,
-      noOfContributors: (g.contributors || []).length,
-    }));
-
 
     return res.status(200).json({
       query,
       keywords,
       users,
-      groups: formattedGroups
     });
 
   } catch (err) {

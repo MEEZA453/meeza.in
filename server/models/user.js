@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
-const subscribedGroupSchema = new mongoose.Schema(
-  {
-    group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
-    notificationsEnabled: { type: Boolean, default: false }, // like YouTube bell 🔔
-  },
-  { _id: false }
-);
+// const subscribedGroupSchema = new mongoose.Schema(
+//   {
+//     group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
+//     notificationsEnabled: { type: Boolean, default: false }, // like YouTube bell 🔔
+//   },
+//   { _id: false }
+// );
 const userSchema = new mongoose.Schema({
   name: String,
   email: {
@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
     enum: ["normal", "jury", "dev"],
     default: "normal"
   },
-  subscribedGroups: [subscribedGroupSchema],
+  // subscribedGroups: [subscribedGroupSchema],
   // Jury application pending
   juryApplied: {
     type: Boolean,
@@ -60,7 +60,9 @@ normalApplied: {
     type: [String],
     default: [],
   },
-
+recentlyVisitedUsers: [
+  { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+],
   // recently opened user profiles
 folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
 });

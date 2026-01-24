@@ -101,7 +101,7 @@ export const getSearchDefaults = async (req, res) => {
           })
      
       : null;
-
+console.log('my user  is',user)
     const trendingUsers = await User.find({})
       .sort({ createdAt: -1 })
       .limit(10)
@@ -119,8 +119,6 @@ export const getSearchDefaults = async (req, res) => {
       // 👉 only return the latest 4
       recentKeywords: user?.recentSearches?.slice(0, 4) || [],
       recentUsers: user?.recentlyVisitedUsers?.slice(0, 4) || [],
-      // recentGroups: user?.recentlyVisitedGroups?.slice(0, 4) || [],
-
       trendingUsers,
       // trendingGroups
     });
@@ -181,15 +179,6 @@ const keywords = keywordDocs.map(k => k.text);  // << extract only text
     //   .select("name profile owner subscribers contributors")
     //   .populate({ path: "owner", select: "handle profile" })
     //   .lean();
-
-    const formattedGroups = groups.map(g => ({
-      _id: g._id,
-      name: g.name,
-      profile: g.profile,
-      owner: g.owner,
-      totalSubscribers: (g.subscribers || []).length,
-      noOfContributors: (g.contributors || []).length,
-    }));
 
 
     return res.status(200).json({
