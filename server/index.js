@@ -24,7 +24,10 @@ import searchRoute from './routes/search.js'
 import { generatePendingAchievements } from './corn/achievementScheduler.js';
 import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
 import mongoose from 'mongoose';
+import webhookRoutes from "./routes/webhook.js";
+import subscriptionRoutes from "./routes/subscribtion.js";
 import Product from './models/designs.js';
+import { startSubscriptionCron } from './corn/subscribtion.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -78,8 +81,8 @@ app.use('/notification', notificationRoute)
 app.use('/achievement', achivementRoute)
 app.use('/folder', folderRoute)
 app.use('/search', searchRoute)
-
-
+app.use("/webhooks", webhookRoutes);
+app.use("/subscriptions", subscriptionRoutes);
 app.use('/promotion', promotionRoute);
 app.use('/hotlist', hotListRouter);
 
@@ -104,7 +107,7 @@ async function testAchievements() {
 }
 // testAchievements();
 
-
+startSubscriptionCron();
 server.listen(PORT, () => {
   console.log(`🚀 Server running with Socket.IO on port ${PORT}`);
 });

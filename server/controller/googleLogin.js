@@ -70,6 +70,7 @@ export const googleLogin = async (req, res) => {
       handle: user.handle,
       instagram: user.instagram,
       bio: user.bio,
+      premium: user.premium,
       role: user.role,
       token: generateToken(user._id),
       isAlreadyUser,

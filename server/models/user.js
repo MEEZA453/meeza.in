@@ -60,12 +60,19 @@ normalApplied: {
     type: [String],
     default: [],
   },
+  // inside your existing userSchema definition:
+premium: { type: Boolean, default: false },
+premiumExpiresAt: { type: Date, default: null },
+// optional quick link to an upcoming subscription (not required, but handy)
+upcomingSubscription: { type: mongoose.Schema.Types.ObjectId, ref: "Subscription", default: null },
+
 recentlyVisitedUsers: [
   { type: mongoose.Schema.Types.ObjectId, ref: "User" }
 ],
   // recently opened user profiles
 folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
 });
+
 
 // Virtuals
 userSchema.virtual("isDev").get(function () { return this.role === "dev"; });

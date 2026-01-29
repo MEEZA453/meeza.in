@@ -405,8 +405,9 @@ export const registerUser = async (req, res) => {
       email: user.email,
       role: user.role,
       token: generateToken(user._id),
+      premium: user.premium,
     });
-
+console.log(user)
     console.log("✅ User created successfully:", user.email, "Role:", user.role);
   } catch (err) {
     console.error(err);
@@ -453,8 +454,9 @@ export const loginUser = async (req, res) => {
       email: user.email,
       role: user.role,
       token: generateToken(user._id),
+      premium: user.premium,
     });
-
+console.log(user)
     console.log("✅ Login successful:", user.email);
   } catch (err) {
     console.error(err);
@@ -535,7 +537,7 @@ export const updateUserProfile = async (req, res) => {
     user.website = website || '';
     user.instagram = instagram || '';
     user.bio = bio || '';
-
+    user.premium = user.premium;
     await user.save();
 console.log('user updated successfully' , user)
     res.status(200).json({ message: "Profile updated", user });
