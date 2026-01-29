@@ -31,19 +31,34 @@ function chooseGateway(currency) {
 export const createSubscriptionOrder = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { plan, currency = "USD" } = req.body;
+    const { plan, gateway: requestedGateway } = req.body;
 
     if (!["monthly", "yearly"].includes(plan)) {
       return res.status(400).json({ success: false, message: "Invalid plan" });
     }
 
-    const prices = { monthly: 5, yearly: 48 };
-    const amount = prices[plan];
+    // Base prices in USD
+    const pricesUSD = { monthly: 5, yearly: 48 };
+    const amountUSD = pricesUSD[plan];
 
-    const gateway = chooseGateway(currency);
+    // Decide gateway
+    const gateway = requestedGateway || "stripe";
 
     const startDate = new Date();
     const endDate = computeEndDate(startDate, plan);
+
+    let amount;
+    let currency;
+
+    // 🔁 Currency handling
+    if (gateway === "razorpay") {
+      const USD_TO_INR = 83; // keep configurable
+      amount = Math.round(amountUSD * USD_TO_INR);
+      currency = "INR";
+    } else {
+      amount = amountUSD;
+      currency = "USD";
+    }
 
     const subscription = await Subscription.create({
       user: userId,
@@ -56,9 +71,7 @@ export const createSubscriptionOrder = async (req, res) => {
       status: "PENDING",
     });
 
-    // =======================
-    // 🟢 STRIPE (NO checkout)
-    // =======================
+    // 🟦 Stripe flow
     if (gateway === "stripe") {
       return res.json({
         success: true,
@@ -69,17 +82,15 @@ export const createSubscriptionOrder = async (req, res) => {
       });
     }
 
-    // =======================
-    // 🟢 RAZORPAY (unchanged)
-    // =======================
+    // 🟩 Razorpay flow
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
 
     const order = await razorpay.orders.create({
-      amount: amount * 100,
-      currency,
+      amount: amount * 100, // paise
+      currency: "INR",
       receipt: `sub_${subscription._id}`,
     });
 
@@ -92,15 +103,15 @@ export const createSubscriptionOrder = async (req, res) => {
       orderId: order.id,
       key: process.env.RAZORPAY_KEY_ID,
       amount: order.amount,
-      currency,
+      currency: "INR",
       subscriptionId: subscription._id,
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Order creation failed" });
   }
 };
-
 
 // export const createSubscriptionOrder = async (req, res) => {
 //   try {
@@ -332,7 +343,7 @@ console.log("Stripe subscription activated for subscription:", subscription);
       premiumExpiresAt: subscription.endDate,
       upcomingSubscription: null,
     });
-
+console.log("Razorpay subscription verified for subscription:", subscription);
     return res.json({
       success: true,
       message: "Razorpay subscription verified",
