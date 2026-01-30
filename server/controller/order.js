@@ -71,7 +71,7 @@ export const unlockFreeProduct = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-// export const downloadProduct = async (req, res) => {
+
 //   console.log('downloading')
 //   try {
 //     const { token } = req.query;

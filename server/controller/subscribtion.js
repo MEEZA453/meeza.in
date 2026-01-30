@@ -4,10 +4,6 @@ import Subscription from "../models/subscription.js";
 import User from "../models/user.js"; // your user model
 import Payment from "../models/payment.js"; // optional: your payment model if used
 import { stripe } from "../lib/stripe.js";
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
 
 function computeEndDate(startDate, plan) {
   const start = new Date(startDate);
@@ -113,107 +109,7 @@ export const createSubscriptionOrder = async (req, res) => {
   }
 };
 
-// export const createSubscriptionOrder = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     const { plan, currency = "USD" } = req.body;
-// console.log("Creating subscription order for user:", userId, "plan:", plan, "currency:", currency);
-//     if (!["monthly", "yearly"].includes(plan)) {
-//       return res.status(400).json({ success: false, message: "Invalid plan" });
-//     }
 
-//     const prices = { monthly: 5, yearly: 48 };
-//     const amount = prices[plan];
-
-//     const gateway = chooseGateway(currency);
-
-//     const startDate = new Date();
-//     const endDate = computeEndDate(startDate, plan);
-
-//     // Create subscription DB entry
-//     const subscription = await Subscription.create({
-//       user: userId,
-//       plan,
-//       amount,
-//       currency,
-//       startDate,
-//       endDate,
-//       gateway,
-//       status: "PENDING",
-//     });
-
-//     // =======================
-//     // STRIPE
-//     // =======================
-//     if (gateway === "stripe") {
-//       console.log("Creating Stripe checkout session for subscription:", subscription._id);
-//       const session = await stripe.checkout.sessions.create({
-//   mode: "payment",
-//   payment_method_types: ["card"],
-//   customer_email: req.user.email,
-//   line_items: [
-//     {
-//       price_data: {
-//         currency,
-//         product_data: { name: `${plan} Premium Subscription` },
-//         unit_amount: Math.round(amount * 100),
-//       },
-//       quantity: 1,
-//     },
-//   ],
-//   metadata: { subscriptionId: subscription._id.toString(), userId },
-//   success_url: `${process.env.CLIENT_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-//   cancel_url: `${process.env.CLIENT_URL}/subscription/cancel`,
-// });
-
-// console.log("Checkout session URL:", session.url);
-// console.log("Stripe success URL:", `${process.env.CLIENT_URL}/subscription/success`);
-//       subscription.stripeSessionId = session.id;
-//       await subscription.save();
-//  console.log("Stripe checkout session created:", session.id);
-//       return res.json({
-//         success: true,
-//         gateway: "stripe",
-//         sessionId: session.id,
-//          checkoutUrl: session.url, 
-//         publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
-//       });
-//     }
-
-//     // =======================
-//     // RAZORPAY
-//     // =======================
-
-//     console.log("Creating Razorpay order for subscription:", subscription._id);
-//     const razorpay = new Razorpay({
-//       key_id: process.env.RAZORPAY_KEY_ID,
-//       key_secret: process.env.RAZORPAY_KEY_SECRET,
-//     });
-
-//     const order = await razorpay.orders.create({
-//       amount: amount * 100,
-//       currency,
-//       receipt: `sub_${subscription._id}`,
-//     });
-
-//     subscription.razorpayOrderId = order.id;
-//     await subscription.save();
-
-//     res.json({
-//       success: true,
-//       gateway: "razorpay",
-//       orderId: order.id,
-//       key: process.env.RAZORPAY_KEY_ID,
-//       amount: order.amount,
-//       currency,
-//       subscriptionId: subscription._id,
-//     });
-// console.log("Razorpay order created:", order.id);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ success: false, message: "Order creation failed" });
-//   }
-// };
 export const createStripePaymentIntent = async (req, res) => {
   try {
     const { subscriptionId } = req.body;

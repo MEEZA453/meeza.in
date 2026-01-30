@@ -1,18 +1,18 @@
+// models/Payment.js
 import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
-    buyer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true }],
-    sellers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }],
-    orderId: { type: String, required: true },
-    paymentId: String,
+    order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
+    payer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    payee: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // seller
     amount: { type: Number, required: true },
-    currency: { type: String, default: "INR" },
-    status: { type: String, enum: ["CREATED", "COMPLETED", "FAILED"], default: "CREATED" },
+    currency: { type: String, required: true },
+    gateway: { type: String, enum: ["stripe", "razorpay"], required: true },
+    gatewayPaymentId: String,
+    meta: { type: Object }, // optional raw gateway metadata
   },
   { timestamps: true }
 );
 
-
-export default mongoose.model("Payment", paymentSchema);
+export default mongoose.models.Payment || mongoose.model("Payment", paymentSchema);

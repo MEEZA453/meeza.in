@@ -8,7 +8,7 @@ import path from 'path';
 import multer from 'multer';
 import designRoute from './routes/postDesign.js';
 import highlightDesignRoute from './routes/postHighlightDesign.js';
-import paymentRoute from './routes/payment.js'
+import orderPaymentRoutes from './routes/orderPayment.js';
 import cartRoute from './routes/cart.js'
 import userRoute from './routes/user.js'
 import postRoute from './routes/post.js'
@@ -86,7 +86,7 @@ app.use("/subscriptions", subscriptionRoutes);
 app.use('/promotion', promotionRoute);
 app.use('/hotlist', hotListRouter);
 
-app.use('/payment' , paymentRoute )
+app.use('/orders', orderPaymentRoutes)
 app.use('/order' , orderRouter )
 
 app.use('/cart' , cartRoute)
