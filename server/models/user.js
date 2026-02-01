@@ -44,9 +44,12 @@ removeJuryApplied: {
   type: Boolean,
   default: false
 },
-// In User model
+stripeAccountId: { type: String, sparse: true },
+stripeOnboarded: { type: Boolean, default: false },
+razorpayAccountId: { type: String, sparse: true },
+razorpayOnboarded: { type: Boolean, default: false },
 balance: { type: Number, default: 0 },
-razorpayAccountId: { type: String, unique: true, sparse: true },
+
 
 // Normal application pending
 normalApplied: {

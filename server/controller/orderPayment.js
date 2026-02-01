@@ -8,7 +8,7 @@ import Payment from "../models/payment.js";
 import Notification from "../models/notification.js";
 import nodemailer from "nodemailer";
 import { stripe } from "../lib/stripe.js";
-
+import  WalletTransaction  from "../models/wallet.js";
 const USD_TO_INR = process.env.USD_TO_INR ? Number(process.env.USD_TO_INR) : 83;
 
 // Utility to compute normalized USD amount from whatever currency
@@ -142,28 +142,49 @@ console.log("Created Stripe PaymentIntent:", paymentIntent.id);
 };
 
 // Verify payment (Stripe PaymentIntent or Razorpay signature)
+// controller/orderPayment.js (only the verifyProductPayment function replaced)
+
 export const verifyProductPayment = async (req, res) => {
   console.log("verifyProductPayment:", req.body);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     // Stripe path
     if (req.body.paymentIntentId) {
       const { paymentIntentId } = req.body;
       const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
       if (intent.status !== "succeeded") {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ success: false, message: "Stripe payment not successful" });
       }
 
       const orderId = intent.metadata.orderId;
-      const order = await Order.findById(orderId).populate("product seller buyer");
-      if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+      const order = await Order.findById(orderId).populate("product seller buyer").session(session);
+      if (!order) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+
+      // Idempotency: if Payment already exists for this gatewayPaymentId, skip duplication
+      const existingPayment = await Payment.findOne({ gatewayPaymentId: intent.id }).session(session);
+      if (existingPayment) {
+        // already processed - return success (but refresh order)
+        await session.commitTransaction();
+        session.endSession();
+        const refreshedOrder = await Order.findById(order._id).populate("product seller buyer");
+        return res.json({ success: true, message: "Payment already processed", order: refreshedOrder });
+      }
 
       // mark order paid
       order.status = "paid";
       order.stripePaymentIntentId = intent.id;
-      await order.save();
+      await order.save({ session });
 
       // Create Payment record
-      await Payment.create({
+      const payment = await Payment.create([{
         order: order._id,
         payer: order.buyer._id,
         payee: order.seller._id,
@@ -172,23 +193,59 @@ export const verifyProductPayment = async (req, res) => {
         gateway: "stripe",
         gatewayPaymentId: intent.id,
         meta: intent,
-      });
-console.log("Payment record created for order:", order._id);
-      // Credit seller wallet in USD-normalized amount
+      }], { session });
+
+      console.log("Payment record created for order:", order._id);
+
+      // compute credit amount (normalized to USD)
       const creditUSD = order.amountUSD ?? toUSD(order.amount, order.currency);
-      await User.findByIdAndUpdate(order.seller._id, { $inc: { balance: creditUSD } });
-console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
-      // Notify seller
-      await Notification.create({
+
+      // Fetch seller and compute new balance
+      const seller = await User.findById(order.seller._id).session(session);
+      if (!seller) throw new Error("Seller not found during credit");
+
+      const newBalance = (seller.balance || 0) + creditUSD;
+
+      // Create WalletTransaction (CREDIT)
+      const walletTx = await WalletTransaction.create([{
+        user: seller._id,
+        type: "CREDIT",
+        amount: creditUSD,
+        currency: "USD",
+        reference: intent.id,
+        status: "SUCCESS",
+        product: {
+          _id: order.product._id,
+          name: order.product.name,
+          amount: order.amountUSD || order.amount,
+          image: order.product.image?.[0] || "",
+        },
+        purchasedBy: {
+          _id: order.buyer._id,
+          handle: order.buyer.handle || "",
+          name: order.buyer.name || "",
+          email: order.buyer.email || "",
+        },
+        balanceAfter: newBalance,
+        gateway: "stripe",
+      }], { session });
+
+      // Update seller balance
+      await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
+
+      console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
+
+      // Notification
+      await Notification.create([{
         recipient: order.seller._id,
         sender: order.buyer._id,
         type: "order_created",
         message: `Your product "${order.product.name || order.product}" was purchased.`,
         meta: { productId: order.product._id, orderId: order._id },
         image: order.product.image?.[0] || "",
-      });
+      }], { session });
 
-      // send email to buyer with download link (optional)
+      // optional email to buyer
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || "smtp.gmail.com",
         port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
@@ -202,8 +259,10 @@ console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
         subject: `Your purchase for ${order.product.name}`,
         html: `<p>Thanks for purchasing <b>${order.product.name}</b>. The seller has been credited and the download link is available in your orders.</p>`,
       };
-
       await transporter.sendMail(mail).catch((e) => console.warn("mail send failed", e));
+
+      await session.commitTransaction();
+      session.endSession();
 
       return res.json({ success: true, message: "Payment verified and seller credited", order });
     }
@@ -215,8 +274,11 @@ console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
       razorpay_signature,
       orderId: orderIdFromClient,
     } = req.body;
-
+    console.log("Razorpay verification data:", req.body);
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !orderIdFromClient) {
+      await session.abortTransaction();
+      session.endSession();
+      console.log("Missing Razorpay verification data");
       return res.status(400).json({ success: false, message: "Missing verification data" });
     }
 
@@ -226,18 +288,34 @@ console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ success: false, message: "Invalid signature" });
     }
 
-    const order = await Order.findById(orderIdFromClient).populate("product seller buyer");
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    const order = await Order.findById(orderIdFromClient).populate("product seller buyer").session(session);
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // Idempotency: check Payment with this razorpay_payment_id
+    const existingPayment = await Payment.findOne({ gatewayPaymentId: razorpay_payment_id }).session(session);
+    if (existingPayment) {
+      await session.commitTransaction();
+      session.endSession();
+      const refreshedOrder = await Order.findById(order._id).populate("product seller buyer");
+      return res.json({ success: true, message: "Payment already processed", order: refreshedOrder });
+    }
 
     order.razorpayPaymentId = razorpay_payment_id;
     order.razorpaySignature = razorpay_signature;
     order.status = "paid";
-    await order.save();
+    await order.save({ session });
+    console.log("Razorpay payment verified for order:", order._id);
 
-    await Payment.create({
+    await Payment.create([{
       order: order._id,
       payer: order.buyer._id,
       payee: order.seller._id,
@@ -246,45 +324,85 @@ console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
       gateway: "razorpay",
       gatewayPaymentId: razorpay_payment_id,
       meta: { razorpay_order_id, razorpay_signature },
-    });
+    }], { session });
 
     // Credit seller: convert INR to USD-equivalent and credit USD value to wallet
     const creditUSD = order.amountUSD ?? toUSD(order.amount, order.currency);
-    await User.findByIdAndUpdate(order.seller._id, { $inc: { balance: creditUSD } });
 
-    // Notify the seller
-    await Notification.create({
+    const seller = await User.findById(order.seller._id).session(session);
+    if (!seller) throw new Error("Seller not found during credit");
+
+    const newBalance = (seller.balance || 0) + creditUSD;
+
+    await WalletTransaction.create([{
+      user: seller._id,
+      type: "CREDIT",
+      amount: creditUSD,
+      currency: "USD",
+      reference: razorpay_payment_id,
+      status: "SUCCESS",
+      product: {
+        _id: order.product._id,
+        name: order.product.name,
+        amount: order.amountUSD || order.amount,
+        image: order.product.image?.[0] || "",
+      },
+      purchasedBy: {
+        _id: order.buyer._id,
+        handle: order.buyer.handle || "",
+        name: order.buyer.name || "",
+        email: order.buyer.email || "",
+      },
+      balanceAfter: newBalance,
+      gateway: "razorpay",
+    }], { session });
+
+    await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
+
+    console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
+
+    await Notification.create([{
       recipient: order.seller._id,
       sender: order.buyer._id,
       type: "order_paid",
       message: `Your product "${order.product.name || order.product}" was purchased.`,
       meta: { productId: order.product._id, orderId: order._id },
       image: order.product.image?.[0] || "",
-    });
+    }], { session });
 
-    // Optionally email buyer
-    const transporter = nodemailer.createTransport({
+    // optional email to buyer
+    const transporter2 = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
       port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
       secure: false,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
 
-    const mail = {
+    const mail2 = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: order.buyer.email,
       subject: `Your purchase for ${order.product.name}`,
       html: `<p>Thanks for purchasing <b>${order.product.name}</b>. The seller has been credited and the download link is available in your orders.</p>`,
     };
 
-    await transporter.sendMail(mail).catch((e) => console.warn("mail send failed", e));
+    await transporter2.sendMail(mail2).catch((e) => console.warn("mail send failed", e));
+
+    await session.commitTransaction();
+    session.endSession();
 
     return res.json({ success: true, message: "Razorpay payment verified and seller credited", order });
   } catch (err) {
     console.error("verifyProductPayment error:", err);
-    return res.status(500).json({ success: false, message: "Failed to verify payment" });
+    try {
+      await session.abortTransaction();
+      session.endSession();
+    } catch (e) {
+      console.warn("failed aborting tx", e);
+    }
+    return res.status(500).json({ success: false, message: "Failed to verify payment", error: err.message });
   }
 };
+
 
 // small helper (same logic you used earlier)
 function chooseGatewayFromCurrency(currency) {

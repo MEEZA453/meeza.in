@@ -20,6 +20,8 @@ import hotListRouter from './routes/hotlist.js'
 import notificationRoute from './routes/notification.js'
 import achivementRoute from './routes/achivement.js'
 import folderRoute from './routes/folder.js'
+import payoutRoutes from "./routes/payout.js";
+import connectRoute from "./routes/connect.js";
 import searchRoute from './routes/search.js'
 import { generatePendingAchievements } from './corn/achievementScheduler.js';
 import { finalizePendingAchievements } from './corn/achievementFinalizer.js';
@@ -28,6 +30,7 @@ import webhookRoutes from "./routes/webhook.js";
 import subscriptionRoutes from "./routes/subscribtion.js";
 import Product from './models/designs.js';
 import { startSubscriptionCron } from './corn/subscribtion.js';
+import Post from './models/post.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -48,30 +51,11 @@ const io = new IOServer(server, {
 // attach to app so controllers can access it via req.app.get('io')
 app.set('io', io);
 
-// Serve images statically from 'uploads' folder
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Multer Storage Configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/"); // Store in 'uploads' folder
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + "-" + file.originalname); // Unique file names
-    }
-});
 
-const upload = multer({ storage });
-
-// Image Upload Route
-app.post('/upload', upload.single('image'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-    }
-    res.json({ imageUrl: `/uploads/${req.file.filename}` }); // Send back image path
-});
-
-// Routes
+app.use(express.json({ limit: "500mb" }));
+app.use(express.urlencoded({ limit: "500mb", extended: true }));
+server.setTimeout(10 * 60 * 1000); // 10 minutes
 app.use('/', designRoute);
 app.use('/post',postRoute)
 app.use("/user", userRoute);
@@ -85,14 +69,48 @@ app.use("/webhooks", webhookRoutes);
 app.use("/subscriptions", subscriptionRoutes);
 app.use('/promotion', promotionRoute);
 app.use('/hotlist', hotListRouter);
-
+app.use('/connect', connectRoute)
 app.use('/orders', orderPaymentRoutes)
 app.use('/order' , orderRouter )
-
+app.use("/payouts", payoutRoutes);
 app.use('/cart' , cartRoute)
 
 // Connect to DB and start server
 connectDB();
+// async function migrateImagesToMedia() {
+//   try {
+//     const posts = await Post.find({}).lean(); // raw objects
+//     console.log(`Found ${posts.length} posts to check`);
+
+//     for (const rawPost of posts) {
+//       if (Array.isArray(rawPost.images) && rawPost.images.length > 0) {
+//         // Convert images to media format
+//         const media = rawPost.images.map(img => {
+//           if (typeof img === "string") return { url: img, type: "image" };
+//           return img;
+//         });
+
+//         // Directly update in DB
+//         await Post.updateOne(
+//           { _id: rawPost._id },
+//           { $set: { media }, $unset: { images: "" } }
+//         );
+
+//         console.log(`Migrated post ${rawPost._id}`);
+//       } else {
+//         console.log(`Skipping post ${rawPost._id} (no images array)`);
+//       }
+//     }
+
+//     console.log("Migration complete!");
+//     process.exit(0);
+//   } catch (err) {
+//     console.error(err);
+//     process.exit(1);
+//   }
+// }
+
+// migrateImagesToMedia();
 async function testAchievements() {
   console.log("🏁 Testing achievement generation...");
 // await generatePendingAchievements("day", 1, 1); // for quick test
@@ -106,7 +124,37 @@ async function testAchievements() {
   console.log("✅ Achievement test completed");
 }
 // testAchievements();
+// async function migrateImagesToMedia() {
+//   try {
+//     // Fetch all posts that have images field OR maybe undefined
+//     const posts = await Post.find({});
+//     console.log(`Found ${posts.length} posts to check`);
 
+//     for (const post of posts) {
+//       // If images exist and is non-empty array
+//       if (Array.isArray(post.images) && post.images.length > 0) {
+//         post.media = post.images.map(img => {
+//           if (typeof img === "string") return { url: img, type: "image" };
+//           return img; // already object
+//         });
+
+//         post.images = undefined; // remove old field
+//         await post.save();
+//         console.log(`Migrated post ${post._id}`);
+//       } else {
+//         console.log(`Skipping post ${post._id} (no images array)`);
+//       }
+//     }
+
+//     console.log("Migration complete!");
+//     process.exit(0);
+//   } catch (err) {
+//     console.error(err);
+//     process.exit(1);
+//   }
+// }
+
+// migrateImagesToMedia();
 startSubscriptionCron();
 server.listen(PORT, () => {
   console.log(`🚀 Server running with Socket.IO on port ${PORT}`);

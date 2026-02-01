@@ -24,11 +24,15 @@ const pendingSchema = new mongoose.Schema({
 
 
 const postSchema = new mongoose.Schema({
-  name: { type: String, required: true },
   description: String,
   category: [{ type: String, required: true }],
   hashtags: [String],
-  images: [],
+media: [
+  {
+    url: { type: String, required: true },
+    type: { type: String, enum: ["image", "video"], required: true }
+  }
+],
   voteFields: [{ type: String }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],

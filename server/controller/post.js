@@ -1,6 +1,7 @@
 import Post from "../models/post.js";
  import User from "../models/user.js";
 import { cloudinary , getCloudinaryPublicId} from "../config/cloudinery.js";
+// import {v2 as cloudinary} from "cloudinary";
 import Notification from "../models/notification.js";
 import Product from "../models/designs.js"
 import { sanitizeProduct } from "../utils/sanitizeProduct.js";
@@ -251,15 +252,45 @@ export const getAssetsOfPost = async (req, res) => {
 
 
 // ✅ Create a post
-export const createPost = async (req, res) => {
-  console.log('Creating post...');
+export const getUploadSignature = (req, res) => {
+  console.log("Generating Cloudinary upload signature");
   try {
-    const { name, description, category, hashtags, voteFields } = req.body;
+    const timestamp = Math.floor(Date.now() / 1000);
 
-    if (!name || !category) {
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp,
+        folder: "posts",
+        resource_type: "auto", // image or video
+      },
+      process.env.CLOUDINARY_API_SECRET
+    );
+
+    res.json({
+      signature,
+      timestamp,
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+    });
+    console.log("Generated Cloudinary signature successfully");
+  } catch (err) {
+    console.error("Failed to generate Cloudinary signature", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// 2️⃣ Create Post (expects URLs from frontend)
+export const createPost = async (req, res) => {
+  console.log("Creating post...");
+  try {
+    const { description, category, voteFields, media } = req.body;
+console.log("Received data:", { description, category, voteFields, media });
+    if (!voteFields || !category) {
       return res.status(400).json({ message: "Required fields missing" });
     }
- let categoryArray = [];
+
+    // parse category
+    let categoryArray= [];
     if (typeof category === "string") {
       try {
         const parsed = JSON.parse(category);
@@ -279,35 +310,31 @@ export const createPost = async (req, res) => {
       return res.status(400).json({ message: "Category array required" });
     }
 
-    let uploadedImages = [];
-    if (req.files && req.files.length > 0) {
-      uploadedImages = await Promise.all(
-        req.files.map(async (file) => {
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: "posts",
-          });
-          return result.secure_url;
-        })
-      );
-    }
+    // parse media array
+// parse media array
+let uploadedMedia = [];
+if (Array.isArray(media)) {
+  uploadedMedia = media;
+} else if (typeof media === "string") {
+  uploadedMedia = JSON.parse(media);
+}
 
     const post = new Post({
-      name,
       description,
       category: categoryArray,
-      hashtags: hashtags ? JSON.parse(hashtags) : [],
-      voteFields: voteFields ? JSON.parse(voteFields) : [], // ✅ parse from frontend
-      images: uploadedImages,
+voteFields: Array.isArray(voteFields) ? voteFields : JSON.parse(voteFields),
+      media: uploadedMedia,
       createdBy: req.user.id,
-        recentNormalVotes: [],
-  recentJuryVotes: [],
-        score: { averages: {}, totalScore: 0 }    
-        
+      recentNormalVotes: [],
+      recentJuryVotes: [],
+      score: { averages: {}, totalScore: 0 },
     });
-  const keywords = extractKeywordsPost(post);
+
+    const keywords = extractKeywordsPost(post);
     await saveKeywords(keywords);
+
     const savedPost = await post.save();
-    console.log('post created successfully')
+    console.log("Post created successfully");
     res.status(201).json(savedPost);
   } catch (err) {
     console.error("Post creation failed:", err);
@@ -315,51 +342,37 @@ export const createPost = async (req, res) => {
   }
 };
 
-
+// 3️⃣ Edit Post (also expects URLs from frontend)
 export const editPost = async (req, res) => {
   console.log("Editing post...");
   try {
     const { id } = req.params;
-    const { name, description, category, hashtags, voteFields, removeImages } = req.body;
+    const { description, category, hashtags, voteFields, media, removeImages } = req.body;
 
-    console.log("Images to remove:", removeImages);
-
-    // 1️⃣ Find post
     const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found" });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
 
-    // 2️⃣ Handle uploaded new images
-    let newImages = [];
-    if (req.files && req.files.length > 0) {
-      newImages = await Promise.all(
-        req.files.map(async (file) => {
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: "posts",
-          });
-          return result.secure_url;
-        })
-      );
-    }
-
-    // 3️⃣ Handle removing old images
-    let updatedImages = [...post.images];
+    // remove old media
+    let updatedMedia = post.media || [];
     if (removeImages) {
-      const imagesToRemove = JSON.parse(removeImages);
-      for (const url of imagesToRemove) {
-        const publicId = getCloudinaryPublicId(url);
+      const mediaToRemove = JSON.parse(removeImages);
+      for (const item of mediaToRemove) {
+        const publicId = getCloudinaryPublicId(item.url);
         if (publicId) {
-          await cloudinary.uploader.destroy(publicId);
+          await cloudinary.uploader.destroy(publicId, {
+            resource_type: item.type === "video" ? "video" : "image",
+          });
         }
-        updatedImages = updatedImages.filter((img) => img !== url);
+        updatedMedia = updatedMedia.filter(m => m.url !== item.url);
       }
     }
 
-    // 4️⃣ Merge old + new images
-    updatedImages = [...updatedImages, ...newImages];
+    // add new media (frontend sends array of {url, type})
+    if (media) {
+      updatedMedia = [...updatedMedia, ...JSON.parse(media)];
+    }
 
-    // 5️⃣ Parse category like createPost
+    // parse category
     let categoryArray = [];
     if (category) {
       if (typeof category === "string") {
@@ -378,25 +391,21 @@ export const editPost = async (req, res) => {
       }
     }
 
-    // 6️⃣ Update post fields
-    post.name = name || post.name;
+    // update post
     post.description = description || post.description;
     post.category = categoryArray.length ? categoryArray : post.category;
     post.hashtags = hashtags ? JSON.parse(hashtags) : post.hashtags;
     post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
-    post.images = updatedImages;
+    post.media = updatedMedia;
 
-    // 7️⃣ Save updated post
     await post.save();
     console.log("Post updated successfully");
-    return res.status(200).json({ success: true, post });
+    res.status(200).json({ success: true, post });
   } catch (err) {
     console.error("Edit post failed:", err);
-    return res.status(500).json({ success: false, message: err.message || "Internal server error" });
+    res.status(500).json({ success: false, message: err.message || "Internal server error" });
   }
 };
-
-
 export const getDefaultPosts = async (req, res) => {
   console.log("getting default posts");
   try {

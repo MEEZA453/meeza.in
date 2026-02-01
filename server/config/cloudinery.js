@@ -14,11 +14,16 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: 'uploads',
-    public_id: (req, file) => Date.now() + '-' + file.originalname,
+  params: async (req, file) => {
+    const isVideo = file.mimetype.startsWith("video");
+    return {
+      folder: "posts",
+      resource_type: isVideo ? "video" : "image",
+      public_id: `${Date.now()}-${file.originalname.split(".")[0]}`,
+    };
   },
 });
+
 
 const upload = multer({ storage });
 const getCloudinaryPublicId = (url) => {
