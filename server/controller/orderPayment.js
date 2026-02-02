@@ -225,6 +225,7 @@ export const verifyProductPayment = async (req, res) => {
           _id: order.buyer._id,
           handle: order.buyer.handle || "",
           name: order.buyer.name || "",
+          profile: order.buyer.profile || '',
           email: order.buyer.email || "",
         },
         balanceAfter: newBalance,

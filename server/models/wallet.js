@@ -19,6 +19,7 @@ const walletTransactionSchema = new mongoose.Schema(
       _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       handle: String,
       name: String,
+      profile:String,
       email: String,
     },
     // balance after this transaction (useful for quick reconciliation)
