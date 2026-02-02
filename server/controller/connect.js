@@ -64,6 +64,7 @@ export const stripeConnectReturn = async (req, res) => {
     return res.json({
       success: true,
       stripeOnboarded: onboarded,
+      stripeAccountId : user.stripeAccountId
     });
   } catch (err) {
     console.error("Stripe return error:", err);

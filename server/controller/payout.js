@@ -16,7 +16,7 @@ export const createPayoutRequest = async (req, res) => {
   try {
     const userId = req.user.id;
     const { amount, gateway } = req.body; // amount expected in USD (normalized)
-
+console.log('creating payout' , amount, gateway)
     if (!amount || amount <= 0) {
       await session.abortTransaction();
       session.endSession();
@@ -32,18 +32,22 @@ export const createPayoutRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 if (gateway === "stripe" && !user.stripeOnboarded) {
+  console.log('stripe account not connected')
   return res.status(400).json({ message: "Stripe account not onboarded" });
 }
 
 if (gateway === "razorpay" && !user.razorpayOnboarded) {
+  console.log('stripe account not connected')
+
   return res.status(400).json({ message: "Razorpay account not onboarded" });
 }
     // Check connected account
     let destinationAccountId = null;
     if (gateway === "stripe") destinationAccountId = user.stripeAccountId;
     if (gateway === "razorpay") destinationAccountId = user.razorpayAccountId;
-
+console.log('destinationAccount', destinationAccountId)
     if (!destinationAccountId) {
+      console.log('destination not found')
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ success: false, message: "User not connected to payout gateway" });
@@ -86,9 +90,12 @@ if (gateway === "razorpay" && !user.razorpayOnboarded) {
       type: "payout_requested",
       message: `Your withdrawal request of $${amount} has been queued.`,
     }).catch(() => {});
-
+console.log('payout done bro')
     return res.json({ success: true, message: "Payout requested", payoutRequest: payoutRequest[0] });
   } catch (err) {
+    console.log('payout error:', err
+      
+    )
     console.error("createPayoutRequest error:", err);
     try { await session.abortTransaction(); session.endSession(); } catch (e) {}
     return res.status(500).json({ success: false, message: "Failed to create payout request", error: err.message });
@@ -223,5 +230,28 @@ export const processPayout = async (req, res) => {
 
     try { await session.abortTransaction(); session.endSession(); } catch (e) {}
     return res.status(500).json({ success: false, message: "Failed to process payout", error: err.message });
+  }
+};
+export const getPayoutRequests = async (req, res) => {
+  try {
+    const { status } = req.query; // optional filter
+
+    const filter = {};
+    if (status) filter.status = status;
+
+    const payouts = await PayoutRequest.find(filter)
+      .populate("user", "email handle name profile")
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      payouts,
+    });
+  } catch (err) {
+    console.error("getPayoutRequests error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch payout requests",
+    });
   }
 };

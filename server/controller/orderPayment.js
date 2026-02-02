@@ -9,6 +9,7 @@ import Notification from "../models/notification.js";
 import nodemailer from "nodemailer";
 import { stripe } from "../lib/stripe.js";
 import  WalletTransaction  from "../models/wallet.js";
+import mongoose from "mongoose";
 const USD_TO_INR = process.env.USD_TO_INR ? Number(process.env.USD_TO_INR) : 83;
 
 // Utility to compute normalized USD amount from whatever currency
@@ -360,16 +361,16 @@ export const verifyProductPayment = async (req, res) => {
     await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
 
     console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
-
+    
     await Notification.create([{
       recipient: order.seller._id,
       sender: order.buyer._id,
-      type: "order_paid",
-      message: `Your product "${order.product.name || order.product}" was purchased.`,
-      meta: { productId: order.product._id, orderId: order._id },
+      type: "cash_received",
+      message: `cash received in your wallet`,
+      meta: { productId: order.product._id, amount: creditUSD, orderId: order._id },
       image: order.product.image?.[0] || "",
     }], { session });
-
+    console.log("Notification created for seller:", order.seller._id);
     // optional email to buyer
     const transporter2 = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
