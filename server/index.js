@@ -32,6 +32,7 @@ import Product from './models/designs.js';
 import { startSubscriptionCron } from './corn/subscribtion.js';
 import Post from './models/post.js';
 import walletRoute from './routes/wallet.js';
+import appreciationRoute from './routes/appreciation.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -73,6 +74,7 @@ app.use('/hotlist', hotListRouter);
 app.use('/connect', connectRoute)
 app.use('/orders', orderPaymentRoutes)
 app.use('/order' , orderRouter )
+app.use("/appreciations", appreciationRoute);
 app.use("/payouts", payoutRoutes);
 app.use('/cart' , cartRoute)
 app.use('/wallet', walletRoute)

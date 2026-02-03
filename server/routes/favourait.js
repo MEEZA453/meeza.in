@@ -7,8 +7,5 @@ router.post('/favorites/add', verifyToken, addToFavorites);
 router.post('/favorites/remove', verifyToken, removeFromFavorites);
 router.get('/favoritesByHandle/:handle', verifyIsUser, getFavoritesByHandle);
 
-// router.get('/appreciations/:postId', verifyToken, getPostAppreciations);
-// router.get('/favorites', verifyToken, getFavorites);
-
 
 export default router

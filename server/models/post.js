@@ -61,15 +61,6 @@ views: { type: Number, default: 0 },
     default: 0,
   },
 
-  appreciations: [
-  {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    name: String,
-    profile: String,
-    handle: String,
-    appreciatedAt: { type: Date, default: Date.now }
-  }
-],
 recentNormalVotes: [{
   user: {
     _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
