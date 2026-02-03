@@ -9,6 +9,8 @@ import user from "../models/user.js";
 dotenv.config();
 import mongoose from "mongoose";
 import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.js";
+import productView from "../models/productView.js";
+import { updateProductHotScore } from "../utils/updateProductHotScore.js";
 export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
@@ -49,37 +51,76 @@ export const getDefaultDesigns = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching default designs" });
   }
 };
+const VIEW_COOLDOWN_HOURS = 6;
+const DRIP_PER_VIEW = 5;
+
 export const addProductView = async (req, res) => {
   try {
-    const { id } = req.params;
+    const productId = req.params.id;
+    const viewerId = req.user.id;
+console.log('viewing product', productId, viewerId)
+    const windowStart = new Date(
+      Date.now() - VIEW_COOLDOWN_HOURS * 60 * 60 * 1000
+    );
 
-    const product = await Product.findByIdAndUpdate(
-      id,
-      {
-        $inc: {
-          views: 1,
-          drip: 5
-        }
+    // 🔍 ever viewed?
+    const everViewed = await productView.findOne({
+      product: productId,
+      viewer: viewerId,
+    });
+
+    const isFirstView = !everViewed;
+
+    // 🔒 cooldown
+    const recentView = await productView.findOne({
+      product: productId,
+      viewer: viewerId,
+      viewedAt: { $gte: windowStart },
+    });
+
+    if (recentView) {
+      return res.json({ success: true, throttled: true });
+    }
+
+    const product = await Product.findById(productId).select("postedBy");
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const isOwner = product.postedBy.toString() === viewerId;
+
+    // 🧠 raw event
+    await productView.create({
+      product: productId,
+      viewer: viewerId,
+      weight: isOwner ? 0 : 1,
+      ipHash: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    // 🚀 aggregate update
+    await Product.findByIdAndUpdate(productId, {
+      $inc: {
+        views: 1,
+        drip: isOwner ? 0 : DRIP_PER_VIEW,
+        ...(isFirstView ? { uniqueViewers: 1 } : {}),
       },
-      { new: true }
-    ).populate("postedBy", "_id");
-
-    if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
-
-    // add drip to creator
-    await User.findByIdAndUpdate(product.postedBy._id, {
-      $inc: { drip: 5 }
     });
 
-    res.json({
-      success: true,
-      productId: product._id,
-      views: product.views,
-      drip: product.drip,
-    });
+    // 💰 reward creator
+    if (!isOwner) {
+      await user.findByIdAndUpdate(product.postedBy, {
+        $inc: { drip: DRIP_PER_VIEW },
+      });
+    }
+
+    // 🔥 HOT SCORE UPDATE
+    await updateProductHotScore(productId);
+console.log('product viewed')
+    res.json({ success: true, throttled: false });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("addProductView:", err);
+    res.status(500).json({ message: err.message });
   }
 };
 export const getDesign = async (req, res) => {
@@ -148,11 +189,11 @@ if (isAsset !== null) {
         : baseQuery;
 
     // ---------- FETCH DATA ----------
-    let designs = await Product.find(findQuery)
-      .sort({ _id: -1 })
-      .limit(limit)
-      .populate("postedBy", "name profile handle followers")
-      .lean();
+   let designs = await Product.find(findQuery)
+  .sort({ hotScore: -1, createdAt: -1 }) // 🔥 HOT FEED
+  .limit(limit)
+  .populate("postedBy", "name profile handle followers")
+  .lean();
 
     // ---------- SANITIZE + FLAGS ----------
     designs = designs.map((product) => {

@@ -10,6 +10,15 @@ const productSchema = new mongoose.Schema(
     },
       isAsset: { type: Boolean, default: false }, // <-- new
     name: { type: String, required: true },
+    views: { type: Number, default: 0 },
+uniqueViewers: { type: Number, default: 0 },
+drip: { type: Number, default: 0 },
+
+hotScore: {
+  type: Number,
+  default: 0,
+  index: true,
+},
     image: [],
     driveLink: { type: String, required: false },
     amount: { type: Number, required: true },

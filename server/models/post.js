@@ -48,6 +48,19 @@ highlightedBy: [
     averages: { type: mongoose.Schema.Types.Mixed, default: {} }, 
     totalScore: { type: Number, default: 0 }
   },
+
+  drip: { type: Number, default: 0 },
+views: { type: Number, default: 0 },
+  hotScore: {
+    type: Number,
+    default: 0,
+    index: true, // 🔥 important
+  },
+  uniqueViewers: {
+    type: Number,
+    default: 0,
+  },
+
   appreciations: [
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -65,18 +78,9 @@ recentNormalVotes: [{
     handle: String,
     role: String
   },
-  drip: { type: Number, default: 0 },
-views: { type: Number, default: 0 },
-  uniqueViewers: {
-    type: Number,
-    default: 0,
-  },
 
-  hotScore: {
-    type: Number,
-    default: 0,
-    index: true, // 🔥 important
-  },
+
+
   fields: mongoose.Schema.Types.Mixed,
   totalVote: Number,
   votedAt: { type: Date, default: Date.now }

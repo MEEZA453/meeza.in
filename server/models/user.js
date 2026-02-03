@@ -20,7 +20,10 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
   },
-  favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+  favourites: {
+  posts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+  products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+},
   promotions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
 
   profile: String,
