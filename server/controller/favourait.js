@@ -1,7 +1,16 @@
 import User from "../models/user.js";
 import Product from "../models/designs.js";
 import post from "../models/post.js";
+
+const DRIP = {
+  APPRECIATION: 20,
+  VOTE_NORMAL: 40,
+  VOTE_JURY: 60,
+  VIEW: 5
+};
+
 export const addToFavorites = async (req, res) => {
+
   try {
     const userId = req.user.id;
     const { designId } = req.body;
@@ -32,13 +41,33 @@ export const addToFavorites = async (req, res) => {
         await postDoc.save();
       }
     }
+if (!already) {
+  postDoc.appreciations.push({
+    user: userId,
+    name: user.name,
+    profile: user.profile,
+    handle: user.handle
+  });
 
+  postDoc.appreciationCount = (postDoc.appreciationCount || 0) + 1;
+
+  // 🔥 DRIP ADD
+  postDoc.drip = (postDoc.drip || 0) + DRIP.APPRECIATION;
+
+  await User.findByIdAndUpdate(postDoc.createdBy, {
+    $inc: { drip: DRIP.APPRECIATION }
+  });
+
+  await postDoc.save();
+}
     res.status(200).json({ success: true, message: "Added to favorites." });
 
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+const DRIP_APPRECIATION = 20;
 
 export const removeFromFavorites = async (req, res) => {
   try {
@@ -51,7 +80,8 @@ export const removeFromFavorites = async (req, res) => {
       { new: true }
     );
 
-    const postDoc = await post.findById(designId).select("appreciations appreciationCount");
+    const postDoc = await post.findById(designId)
+      .select("appreciations appreciationCount drip createdBy");
 
     if (postDoc) {
       const before = postDoc.appreciations.length;
@@ -62,12 +92,19 @@ export const removeFromFavorites = async (req, res) => {
 
       if (postDoc.appreciations.length !== before) {
         postDoc.appreciationCount = Math.max(0, postDoc.appreciationCount - 1);
+
+        // 🔥 MINUS DRIP
+        postDoc.drip = Math.max(0, (postDoc.drip || 0) - DRIP_APPRECIATION);
+
+        await User.findByIdAndUpdate(postDoc.createdBy, {
+          $inc: { drip: -DRIP_APPRECIATION }
+        });
+
         await postDoc.save();
       }
     }
 
     res.status(200).json({ success: true, message: "Removed from favorites." });
-
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  drip: { type: Number, default: 0 },
   googleId: {
     type: String,
     require: true,

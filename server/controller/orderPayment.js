@@ -236,7 +236,13 @@ export const verifyProductPayment = async (req, res) => {
       await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
 
       console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
+await Product.findByIdAndUpdate(order.product._id, {
+  $inc: { drip: 50 }
+}, { session });
 
+await User.findByIdAndUpdate(order.seller._id, {
+  $inc: { drip: 50 }
+}, { session });
       // Notification
       await Notification.create([{
         recipient: order.seller._id,
@@ -360,7 +366,13 @@ export const verifyProductPayment = async (req, res) => {
     }], { session });
 
     await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
+await Product.findByIdAndUpdate(order.product._id, {
+  $inc: { drip: 50 }
+}, { session });
 
+await User.findByIdAndUpdate(order.seller._id, {
+  $inc: { drip: 50 }
+}, { session });
     console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
     
     await Notification.create([{

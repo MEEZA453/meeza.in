@@ -18,7 +18,8 @@ import {
   attachAssetToPost,
   editPost,
   getNonJuryVotesForPost,
-  getJuryVotesForPost
+  getJuryVotesForPost,
+  addPostView
 } from "../controller/post.js";
 import {verifyToken} from '../middleweres/auth.js'
 
@@ -43,6 +44,5 @@ router.get("/:id/votes", getVotesForPost);       // Get votes for a post
 router.get("/:id/votes/nonjury", getNonJuryVotesForPost);
 router.get("/:id/votes/jury", getJuryVotesForPost);
 router.delete("/deletePost/:id", verifyToken, deletePost);
-
-
+router.post("/:id/view", verifyToken, addPostView);
 export default router;

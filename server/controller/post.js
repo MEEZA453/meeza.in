@@ -10,7 +10,15 @@ import { handleVoteNotification } from "../utils/handleVoteNotification.js";
 import Vote from "../models/vote.js";
 import mongoose from "mongoose";
 import { extractKeywordsPost, saveKeywords } from "../utils/extractKeywords.js";
+import postView from "../models/postView.js";
+import { updateHotScore } from "../utils/updateHotScore.js";
 // controllers/assetController.js
+const DRIP = {
+  APPRECIATION: 20,
+  VOTE_NORMAL: 40,
+  VOTE_JURY: 60,
+  VIEW: 5
+};
 
 
 // Attach asset to post
@@ -239,7 +247,6 @@ export const getAssetsOfPost = async (req, res) => {
       };
     });
 
-    console.log("assets with ownership:", productsWithOwnership);
 
     res.status(200).json({ success: true, assets: productsWithOwnership });
   } catch (error) {
@@ -428,13 +435,167 @@ export const getDefaultPosts = async (req, res) => {
 // controllers/postController.js
 
 
+// export const getPosts = async (req, res) => {
+//   try {
+//     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+//     let cursor = req.query.cursor || null;
+//     const categoryQuery = req.query.category || "";
+//     const query = req.query.query?.trim() || "";   // 🔥 added search
+//     const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
+
+//     const total = await Post.countDocuments({});
+
+//     console.log(
+//       "category filter:", parts.join(", ") || "none",
+//       "query:", query || "none",
+//       "cursor:", cursor,
+//       "limit:", limit
+//     );
+
+//     // 🔥 Build search conditions
+//     let searchCondition = {};
+//     if (query) {
+//       const regex = { $regex: query, $options: "i" };
+//       searchCondition = {
+//         $or: [
+//           { name: regex },
+//           { description: regex },
+//           { category: regex },
+//           { hashtags: regex },
+//         ]
+//       };
+//     }
+
+//     // ------------------------------------------------------------
+//     // CASE 1: NO CATEGORY FILTER
+//     // ------------------------------------------------------------
+//     if (!parts.length) {
+//       const findQuery = {
+//         ...searchCondition, // 🔥 apply search
+//         ...(cursor && mongoose.isValidObjectId(cursor)
+//           ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+//           : {})
+//       };
+
+//       const posts = await Post.find(findQuery)
+//         .sort({ _id: -1 })
+//         .limit(limit)
+//         .populate("createdBy", "name profile handle")
+//         .select("-__v")
+//         .lean();
+
+//       const nextCursor = posts.length ? posts[posts.length - 1]._id.toString() : null;
+//       const hasMore = posts.length === limit;
+
+//       return res.json({
+//         success: true,
+//         results: posts,
+//         limit,
+//         nextCursor,
+//         count: total,
+//         hasMore,
+//       });
+//     }
+
+//     // ------------------------------------------------------------
+//     // CASE 2: CATEGORY FILTER
+//     // ------------------------------------------------------------
+
+//     // 🔥 apply search inside filtered docs
+//     const filteredDocs = await Post.find({
+//       category: { $in: parts },
+//       ...searchCondition, // 🔥 added
+//     })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
+
+//     const nonFilteredDocs = await Post.find({
+//       category: { $nin: parts },
+//       ...searchCondition, // 🔥 added
+//     })
+//       .sort({ createdAt: -1 })
+//       .select("_id")
+//       .lean();
+
+//     const combinedIds = [
+//       ...filteredDocs.map(d => d._id.toString()),
+//       ...nonFilteredDocs.map(d => d._id.toString()),
+//     ];
+
+//     const totalCombined = combinedIds.length;
+
+//     const startIndex =
+//       cursor && combinedIds.includes(cursor)
+//         ? combinedIds.indexOf(cursor) + 1
+//         : 0;
+
+//     if (startIndex >= totalCombined) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         limit,
+//         nextCursor: null,
+//         count: total,
+//         hasMore: false,
+//       });
+//     }
+
+//     const pagedIdStrings = combinedIds.slice(startIndex, startIndex + limit);
+
+//     if (!pagedIdStrings.length) {
+//       return res.json({
+//         success: true,
+//         results: [],
+//         limit,
+//         nextCursor: null,
+//         count: total,
+//         hasMore: false,
+//       });
+//     }
+
+//     const objectIds = pagedIdStrings.map(id => new mongoose.Types.ObjectId(id));
+
+//     const posts = await Post.find({ _id: { $in: objectIds } })
+//       .populate("createdBy", "name profile handle")
+//       .select("-__v")
+//       .lean();
+
+//     const orderedPosts = pagedIdStrings.map(id =>
+//       posts.find(p => p._id.toString() === id)
+//     );
+
+//     const nextCursor = pagedIdStrings.length
+//       ? pagedIdStrings[pagedIdStrings.length - 1]
+//       : null;
+
+//     const hasMore = startIndex + limit < totalCombined;
+
+//     return res.json({
+//       success: true,
+//       results: orderedPosts,
+//       limit,
+//       nextCursor,
+//       count: total,
+//       hasMore,
+//     });
+
+//   } catch (err) {
+//     console.error("Error getting posts:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
 export const getPosts = async (req, res) => {
   try {
     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
     let cursor = req.query.cursor || null;
     const categoryQuery = req.query.category || "";
-    const query = req.query.query?.trim() || "";   // 🔥 added search
+    const query = req.query.query?.trim() || "";   // 🔥 search
     const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
+
+    // trending flag: if "true" then hot feed, otherwise recent feed
+    const trending = String(req.query.trending || "").toLowerCase() === "true";
 
     const total = await Post.countDocuments({});
 
@@ -442,10 +603,11 @@ export const getPosts = async (req, res) => {
       "category filter:", parts.join(", ") || "none",
       "query:", query || "none",
       "cursor:", cursor,
-      "limit:", limit
+      "limit:", limit,
+      "trending:", trending
     );
 
-    // 🔥 Build search conditions
+    // Build search conditions
     let searchCondition = {};
     if (query) {
       const regex = { $regex: query, $options: "i" };
@@ -459,25 +621,72 @@ export const getPosts = async (req, res) => {
       };
     }
 
+    // helper to parse trending cursor (format: "<hotScore>|<objectId>")
+    let cursorHot = null;
+    let cursorId = null;
+    if (trending && cursor && typeof cursor === "string") {
+      if (cursor.includes("|")) {
+        const partsCursor = cursor.split("|");
+        cursorHot = Number(partsCursor[0]);
+        cursorId = partsCursor[1];
+        if (!mongoose.isValidObjectId(cursorId)) cursorId = null;
+        if (!Number.isFinite(cursorHot)) cursorHot = null;
+      } else if (mongoose.isValidObjectId(cursor)) {
+        // backward-compatible: plain ObjectId cursor supplied
+        cursorId = cursor;
+      }
+    }
+
     // ------------------------------------------------------------
     // CASE 1: NO CATEGORY FILTER
     // ------------------------------------------------------------
     if (!parts.length) {
-      const findQuery = {
-        ...searchCondition, // 🔥 apply search
-        ...(cursor && mongoose.isValidObjectId(cursor)
-          ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
-          : {})
-      };
+      // build cursor condition depending on trending flag
+      let cursorCondition = {};
+      if (trending) {
+        if (cursorHot !== null && cursorId) {
+          cursorCondition = {
+            $or: [
+              { hotScore: { $lt: cursorHot } },
+              { hotScore: cursorHot, _id: { $lt: new mongoose.Types.ObjectId(cursorId) } }
+            ]
+          };
+        } else if (cursorId) {
+          // best-effort: plain id cursor for trending - find position after this id
+          // we'll leave cursorCondition empty so we fetch from top and slice in-memory later (see below)
+          cursorCondition = {};
+        }
+      } else {
+        // recent feed uses _id cursor (existing behavior)
+        if (cursor && mongoose.isValidObjectId(cursor)) {
+          cursorCondition = { _id: { $lt: new mongoose.Types.ObjectId(cursor) } };
+        }
+      }
 
-      const posts = await Post.find(findQuery)
-        .sort({ _id: -1 })
-        .limit(limit)
+      const sortQuery = trending ? { hotScore: -1, _id: -1 } : { _id: -1 };
+
+      // If trending + plain cursorId was provided (no cursorHot), we'll fetch an extra page and then drop items until after cursorId
+      // This keeps backward compatibility with older clients that only send objectId cursor.
+      let posts = await Post.find({ ...searchCondition, ...cursorCondition })
+        .sort(sortQuery)
+        .limit(trending && cursorId && cursorHot === null ? limit * 2 : limit)
         .populate("createdBy", "name profile handle")
         .select("-__v")
         .lean();
 
-      const nextCursor = posts.length ? posts[posts.length - 1]._id.toString() : null;
+      // If trending and a plain cursorId was passed (without hotScore), do a best-effort skip to the position after cursorId
+      if (trending && cursorId && cursorHot === null) {
+        const idx = posts.findIndex(p => p._id.toString() === cursorId);
+        const start = idx === -1 ? 0 : idx + 1;
+        posts = posts.slice(start, start + limit);
+      }
+
+      const nextCursor = posts.length
+        ? (trending
+            ? `${posts[posts.length - 1].hotScore}|${posts[posts.length - 1]._id}`
+            : posts[posts.length - 1]._id.toString())
+        : null;
+
       const hasMore = posts.length === limit;
 
       return res.json({
@@ -493,21 +702,26 @@ export const getPosts = async (req, res) => {
     // ------------------------------------------------------------
     // CASE 2: CATEGORY FILTER
     // ------------------------------------------------------------
+    // We keep your original behavior of showing filtered docs first, then non-filtered.
+    // Inside each group we sort according to trending flag.
 
-    // 🔥 apply search inside filtered docs
+    const filteredSort = trending ? { hotScore: -1, _id: -1 } : { createdAt: -1 };
+    const nonFilteredSort = trending ? { hotScore: -1, _id: -1 } : { createdAt: -1 };
+
+    // fetch ids in the requested order
     const filteredDocs = await Post.find({
       category: { $in: parts },
-      ...searchCondition, // 🔥 added
+      ...searchCondition,
     })
-      .sort({ createdAt: -1 })
+      .sort(filteredSort)
       .select("_id")
       .lean();
 
     const nonFilteredDocs = await Post.find({
       category: { $nin: parts },
-      ...searchCondition, // 🔥 added
+      ...searchCondition,
     })
-      .sort({ createdAt: -1 })
+      .sort(nonFilteredSort)
       .select("_id")
       .lean();
 
@@ -518,10 +732,26 @@ export const getPosts = async (req, res) => {
 
     const totalCombined = combinedIds.length;
 
-    const startIndex =
-      cursor && combinedIds.includes(cursor)
-        ? combinedIds.indexOf(cursor) + 1
-        : 0;
+    // starting index logic accepts both composite cursors and plain ids (composite only necessary for robust trending cursor)
+    let startIndex = 0;
+    if (cursor && combinedIds.length) {
+      if (trending && typeof cursor === "string" && cursor.includes("|")) {
+        // composite cursor: "<hotScore>|<id>"
+        const [, idPart] = cursor.split("|");
+        if (combinedIds.includes(idPart)) {
+          startIndex = combinedIds.indexOf(idPart) + 1;
+        } else {
+          startIndex = 0;
+        }
+      } else if (mongoose.isValidObjectId(cursor)) {
+        const idStr = cursor;
+        if (combinedIds.includes(idStr)) {
+          startIndex = combinedIds.indexOf(idStr) + 1;
+        } else {
+          startIndex = 0;
+        }
+      }
+    }
 
     if (startIndex >= totalCombined) {
       return res.json({
@@ -554,12 +784,15 @@ export const getPosts = async (req, res) => {
       .select("-__v")
       .lean();
 
+    // preserve ordering from pagedIdStrings
     const orderedPosts = pagedIdStrings.map(id =>
       posts.find(p => p._id.toString() === id)
     );
 
     const nextCursor = pagedIdStrings.length
-      ? pagedIdStrings[pagedIdStrings.length - 1]
+      ? (trending
+          ? `${orderedPosts[orderedPosts.length - 1].hotScore}|${pagedIdStrings[pagedIdStrings.length - 1]}`
+          : pagedIdStrings[pagedIdStrings.length - 1])
       : null;
 
     const hasMore = startIndex + limit < totalCombined;
@@ -578,295 +811,6 @@ export const getPosts = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
-// export const getPosts = async (req, res) => {
-//   try {
-//     const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
-//     let cursor = req.query.cursor || null;
-//     const categoryQuery = req.query.category || "";
-//     const parts = categoryQuery ? categoryQuery.split(",").map(c => c.trim()) : [];
-
-//     const total = await Post.countDocuments({});
-
-//     console.log("category filter:", parts.join(", ") || "none", "cursor:", cursor, "limit:", limit);
-
-//     // ---- CASE 1: NO CATEGORY FILTER ----
-//     if (!parts.length) {
-//       // Validate cursor first
-//       const findQuery = (cursor && mongoose.isValidObjectId(cursor))
-//         ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
-//         : {};
-
-//       const posts = await Post.find(findQuery)
-//         .sort({ _id: -1 })
-//         .limit(limit)
-//         .populate("createdBy", "name profile handle")
-//         .select("-__v")
-//         .lean();
-
-//       const nextCursor = posts.length ? posts[posts.length - 1]._id.toString() : null;
-//       const hasMore = posts.length === limit;
-
-//       return res.json({
-//         success: true,
-//         results: posts,
-//         limit,
-//         nextCursor,
-//         count: total,
-//         hasMore,
-//       });
-//     }
-
-//     // ---- CASE 2: CATEGORY FILTER ----
-//     const filteredDocs = await Post.find({ category: { $in: parts } })
-//       .sort({ createdAt: -1 })
-//       .select("_id")
-//       .lean();
-
-//     const nonFilteredDocs = await Post.find({ category: { $nin: parts } })
-//       .sort({ createdAt: -1 })
-//       .select("_id")
-//       .lean();
-
-//     const combinedIds = [
-//       ...filteredDocs.map(d => d._id.toString()),
-//       ...nonFilteredDocs.map(d => d._id.toString()),
-//     ];
-
-//     const totalCombined = combinedIds.length;
-
-//     // If cursor supplied but not valid, treat it as null (start from 0)
-//     const startIndex = (cursor && combinedIds.includes(cursor))
-//       ? combinedIds.indexOf(cursor) + 1
-//       : 0;
-
-//     if (startIndex >= totalCombined) {
-//       return res.json({
-//         success: true,
-//         results: [],
-//         limit,
-//         nextCursor: null,
-//         count: total,
-//         hasMore: false,
-//       });
-//     }
-
-//     const pagedIdStrings = combinedIds.slice(startIndex, startIndex + limit);
-//     if (!pagedIdStrings.length) {
-//       return res.json({
-//         success: true,
-//         results: [],
-//         limit,
-//         nextCursor: null,
-//         count: total,
-//         hasMore: false,
-//       });
-//     }
-
-//     // map to ObjectId safely (we built these from real _id strings so they are valid)
-//     const objectIds = pagedIdStrings.map(id => new mongoose.Types.ObjectId(id));
-//     const posts = await Post.find({ _id: { $in: objectIds } })
-//       .populate("createdBy", "name profile handle")
-//       .select("-__v")
-//       .lean();
-
-//     const orderedPosts = pagedIdStrings.map(id => posts.find(p => p._id.toString() === id));
-
-//     const nextCursor = pagedIdStrings.length ? pagedIdStrings[pagedIdStrings.length - 1] : null;
-//     const hasMore = startIndex + limit < totalCombined;
-
-//     return res.json({
-//       success: true,
-//       results: orderedPosts,
-//       limit,
-//       nextCursor,
-//       count: total,
-//       hasMore,
-//     });
-
-//   } catch (err) {
-//     console.error("Error getting posts:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// };
-// export const getPosts = async (req, res) => {
-//   try {
-//     const page = Math.max(1, parseInt(req.query.page || '1', 10));
-//     const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
-//     const categoryQuery = req.query.category || '';
-//     const parts = categoryQuery ? categoryQuery.split(',').map(c => c.trim()) : [];
-//     const skip = (page - 1) * limit;
-
-//     console.log("category filter:", parts.join(', ') || 'none', page, limit);
-
-//     let posts = [];
-//     let total = await Post.countDocuments({}); // total posts count (for client ref)
-
-//     if (parts.length) {
-//       // Count totals
-//       const totalMatching = await Post.countDocuments({ category: { $in: parts } });
-//       const totalNonMatching = total - totalMatching;
-
-//       // If we still have filtered posts left in the current page range
-//       if (skip < totalMatching) {
-//         // 1️⃣ Get matching posts for this page
-//         const matchingPosts = await Post.find({ category: { $in: parts } })
-//           .sort({ createdAt: -1 })
-//           .skip(skip)
-//           .limit(limit)
-//           .populate([
-//             { path: 'createdBy', select: 'name profile handle' },
-//             { path: 'votes.user', select: 'name profile handle' },
-//           ]);
-
-//         posts = matchingPosts;
-
-//         // If this page still has room (e.g. last filtered page not full), fill with others
-//         if (matchingPosts.length < limit && skip + limit > totalMatching) {
-//           const remaining = limit - matchingPosts.length;
-//           const nonMatchingSkip = Math.max(0, skip + matchingPosts.length - totalMatching);
-
-//           const extra = await Post.find({ category: { $nin: parts } })
-//             .sort({ createdAt: -1 })
-//             .skip(nonMatchingSkip)
-//             .limit(remaining)
-//             .populate([
-//               { path: 'createdBy', select: 'name profile handle' },
-//               { path: 'votes.user', select: 'name profile handle' },
-//             ]);
-
-//           posts = [...matchingPosts, ...extra];
-//         }
-//       } else {
-//         // 2️⃣ All filtered posts exhausted — continue with non-matching posts
-//         const nonMatchingSkip = skip - totalMatching;
-
-//         posts = await Post.find({ category: { $nin: parts } })
-//           .sort({ createdAt: -1 })
-//           .skip(nonMatchingSkip)
-//           .limit(limit)
-//           .populate([
-//             { path: 'createdBy', select: 'name profile handle' },
-//             { path: 'votes.user', select: 'name profile handle' },
-//           ]);
-//       }
-//     } else {
-//       // No filter
-//       posts = await Post.find({})
-//         .sort({ createdAt: -1 })
-//         .skip(skip)
-//         .limit(limit)
-//         .populate([
-//           { path: 'createdBy', select: 'name profile handle' },
-//           { path: 'votes.user', select: 'name profile handle' },
-//         ]);
-//     }
-
-//     res.json({
-//       results: posts,
-//       page,
-//       limit,
-//       count: total,
-//     });
-//   } catch (err) {
-//     console.error('Error getting posts:', err);
-//     res.status(500).json({ message: err.message });
-//   }
-// };
-// controllers/postController.js (update getPosts)
-
-
-// export const getPosts = async (req, res) => {
-//   try {
-//     const page = Math.max(1, parseInt(req.query.page || "1"));
-//     const limit = Math.max(1, parseInt(req.query.limit || "10"));
-//     const skip = (page - 1) * limit;
-
-//     const categoryQuery = req.query.category || "";
-//     const parts = categoryQuery
-//       ? categoryQuery.split(",").map(c => c.trim())
-//       : [];
-
-//     // total posts count
-//     const total = await Post.countDocuments({});
-
-//     // ---- CASE 1: NO CATEGORY FILTER ----
-//     if (!parts.length) {
-//       const posts = await Post.find({})
-//         .sort({ createdAt: -1 })
-//         .skip(skip)
-//         .limit(limit)
-//         .populate("createdBy", "name profile handle")
-//         .select("-__v")
-//         .lean();
-
-//       return res.json({
-//         success: true,
-//         results: posts,
-//         page,
-//         limit,
-//         count: total,
-//         hasMore: page * limit < total,
-//       });
-//     }
-
-//     // ---- CASE 2: CATEGORY FILTER PRESENT ----
-
-//     // filtered first
-//     const filtered = await Post.find({ category: { $in: parts } })
-//       .sort({ createdAt: -1 })
-//       .select("_id")
-//       .lean();
-
-//     // then non-filtered
-//     const nonFiltered = await Post.find({ category: { $nin: parts } })
-//       .sort({ createdAt: -1 })
-//       .select("_id")
-//       .lean();
-
-//     const combinedIds = [
-//       ...filtered.map(d => d._id),
-//       ...nonFiltered.map(d => d._id),
-//     ];
-
-//     const pagedIds = combinedIds.slice(skip, skip + limit);
-
-//     if (!pagedIds.length) {
-//       return res.json({
-//         success: true,
-//         results: [],
-//         page,
-//         limit,
-//         count: total,
-//         hasMore: false,
-//       });
-//     }
-
-//     // fetch posts in original filtered-first sorted order
-//     const posts = await Post.find({ _id: { $in: pagedIds } })
-//       .populate("createdBy", "name profile handle")
-//       .select("-__v")
-//       .lean();
-
-//     // reorder manually to match pagedIds order
-//     const orderedPosts = pagedIds.map(id =>
-//       posts.find(p => p._id.toString() === id.toString())
-//     );
-
-//     return res.json({
-//       success: true,
-//       results: orderedPosts,
-//       page,
-//       limit,
-//       count: total,
-//       hasMore: page * limit < combinedIds.length,
-//     });
-
-//   } catch (err) {
-//     console.error("Error getting posts:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// };
 
 
 export const searchPosts = async (req, res) => {
@@ -1540,6 +1484,79 @@ export const deletePost = async (req, res) => {
     res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
+const DRIP_PER_VIEW = 5;
+const VIEW_COOLDOWN_HOURS = 6;
+
+export const addPostView = async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const viewerId = req.user.id;
+console.log('viewing the post ', postId, viewerId)
+    const windowStart = new Date(
+      Date.now() - VIEW_COOLDOWN_HOURS * 60 * 60 * 1000
+    );
+const everViewed = await postView.findOne({
+  post: postId,
+  viewer: viewerId,
+});
+const isFirstView = !everViewed;;
+
+    // 🔒 Anti-spam check
+    const recentView = await postView.findOne({
+      post: postId,
+      
+      viewer: viewerId,
+      viewedAt: { $gte: windowStart },
+    });
+
+    if (recentView) {
+      return res.json({
+        success: true,
+        throttled: true,
+      });
+    }
+
+    const post = await Post.findById(postId).select("createdBy");
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const isOwner = post.createdBy.toString() === viewerId;
+
+    // 🧠 write raw event
+    await postView.create({
+      post: postId,
+      viewer: viewerId,
+      weight: isOwner ? 0 : 1,
+      ipHash: req.ip, // optionally hash
+      userAgent: req.headers["user-agent"],
+    });
+
+    // 🚀 aggregate update
+await Post.findByIdAndUpdate(postId, {
+  $inc: {
+    views: 1,
+    drip: isOwner ? 0 : DRIP_PER_VIEW,
+    ...(isFirstView ? { uniqueViewers: 1 } : {}),
+  },
+});
+    if (!isOwner) {
+      await User.findByIdAndUpdate(post.createdBy, {
+        $inc: { drip: DRIP_PER_VIEW },
+      });
+    }
+await updateHotScore(postId);
+
+console.log('post viewed')
+    res.json({
+      success: true,
+      throttled: false,
+    });
+  } catch (err) {
+    console.error("addPostView:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
 
 
 export const votePost = async (req, res) => {
@@ -1609,7 +1626,15 @@ console.log(req.user)
         post.voteStats[roleKey].sums[fieldName] = prev + delta;
       }
     }
+const voteDrip =
+  roleKey === "jury" ? DRIP.VOTE_JURY : DRIP.VOTE_NORMAL;
 
+// 🔥 ADD DRIP
+post.drip = (post.drip || 0) + voteDrip;
+
+await User.findByIdAndUpdate(post.createdBy, {
+  $inc: { drip: voteDrip }
+}).session(session);
     // 6) Update recent votes array (update existing entry or unshift)
     const voteData = {
       user: {
@@ -1664,6 +1689,7 @@ if (idx !== -1) {
 
     // 8) Save post (inside transaction)
     await post.save({ session });
+await updateHotScore(postId, session);
 
     // commit
     await session.commitTransaction();

@@ -49,7 +49,39 @@ export const getDefaultDesigns = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching default designs" });
   }
 };
+export const addProductView = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const product = await Product.findByIdAndUpdate(
+      id,
+      {
+        $inc: {
+          views: 1,
+          drip: 5
+        }
+      },
+      { new: true }
+    ).populate("postedBy", "_id");
+
+    if (!product)
+      return res.status(404).json({ success: false, message: "Product not found" });
+
+    // add drip to creator
+    await User.findByIdAndUpdate(product.postedBy._id, {
+      $inc: { drip: 5 }
+    });
+
+    res.json({
+      success: true,
+      productId: product._id,
+      views: product.views,
+      drip: product.drip,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 export const getDesign = async (req, res) => {
   try {
     const userId = req.user?.id || null;

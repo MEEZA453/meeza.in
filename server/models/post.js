@@ -65,6 +65,18 @@ recentNormalVotes: [{
     handle: String,
     role: String
   },
+  drip: { type: Number, default: 0 },
+views: { type: Number, default: 0 },
+  uniqueViewers: {
+    type: Number,
+    default: 0,
+  },
+
+  hotScore: {
+    type: Number,
+    default: 0,
+    index: true, // 🔥 important
+  },
   fields: mongoose.Schema.Types.Mixed,
   totalVote: Number,
   votedAt: { type: Date, default: Date.now }
