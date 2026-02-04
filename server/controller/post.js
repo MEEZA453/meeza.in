@@ -12,6 +12,7 @@ import mongoose from "mongoose";
 import { extractKeywordsPost, saveKeywords } from "../utils/extractKeywords.js";
 import postView from "../models/postView.js";
 import { updateHotScore } from "../utils/updateHotScore.js";
+import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
 // controllers/assetController.js
 const DRIP = {
   APPRECIATION: 20,
@@ -687,11 +688,17 @@ export const getPosts = async (req, res) => {
             : posts[posts.length - 1]._id.toString())
         : null;
 
+const postsWithFlag = await attachIsAppreciated(
+  posts,
+  req.user?.id || null,
+  "Post"
+);
+
       const hasMore = posts.length === limit;
 
       return res.json({
         success: true,
-        results: posts,
+        results: postsWithFlag,
         limit,
         nextCursor,
         count: total,
@@ -796,10 +803,14 @@ export const getPosts = async (req, res) => {
       : null;
 
     const hasMore = startIndex + limit < totalCombined;
-
+const orderedWithFlag = await attachIsAppreciated(
+  orderedPosts,
+  req.user?.id || null,
+  "Post"
+);
     return res.json({
       success: true,
-      results: orderedPosts,
+      results: orderedWithFlag,
       limit,
       nextCursor,
       count: total,

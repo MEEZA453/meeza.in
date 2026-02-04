@@ -1,6 +1,7 @@
 import User from "../models/user.js";
 import Product from "../models/designs.js";
 import Post from "../models/post.js";
+import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
 
 // -----------------------------------------
 // ADD TO HIGHLIGHT
@@ -66,7 +67,8 @@ export const removeFromHighlight = async (req, res) => {
 export const getAllHighlights = async (req, res) => {
   try {
     const { category } = req.query;
-
+    console.log('getting  hightlights')
+console.log(req.user.id)
     const categoryFilter = category
       ? { category: { $in: category.split(",") } }
       : {};
@@ -82,9 +84,16 @@ export const getAllHighlights = async (req, res) => {
       .select("-__v")
       .lean();
 
+const postsWithFlag = await attachIsAppreciated(
+  posts,
+  req.user?.id || null,
+  "Post"
+);
+
+
     return res.json({
       success: true,
-      highlights: posts
+      highlights: postsWithFlag
     });
 
   } catch (err) {

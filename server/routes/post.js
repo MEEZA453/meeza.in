@@ -36,7 +36,7 @@ router.get("/search/posts", searchPosts);
 router.get("/defaultSearch", getDefaultPosts);
 router.post("/createPost", verifyToken, upload.array("images", 5), createPost);    
 router.put("/editPost/:id", verifyToken, upload.array("images", 10), editPost);
-router.get("/", getPosts);                      // Get all posts
+router.get("/",verifyToken, getPosts);                      // Get all posts
 router.get("/:id",verifyToken, getPostById);   
 router.get('/postByHandle/:handle' , getPostsByHandle)              // Get post by ID
 router.post("/:id/vote", verifyToken, votePost);     // Vote on post

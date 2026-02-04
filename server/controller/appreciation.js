@@ -3,15 +3,15 @@ import User from '../models/user.js'
 import Post from '../models/post.js'
 import Product from "../models/designs.js";
 import mongoose from "mongoose";
- const DRIP = { APPRECIATION: 1 };
+ const DRIP = { APPRECIATION: 20 };
 export const appreciate = async (req, res) => {
   try {
     const userId = req.user.id;
     const { targetId, targetType } = req.body;
-
+console.log('appreciating post', targetId, targetType)
     const Model = mongoose.model(targetType);
     const doc = await Model.findById(targetId).select("createdBy postedBy drip appreciateCount");
-
+    console.log ('founded', doc)
     if (!doc) return res.status(404).json({ success: false, message: "Target not found" });
 
     // create appreciation (unique index prevents duplicates)
@@ -25,15 +25,15 @@ export const appreciate = async (req, res) => {
     // atomic-ish update and return updated doc
     const updated = await Model.findByIdAndUpdate(
       targetId,
-      { $inc: { drip: DRIP.APPRECIATION, appreciateCount: 1 } },
+      { $inc: { drip: DRIP.APPRECIATION, appreciationCount: 1 } },
       { new: true }
     ).select("appreciateCount");
-
+    console.log('updated appreciation', updated)
     await User.findByIdAndUpdate(doc.createdBy || doc.postedBy, { $inc: { drip: DRIP.APPRECIATION } });
-
+    console.log('appreciated')
     return res.json({
       success: true,
-      appreciateCount: updated ? updated.appreciateCount : undefined,
+      appreciationCount: updated ? updated.appreciationCount : undefined,
       isAppreciated: true,
     });
   } catch (err) {
@@ -42,9 +42,10 @@ export const appreciate = async (req, res) => {
       try {
         const Model = mongoose.model(req.body.targetType);
         const existing = await Model.findById(req.body.targetId).select("appreciateCount").lean();
+        console.log(existing)
         return res.json({
           success: true,
-          appreciateCount: existing?.appreciateCount ?? 0,
+          appreciationCount: existing?.appreciationCount ?? 0,
           isAppreciated: true,
         });
       } catch (e) {
@@ -60,7 +61,7 @@ export const removeAppreciation = async (req, res) => {
   try {
     const { targetId } = req.body;
     const userId = req.user.id;
-
+console.log('removing the appreciation', targetId,)
     const record = await Appreciation.findOneAndDelete({
       user: userId,
       target: targetId,
@@ -72,20 +73,20 @@ export const removeAppreciation = async (req, res) => {
 
     const updated = await Model.findByIdAndUpdate(
       targetId,
-      { $inc: { drip: -DRIP.APPRECIATION, appreciateCount: -1 } },
+      { $inc: { drip: -DRIP.APPRECIATION, appreciationCount: -1 } },
       { new: true }
     ).select("appreciateCount");
 
     await User.findByIdAndUpdate(record.owner._id, { $inc: { drip: -DRIP.APPRECIATION } });
 
     // ensure not negative (optional safety)
-    if (updated && updated.appreciateCount < 0) {
-      await Model.findByIdAndUpdate(targetId, { $set: { appreciateCount: 0 } });
+    if (updated && updated.appreciationCount < 0) {
+      await Model.findByIdAndUpdate(targetId, { $set: { appreciationCount: 0 } });
     }
-
+console.log('removed appreciation')
     return res.json({
       success: true,
-      appreciateCount: updated ? Math.max(0, updated.appreciateCount) : undefined,
+      appreciationCount: updated ? Math.max(0, updated.appreciationCount) : undefined,
       isAppreciated: false,
     });
   } catch (err) {
@@ -258,30 +259,12 @@ export const getAppreciatedPostsByHandle = async (req, res) => {
       .lean();
 
     /* 🔥 ADD START: isAppreciated logic */
-    let postsWithFlag = posts;
-
-    if (requesterUserId && posts.length) {
-      const appreciatedDocs = await Appreciation.find({
-        user: requesterUserId,
-        targetType: "Post",
-        target: { $in: posts.map(p => p._id) },
-      }).select("target").lean();
-
-      const appreciatedSet = new Set(
-        appreciatedDocs.map(a => String(a.target))
-      );
-
-      postsWithFlag = posts.map(p => ({
-        ...p,
-        isAppreciated: appreciatedSet.has(String(p._id)),
-      }));
-    } else {
-      postsWithFlag = posts.map(p => ({
-        ...p,
-        isAppreciated: false,
-      }));
-    }
-    /* 🔥 ADD END */
+const postsWithFlag = await attachIsAppreciated(
+  posts,
+  req.user?.id || null,
+  "Post"
+);
+/* 🔥 ADD END */
 
     const postMap = new Map(postsWithFlag.map(p => [String(p._id), p]));
     const ordered = postIds.map(id => postMap.get(String(id))).filter(Boolean);
@@ -359,30 +342,12 @@ export const getAppreciatedProductsByHandle = async (req, res) => {
       .lean();
 
     /* 🔥 ADD START: isAppreciated logic */
-    let productsWithFlag = products;
+const productsWithFlag = await attachIsAppreciated(
+  products,
+  req.user?.id || null,
+  "Product"
+);
 
-    if (requesterUserId && products.length) {
-      const appreciatedDocs = await Appreciation.find({
-        user: requesterUserId,
-        targetType: "Product",
-        target: { $in: products.map(p => p._id) },
-      }).select("target").lean();
-
-      const appreciatedSet = new Set(
-        appreciatedDocs.map(a => String(a.target))
-      );
-
-      productsWithFlag = products.map(p => ({
-        ...p,
-        isAppreciated: appreciatedSet.has(String(p._id)),
-      }));
-    } else {
-      productsWithFlag = products.map(p => ({
-        ...p,
-        isAppreciated: false,
-      }));
-    }
-    /* 🔥 ADD END */
 
     const productMap = new Map(productsWithFlag.map(p => [String(p._id), p]));
     const ordered = productIds.map(id => productMap.get(String(id))).filter(Boolean);

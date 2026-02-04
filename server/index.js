@@ -127,7 +127,7 @@ async function testAchievements() {
   console.log("✅ Achievement test completed");
 }
 // testAchievements();
-// async function migrateImagesToMedia() {
+
 //   try {
 //     // Fetch all posts that have images field OR maybe undefined
 //     const posts = await Post.find({});
