@@ -12,7 +12,7 @@ router.get("/asset/:assetId/posts", getPostsOfAsset);
 router.get("/assetById/:id", verifyToken, getDesignById);
 router.post("/view/:id", verifyToken, addProductView);
 // Get single product by HANDLE
-router.get("/assetByHandle/:handle", getDesignByHandle);
+router.get("/assetByHandle/:handle",verifyToken, getDesignByHandle);
 router.post('/post' ,verifyToken, postDesign) ;
 router.delete('/delete/:id', deleteDesign); 
 router.get("/search/designs",verifyToken , searchDesigns);

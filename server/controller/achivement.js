@@ -2,7 +2,7 @@
 import Post from "../models/post.js";
 import Notification from "../models/notification.js";
 import User from "../models/user.js";
-
+import {attachIsAppreciated} from '../utils/attactIsAppreciated.js'
 export const getPendingAchievements = async (req, res) => {
   const posts = await Post.find({ "pendingAchievement.type": { $exists: true } })
     .populate("createdBy", "name handle profile");
@@ -33,7 +33,6 @@ export const getAchievementsByPeriod = async (req, res) => {
       return res.status(400).json({ message: "Invalid period. Use day, week, or month." });
     }
 
-    // 1️⃣ Date range setup
     const now = new Date();
     const since = new Date();
 
@@ -41,31 +40,36 @@ export const getAchievementsByPeriod = async (req, res) => {
     if (period === "week") since.setDate(now.getDate() - 7);
     if (period === "month") since.setMonth(now.getMonth() - 1);
 
-    // 2️⃣ Regex for type match
     const regex = new RegExp(`_of_the_${period}$`, "i");
 
     console.log(`🎯 Fetching all achievements of the ${period} since ${since.toISOString()}`);
 
-    // 3️⃣ Fetch posts that:
-    // - have currentAchievement.type matching the period
-    // - and were awarded within that period
-const posts = await Post.find({
-  "currentAchievement.type": { $regex: regex },
-  "currentAchievement.awardedAt": { $gte: since }, // only achievements awarded in this period
-})
-.sort({ "currentAchievement.awardedAt": -1 })
-.populate("createdBy", "name profile handle")
-.populate("votes.user", "name profile handle");
+    const posts = await Post.find({
+      "currentAchievement.type": { $regex: regex },
+      "currentAchievement.awardedAt": { $gte: since },
+    })
+      .sort({ "currentAchievement.awardedAt": -1 })
+      .populate("createdBy", "name profile handle")
+      .populate("votes.user", "name profile handle")
+      .lean(); // ✅ FIX
 
     if (!posts.length) {
       return res.status(404).json({ message: `No achievements for this ${period} yet.` });
     }
 
+    const postsWithFlag = await attachIsAppreciated(
+      posts,
+      req.user?.id || null,
+      "Post"
+    );
+
+    console.log("posts with flag", postsWithFlag.length);
+
     res.json({
       success: true,
       period,
-      total: posts.length,
-      achievements: posts,
+      total: postsWithFlag.length,
+      achievements: postsWithFlag,
     });
   } catch (error) {
     console.error("❌ Error fetching achievements by period:", error);
@@ -98,8 +102,12 @@ console.log('getting all achivements')
     .sort({ "currentAchievement.awardedAt": -1 })
     .populate("createdBy", "name profile handle")
     .populate("votes.user", "name profile handle");
-
-    res.json(posts);
+const postsWithFlag = await attachIsAppreciated(
+  posts,
+  req.user?.id || null,
+  "Post"
+);
+    res.json(postsWithFlag);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -118,8 +126,12 @@ export const getAchievementsByTypes = async (req, res) => {
     })
       .populate("createdBy", "name profile handle")
       .populate("votes.user", "name profile handle");
-
-    res.json(posts);
+const postsWithFlag = await attachIsAppreciated(
+  posts,
+  req.user?.id || null,
+  "Post"
+);
+    res.json(postsWithFlag);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

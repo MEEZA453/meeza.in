@@ -68,7 +68,7 @@ export async function finalizePendingAchievements() {
 
     if (!pendingPosts.length) return console.log("No pending posts to finalize");
 
-    console.log("Finalizing the pending posts:", pendingPosts.map(p => p.name));
+    console.log("Finalizing the pending posts:", pendingPosts.map(p => p._id));
 
     const juries = await User.find({ role: { $in: ["jury", "dev"] } });
     const totalReviewers = juries.length;
@@ -78,11 +78,11 @@ export async function finalizePendingAchievements() {
         const cancelPercent = (cancelVotes / totalReviewers) * 100;
 
         if (cancelPercent >= 70) {
-            console.log("❌ Achievement canceled for:", post.name);
+            console.log("❌ Achievement canceled for:", post._id);
             await Notification.create({
                 recipient: post.createdBy._id,
                 type: "achievement_rejected",
-                message: `❌ Your post "${post.name}" nomination for ${post.pendingAchievement.type.replace(/_/g, " ")} was rejected.`,
+                message: `❌ Your post "${post._id}" nomination for ${post.pendingAchievement.type.replace(/_/g, " ")} was rejected.`,
                 post: post._id,
             });
             post.pendingAchievement = null;
@@ -108,7 +108,7 @@ export async function finalizePendingAchievements() {
             post.pendingAchievement = null;
             await post.save();
 
-            console.log("🏆 Achievement awarded for:", post.name, "type:", final);
+            console.log("🏆 Achievement awarded for:", post._id, "type:", final);
 
             await Notification.create({
                 recipient: post.createdBy._id,

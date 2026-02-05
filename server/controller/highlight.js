@@ -68,7 +68,7 @@ export const getAllHighlights = async (req, res) => {
   try {
     const { category } = req.query;
     console.log('getting  hightlights')
-console.log(req.user.id)
+console.log(req.user)
     const categoryFilter = category
       ? { category: { $in: category.split(",") } }
       : {};

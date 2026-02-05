@@ -11,7 +11,7 @@ const router = express.Router();
 router.get("/pending", verifyToken, getPendingAchievements);       // Get pending achievements
 router.post("/voteAgainst", verifyToken, voteAgainstAchievement);  // Jury/dev vote to cancel
 // 🎯 New routes
-router.get("/period", getAchievementsByPeriod);
+router.get("/period",verifyToken, getAchievementsByPeriod);
 // ==============================
 // Feed / Public Routes
 // ==============================

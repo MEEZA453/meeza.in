@@ -11,6 +11,7 @@ import mongoose from "mongoose";
 import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.js";
 import productView from "../models/productView.js";
 import { updateProductHotScore } from "../utils/updateProductHotScore.js";
+import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
 export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
@@ -228,9 +229,14 @@ const nextCursor =
       hasMore,
       'total products:' ,total
     );
+const designsWithFlag = await attachIsAppreciated(
+  designs,
+  req.user?.id || null,
+  "Product"
+);
 
     res.status(200).json({
-      results: designs,
+      results: designsWithFlag,
       limit,
       nextCursor,
       count: total,
@@ -392,10 +398,14 @@ export const getDesignByHandle = async (req, res) => {
         .limit(limit)
         .populate({ path: "postedBy", select: "profile handle _id" })
         .lean();
-
+const designsWithFlag = await attachIsAppreciated(
+  products,
+  req.user?.id || null,
+  "Product"
+);
       return res.status(200).json({
         success: true,
-        products,
+        products :designsWithFlag,
         page,
         limit,
         count: totalCount,
@@ -415,21 +425,28 @@ export const getDesignByHandle = async (req, res) => {
       });
     }
 
-    const userId = req.user?.id;
-    const unlocked = false;
+const userId = req.user?.id;
+const unlocked = false;
 
-    const productWithOwnership = {
-      ...product,
-      isMyProduct: userId
-        ? product.postedBy?._id.toString() === userId.toString()
-        : false,
-      unlocked,
-    };
+const productWithOwnership = {
+  ...product,
+  isMyProduct: userId
+    ? product.postedBy?._id.toString() === userId.toString()
+    : false,
+  unlocked,
+};
 
-    res.status(200).json({
-      success: true,
-      product: productWithOwnership,
-    });
+// 🔥 attach appreciation flag (array in → array out)
+const [productWithFlag] = await attachIsAppreciated(
+  [productWithOwnership],
+  userId || null,
+  "Product"
+);
+
+res.status(200).json({
+  success: true,
+  product: productWithFlag,
+});
   } catch (error) {
     console.error("Error in getDesignByHandle:", error);
     res.status(500).json({
@@ -438,7 +455,7 @@ export const getDesignByHandle = async (req, res) => {
     });
   }
 };
-;
+
 
 
 export const searchDesigns = async (req, res) => {

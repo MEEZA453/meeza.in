@@ -13,7 +13,7 @@ const productSchema = new mongoose.Schema(
     views: { type: Number, default: 0 },
 uniqueViewers: { type: Number, default: 0 },
 drip: { type: Number, default: 0 },
-appreciateCount: { type: Number, default: 0 },
+appreciationCount: { type: Number, default: 0 },
 
 hotScore: {
   type: Number,
