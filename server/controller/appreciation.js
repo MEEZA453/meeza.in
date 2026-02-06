@@ -3,6 +3,7 @@ import User from '../models/user.js'
 import Post from '../models/post.js'
 import Product from "../models/designs.js";
 import mongoose from "mongoose";
+import {attachIsAppreciated} from '../utils/attactIsAppreciated.js'
  const DRIP = { APPRECIATION: 20 };
 export const appreciate = async (req, res) => {
   try {
@@ -214,7 +215,7 @@ export const getAppreciatedPostsByHandle = async (req, res) => {
   try {
     const { handle } = req.params;
     const requesterUserId = req.user?.id || null;
-
+console.log('getting appreciated posts')
     const limit = Math.max(1, parseInt(req.query.limit || "10"));
     const page = Math.max(1, parseInt(req.query.page || "1"));
     const skip = (page - 1) * limit;
@@ -278,7 +279,7 @@ const postsWithFlag = await attachIsAppreciated(
         target: { $nin: [...existingIds] },
       });
     }
-
+console.log('got', total, 'appreaciation posts')
     return res.json({
       success: true,
       items: ordered,
@@ -297,7 +298,7 @@ export const getAppreciatedProductsByHandle = async (req, res) => {
   try {
     const { handle } = req.params;
     const requesterUserId = req.user?.id || null;
-
+console.log('getting appreciated product')
     const limit = Math.max(1, parseInt(req.query.limit || "10"));
     const page = Math.max(1, parseInt(req.query.page || "1"));
     const skip = (page - 1) * limit;
@@ -361,7 +362,7 @@ const productsWithFlag = await attachIsAppreciated(
         target: { $nin: [...existingIds] },
       });
     }
-
+console.log('got' ,total, 'appreciated prducsts')
     return res.json({
       success: true,
       items: ordered,
