@@ -12,8 +12,7 @@ console.log('processing highlight quequ')
     for (const post of expired) {
       post.isHighlighted = false;
       post.highlightedUntil = null;
-      await post.save();
-
+      await post.save()
       // mark related HighlightRequest as EXPIRED
       await HighlightRequest.updateMany({ post: post._id, status: "APPROVED", expiresAt: { $lte: now } }, { $set: { status: "EXPIRED" } });
     }

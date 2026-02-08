@@ -1,6 +1,6 @@
 // controller/highlightController.js
 import Post from "../models/post.js";
-import HighlightRequest from "../models/HighlightRequest.js";
+import HighlightRequest from "../models/highlightRequest.js";
 import Notification from "../models/notification.js";
 import User from "../models/user.js";
 import Razorpay from "razorpay";
