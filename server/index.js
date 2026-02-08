@@ -33,6 +33,8 @@ import { startSubscriptionCron } from './corn/subscribtion.js';
 import Post from './models/post.js';
 import walletRoute from './routes/wallet.js';
 import appreciationRoute from './routes/appreciation.js'
+import cron from "node-cron";
+import { processHighlightQueue } from './corn/highlightQueueProcessor.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -127,37 +129,10 @@ async function testAchievements() {
   console.log("✅ Achievement test completed");
 }
 // testAchievements();
+cron.schedule("*/5 * * * *", async () => {
+  await processHighlightQueue();
+});
 
-//   try {
-//     // Fetch all posts that have images field OR maybe undefined
-//     const posts = await Post.find({});
-//     console.log(`Found ${posts.length} posts to check`);
-
-//     for (const post of posts) {
-//       // If images exist and is non-empty array
-//       if (Array.isArray(post.images) && post.images.length > 0) {
-//         post.media = post.images.map(img => {
-//           if (typeof img === "string") return { url: img, type: "image" };
-//           return img; // already object
-//         });
-
-//         post.images = undefined; // remove old field
-//         await post.save();
-//         console.log(`Migrated post ${post._id}`);
-//       } else {
-//         console.log(`Skipping post ${post._id} (no images array)`);
-//       }
-//     }
-
-//     console.log("Migration complete!");
-//     process.exit(0);
-//   } catch (err) {
-//     console.error(err);
-//     process.exit(1);
-//   }
-// }
-
-// migrateImagesToMedia();
 startSubscriptionCron();
 server.listen(PORT, () => {
   console.log(`🚀 Server running with Socket.IO on port ${PORT}`);

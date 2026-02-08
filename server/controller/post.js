@@ -55,7 +55,7 @@ export const requestAttachAsset = async (req, res) => {
       recipient: asset.postedBy,
       sender: userId,
       type: "asset_attach_request",
-      message: message || `User requested to attach your asset "${asset.name}" to post "${post.name}"`,
+      message: 'wants to attact supply',
       meta: { postId, assetId, postImage, assetImage }
     });
 

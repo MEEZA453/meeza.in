@@ -30,19 +30,35 @@ const postSchema = new mongoose.Schema({
 media: [
   {
     url: { type: String, required: true },
-    type: { type: String, enum: ["image", "video"], required: true }
-  }
+
+    type: {
+      type: String,
+      enum: ["image", "video"],
+      required: true,
+    },
+
+    // ✅ only used when type === "video"
+    cover: {
+      type: String,
+      required: function () {
+        return this.type === "video";
+      },
+    },
+  },
 ],
+
   voteFields: [{ type: String }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],
   isHighlighted: { type: Boolean, default: false },
-highlightedBy: [
-  {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    highlightedAt: { type: Date, default: Date.now }
-  }
-]
+  highlightedBy: [
+    {
+      user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      highlightedAt: { type: Date, default: Date.now }
+    }
+  ],
+  highlightedUntil: { type: Date, default: null, index: true },
+  lastHighlightedAt: { type: Date, default: null, index: true }
 ,
   score: {
     averages: { type: mongoose.Schema.Types.Mixed, default: {} }, 

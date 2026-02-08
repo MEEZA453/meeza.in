@@ -43,3 +43,8 @@ export const verifyIsUser = (req, res, next) => {
 
   next();
 };
+export const verifyIsDev = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (req.user.role !== "dev") return res.status(403).json({ success: false, message: "Forbidden: devs only" });
+  next();
+};
