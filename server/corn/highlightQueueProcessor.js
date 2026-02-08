@@ -1,6 +1,6 @@
 // jobs/highlightQueueProcessor.js
 import Post from "../models/post.js";
-import HighlightRequest from "../models/HighlightRequest.js";
+import HighlightRequest from "../models/highlightRequest.js";
 import Notification from "../models/notification.js";
 
 export async function processHighlightQueue() {
