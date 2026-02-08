@@ -7,8 +7,62 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import { stripe } from "../lib/stripe.js";
 import mongoose from "mongoose";
-
+import {attachIsAppreciated} from '../utils/attactIsAppreciated.js'
 const HIGHLIGHT_MAX_ACTIVE = 20;
+export const addToHighlight = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { designId } = req.body;
+
+    const post = await Post.findById(designId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    // Check if user already highlighted
+    const already = post.highlightedBy.some(
+      h => h.user.toString() === userId
+    );
+
+    if (!already) {
+      post.highlightedBy.push({
+        user: userId,
+        highlightedAt: new Date()
+      });
+      post.isHighlighted = true;
+    }
+
+    await post.save();
+
+    return res.status(200).json({ success: true, message: "Post highlighted" });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// -----------------------------------------
+// REMOVE HIGHLIGHT
+// -----------------------------------------
+export const removeFromHighlight = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { designId } = req.body;
+
+    const post = await Post.findById(designId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    post.highlightedBy = post.highlightedBy.filter(
+      h => h.user.toString() !== userId
+    );
+
+    post.isHighlighted = post.highlightedBy.length > 0;
+
+    await post.save();
+
+    return res.status(200).json({ success: true, message: "Highlight removed" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
 // helper: get latest highlight end
 async function getLatestHighlightEnd() {
@@ -222,8 +276,8 @@ console.log('highight approved')
 export const createPaymentForHighlight = async (req, res) => {
   try {
     const userId = req.user.id;
-   const { highlightRequestId, gateway } = req.body;
-   console.log('creating payment for highlight', highlightRequestId, gateway)
+   const { highlightRequestId, gateway,  } = req.body;
+   console.log('creating payment for highlight', highlightRequestId, gateway,'user id ', userId)
     const reqDoc = await HighlightRequest.findById(highlightRequestId).populate("post requester").exec();
     if (!gateway || !['stripe', 'razorpay'].includes(gateway)) {
   return res.status(400).json({
@@ -231,12 +285,20 @@ export const createPaymentForHighlight = async (req, res) => {
     message: "Payment gateway is required"
   });
 }
+console.log('requestdoc', reqDoc.status)
     if (!reqDoc) return res.status(404).json({ success: false, message: "Highlight request not found" });
-    if (reqDoc.requester.toString() !== userId.toString()) return res.status(403).json({ success: false, message: "Not request owner" });
+    if (reqDoc.requester._id.toString() !== userId.toString()) return res.status(403).json({ success: false, message: "Not request owner" });
 
-    if (reqDoc.status !== "AWAITING_PAYMENT") {
-      return res.status(400).json({ success: false, message: "Request not awaiting payment" });
-    }
+ if (
+  reqDoc.status !== "PENDING_PAYMENT" &&
+  reqDoc.status !== "AWAITING_PAYMENT"
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Request not awaiting payment"
+  });
+}
+
 
     // Create payment intent/order depending on gateway
     if (gateway === "stripe") {
@@ -251,8 +313,9 @@ export const createPaymentForHighlight = async (req, res) => {
       reqDoc.stripePaymentIntentId = paymentIntent.id;
       reqDoc.status = "PENDING_PAYMENT";
       await reqDoc.save();
-
-      return res.json({ success: true, gateway: "stripe", clientSecret: paymentIntent.client_secret, highlightRequestId: reqDoc._id });
+console.log('done stripe part')
+      return res.json({ success: true, gateway: "stripe", clientSecret: paymentIntent.client_secret, highlightRequestId: reqDoc._id,  amount: reqDoc.priceUSD,      // 👈 REQUIRED
+  currency: "USD",      });
     }
 
     if (gateway === "razorpay") {
@@ -264,10 +327,10 @@ export const createPaymentForHighlight = async (req, res) => {
       reqDoc.razorpayOrderId = order.id;
       reqDoc.status = "PENDING_PAYMENT";
       await reqDoc.save();
-connsole.log('payment created successfully ')
+console.log('payment created successfully ')
       return res.json({ success: true, gateway: "razorpay", orderId: order.id, key: process.env.RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency, highlightRequestId: reqDoc._id });
     }
-
+console.log('done craaaate')
     return res.status(400).json({ success: false, message: "Unsupported gateway" });
 
   } catch (err) {

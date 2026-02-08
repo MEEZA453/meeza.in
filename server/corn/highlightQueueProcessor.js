@@ -38,13 +38,7 @@ console.log('processing highlight quequ')
       await HighlightRequest.findByIdAndUpdate(r._id, { $set: { startedAt: new Date() } });
 
       // notify requester
-      await Notification.create({
-        recipient: r.requester._id,
-        sender: r.approvedBy || null,
-        type: "highlight_started",
-        message: `Your highlight for post ${post._id} has started and will expire at ${r.expiresAt.toISOString()}`,
-        meta: { highlightRequestId: r._id, postId: post._id, expiresAt: r.expiresAt }
-      });
+
     }
     
     console.log('process successful')
