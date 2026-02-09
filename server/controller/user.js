@@ -30,6 +30,123 @@ async function saveRecentlyVisitedUser(viewerId, visitedUserId) {
   });
 }
 
+// export const getTopCreators = async (req, res) => {
+//   try {
+//     const limit = Math.min(
+//       50,
+//       Math.max(1, parseInt(req.query.limit || "10", 10))
+//     );
+
+//     const cursor = req.query.cursor; 
+//     // cursor format: "drip:_id"
+
+//     let match = { drip: { $gt: 0 } };
+
+//     if (cursor) {
+//       const [lastDrip, lastId] = cursor.split(":");
+
+//       match.$or = [
+//         { drip: { $lt: Number(lastDrip) } },
+//         {
+//           drip: Number(lastDrip),
+//           _id: { $lt: lastId },
+//         },
+//       ];
+//     }
+
+//     const users = await User.find(match)
+//       .sort({ drip: -1, _id: -1 })
+//       .limit(limit + 1)
+//       .select("name profile handle drip role")
+//       .lean();
+
+//     const hasMore = users.length > limit;
+//     if (hasMore) users.pop();
+
+//     const nextCursor = hasMore
+//       ? `${users[users.length - 1].drip}:${users[users.length - 1]._id}`
+//       : null;
+
+//     res.status(200).json({
+//       results: users,
+//       nextCursor,
+//       hasMore,
+//     });
+//   } catch (err) {
+//     console.error("getTopCreators", err);
+//     res.status(500).json({ message: "Failed to fetch top creators" });
+//   }
+// };
+export const getTopCreators = async (req, res) => {
+  console.log('fetching to creators', req.user)
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "10", 10)));
+    const cursor = req.query.cursor || null;
+    const minDrip = req.query.minDrip ? Number(req.query.minDrip) : 0;
+
+    const match = { drip: { $gte: minDrip } };
+
+    if (cursor) {
+      const [lastDripRaw, lastId] = String(cursor).split(":");
+      const lastDrip = Number(lastDripRaw);
+
+      match.$or = [
+        { drip: { $lt: lastDrip } },
+        { drip: lastDrip, _id: { $lt: lastId } },
+      ];
+    }
+
+    const docs = await User.find(match)
+      .sort({ drip: -1, _id: -1 })
+      .limit(limit + 1)
+      .select("name handle profile drip role bio")
+      .lean();
+
+    const hasMore = docs.length > limit;
+    if (hasMore) docs.pop();
+
+    const nextCursor =
+      hasMore && docs.length
+        ? `${docs[docs.length - 1].drip}:${docs[docs.length - 1]._id}`
+        : null;
+
+    let total = undefined;
+    if (req.query.includeCount === "true") {
+      total = await User.countDocuments({ drip: { $gte: minDrip } });
+    }
+
+    /* =======================
+       ✅ ADD: my position logic
+       ======================= */
+    let myPosition = null;
+
+    if (req.user?.id) {
+      const me = await User.findById(req.user.id).select("drip");
+
+      if (me) {
+        const higherCount = await User.countDocuments({
+          drip: { $gt: me.drip },
+        });
+
+        myPosition = higherCount + 1;
+      }
+    }
+    /* ======================= */
+console.log('my postion ' ,myPosition, )
+    res.json({
+      results: docs,
+      nextCursor,
+      hasMore,
+      limit,
+      count: total,
+      myPosition, // ✅ added safely
+    });
+  } catch (err) {
+    console.error("getTopCreators error", err);
+    res.status(500).json({ message: "Server error while fetching top creators" });
+  }
+};
+
 export const getUserByHandle = async (req, res) => {
   const { handle } = req.params;
 

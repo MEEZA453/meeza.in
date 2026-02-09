@@ -78,7 +78,9 @@ recentlyVisitedUsers: [
 ],
   // recently opened user profiles
 folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
-});
+} , {
+    timestamps: true, // 👈 REQUIRED
+  });
 
 
 // Virtuals

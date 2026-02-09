@@ -143,60 +143,96 @@ async function scheduleOrActivateHighlight(reqDoc, approverId) {
 export const requestHighlight = async (req, res) => {
   try {
     const userId = req.user.id;
-const { postId, durationHours = 24, priceUSD = 0 } = req.body;
-console.log('sending request', postId, durationHours, priceUSD)
-    if (!mongoose.Types.ObjectId.isValid(postId)) return res.status(400).json({ success: false, message: "Invalid post" });
+    const { postId, durationHours = 24, priceUSD = 0 } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ success: false, message: "Invalid post" });
+    }
 
     const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
 
-    // Always create as PENDING_APPROVAL — paid requests require dev approval first
-const reqDoc = await HighlightRequest.create({
-  post: post._id,
-  requester: userId,
-  durationHours,
-  priceUSD,
-  currency: "USD",
-  status: "PENDING_APPROVAL"
-});
+    // 1️⃣ Must be post owner
+    if (post.createdBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only highlight your own posts",
+      });
+    }
+
+    // 2️⃣ Already highlighted
+    if (post.isHighlighted && post.highlightedUntil && post.highlightedUntil > new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Post is already highlighted",
+      });
+    }
+
+    // 3️⃣ Already requested in last 7 days
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const existingRequest = await HighlightRequest.findOne({
+      post: post._id,
+      requester: userId,
+      createdAt: { $gte: oneWeekAgo },
+    });
+
+    if (existingRequest) {
+      return res.status(429).json({
+        success: false,
+        message: "You already requested highlight for this post. Try again after 7 days.",
+      });
+    }
+
+    // ✅ Create request
+    const reqDoc = await HighlightRequest.create({
+      post: post._id,
+      requester: userId,
+      durationHours,
+      priceUSD,
+      currency: "USD",
+      status: "PENDING_APPROVAL",
+    });
+
     // notify devs
-const devs = await User.find({ role: "dev" })
-  .select("_id")
-  .lean();
+    const devs = await User.find({ role: "dev" }).select("_id").lean();
 
-for (const d of devs) {
-  await Notification.create({
-    recipient: d._id,
-    sender: userId,                // 👈 sender stays canonical
-    type: "highlight_request",
-    post: post._id,
+    for (const d of devs) {
+      await Notification.create({
+        recipient: d._id,
+        sender: userId,
+        type: "highlight_request",
+        post: post._id,
+        message: `requested to highlight a post for ${durationHours} hour(s).`,
+        meta: {
+          postId: post._id,
+          postImage:
+            post.media?.find(m => m.type === "image")?.url ||
+            post.media?.find(m => m.type === "video")?.cover ||
+            null,
+          extra: {
+            highlightRequestId: reqDoc._id,
+            durationHours,
+            priceUSD,
+          },
+        },
+      });
+    }
 
-    message: `requested to highlight a post for ${durationHours} hour(s).`,
-
-    meta: {
-      postId: post._id,
-postImage:
-  post.media?.find(m => m.type === "image")?.url ||
-  post.media?.find(m => m.type === "video")?.cover ||
-  null
-,
-
-
-      extra: {
-        highlightRequestId: reqDoc._id,
-        durationHours,
-        priceUSD,
-      },
-    },
-  });
-}
-console.log('request successfully send')
-    return res.json({ success: true, message: "Request created and sent to devs for approval", highlightRequest: reqDoc });
+    return res.json({
+      success: true,
+      message: "Request created and sent to devs for approval",
+      highlightRequest: reqDoc,
+    });
   } catch (err) {
     console.error("requestHighlight error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 // 2) dev approval (dev)
 export const approveHighlightRequest = async (req, res) => {
@@ -219,8 +255,14 @@ export const approveHighlightRequest = async (req, res) => {
         recipient: reqDoc.requester._id,
         sender: devId,
         type: "highlight_rejected",
-        message: `Your highlight request for post ${reqDoc.post._id} was rejected.`,
-        meta: { highlightRequestId: reqDoc._id, postId: reqDoc.post._id }
+        message: `This post is not eligible for highlight`,
+        meta: { highlightRequestId: reqDoc._id, postId: reqDoc.post._id ,
+           postId: post._id,
+          postImage:
+            post.media?.find(m => m.type === "image")?.url ||
+            post.media?.find(m => m.type === "video")?.cover ||
+            null,
+        }
       });
 console.log('highlight rejected')
       return res.json({ success: true, message: "Request rejected" });
@@ -257,7 +299,6 @@ postImage:
     },
   },
 });
-console.log('highight approved')
       return res.json({ success: true, message: "Request approved — awaiting payment from requester", highlightRequest: reqDoc });
     } else {
       // Free request → schedule/activate immediately
@@ -383,13 +424,38 @@ console.log('verifying payment')
     const schedulingResult = await scheduleOrActivateHighlight(reqDoc, req.user.id /* mark as approvedBy = requester? or null */);
 
     // notify devs and requester (scheduleOrActivate already notifies requester)
-    await Notification.create({
-      recipient: reqDoc.requester._id,
-      sender: req.user.id,
-      type: "highlight_payment_confirmed",
-      message: `Payment received for highlight request ${reqDoc._id}. ${schedulingResult.activated ? "Activated" : "Scheduled"}.`,
-      meta: { highlightRequestId: reqDoc._id, scheduleResult: schedulingResult }
-    });
+  const post = reqDoc.post;
+
+await Notification.create({
+  recipient: reqDoc.requester._id,
+  sender: req.user.id,
+  type: "highlight_payment_confirmed",
+  post: post._id,
+
+  message: schedulingResult.activated
+    ? "This post of yours has been highlighted."
+    : `This post will be highlight at ${schedulingResult.startsAt} to ${schedulingResult.endsAt}`,
+
+  meta: {
+    postId: post._id,
+
+    postImage:
+      post.media?.find(m => m.type === "image")?.url ||
+      post.media?.find(m => m.type === "video")?.cover ||
+      null,
+
+    extra: {
+      highlightRequestId: reqDoc._id,
+
+      activated: schedulingResult.activated,
+
+      // 👇 exact date & time
+      startsAt: schedulingResult.startsAt,
+      endsAt: schedulingResult.endsAt,
+    },
+  },
+});
+
 console.log('payment veriried and highlighed')
     return res.json({ success: true, message: "Payment verified and highlight scheduled/started", scheduleResult: schedulingResult, highlightRequest: reqDoc });
   } catch (err) {

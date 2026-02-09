@@ -14,7 +14,8 @@ verifyOtp,
   applyJury,
   approveJury,
   approveNormal,
-  applyNormal
+  applyNormal,
+  getTopCreators
 } from "../controller/user.js";
 
 import { googleLogin } from "../controller/googleLogin.js";
@@ -29,7 +30,7 @@ router.post("/register", registerUser);
 router.get('/getProductById/:handle', getProductsByUser);
 router.post("/applyJury", verifyToken, applyJury);
 router.post("/applyNormal", verifyToken, applyNormal);
-
+router.get("/top-creators", verifyToken, getTopCreators);
 
 // Dev approves or rejects
 router.post("/approveJury", verifyToken, approveJury);

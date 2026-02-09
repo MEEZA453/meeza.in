@@ -1637,15 +1637,21 @@ console.log(req.user)
         post.voteStats[roleKey].sums[fieldName] = prev + delta;
       }
     }
-const voteDrip =
-  roleKey === "jury" ? DRIP.VOTE_JURY : DRIP.VOTE_NORMAL;
+if (!existingVote) {
+  const voteDrip =
+    roleKey === "jury" ? DRIP.VOTE_JURY : DRIP.VOTE_NORMAL;
 
-// 🔥 ADD DRIP
-post.drip = (post.drip || 0) + voteDrip;
+  // add drip to post
+  post.drip = (post.drip || 0) + voteDrip;
 
-await User.findByIdAndUpdate(post.createdBy, {
-  $inc: { drip: voteDrip }
-}).session(session);
+  // add drip to post owner
+  await User.findByIdAndUpdate(
+    post.createdBy,
+    { $inc: { drip: voteDrip } },
+    { session }
+  );
+  await updateHotScore(postId);
+} 
     // 6) Update recent votes array (update existing entry or unshift)
     const voteData = {
       user: {
@@ -2414,36 +2420,36 @@ console.log(`Fetched ${votes.length} non-jury votes out of ${total} total for po
   }
 };
 
-export const getJuryVotesForPost = async (req, res) => {
-  try {
-    const postId = req.params.id;
-    const page = Math.max(1, parseInt(req.query.page || "1", 10));
-    const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
-    const skip = (page - 1) * limit;
-console.log("Fetching jury votes for post:", postId, "page:", page, "limit:", limit);
-    const filter = {
-      post: postId,
-      userRole: "jury"
-    };
+  export const getJuryVotesForPost = async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const page = Math.max(1, parseInt(req.query.page || "1", 10));
+      const limit = Math.max(1, parseInt(req.query.limit || "10", 10));
+      const skip = (page - 1) * limit;
+  console.log("Fetching jury votes for post:", postId, "page:", page, "limit:", limit);
+      const filter = {
+        post: postId,
+        userRole: "jury"
+      };
 
-    const [votes, total] = await Promise.all([
-      Vote.find(filter)
-        .populate("user", "name profile handle role")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Vote.countDocuments(filter)
-    ]);
-console.log("Found jury votes:", votes.length, "total:", total);
-    res.json({
-      results: votes,
-      page,
-      limit,
-      count: total
-    });
-  } catch (err) {
-    console.error("getJuryVotesForPost", err);
-    res.status(500).json({ message: err.message });
-  }
-};
+      const [votes, total] = await Promise.all([
+        Vote.find(filter)
+          .populate("user", "name profile handle role")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Vote.countDocuments(filter)
+      ]);
+  console.log("Found jury votes:", votes.length, "total:", total);
+      res.json({
+        results: votes,
+        page,
+        limit,
+        count: total
+      });
+    } catch (err) {
+      console.error("getJuryVotesForPost", err);
+      res.status(500).json({ message: err.message });
+    }
+  };
