@@ -17,13 +17,17 @@ const router = express.Router();
    DEV ROUTES
 ================================= */
 
-router.post("/coupon", verifyToken, verifyIsDev, createCoupon);
+// POST /coupon
+router.post("/", verifyToken, verifyIsDev, createCoupon);
 
-router.patch("/coupon/:id/toggle", verifyToken, verifyIsDev, toggleCoupon);
+// PATCH /coupon/:id/toggle
+router.patch("/:id/toggle", verifyToken, verifyIsDev, toggleCoupon);
 
-router.put("/coupon/:id", verifyToken, verifyIsDev, updateCoupon);
+// PUT /coupon/:id
+router.put("/:id", verifyToken, verifyIsDev, updateCoupon);
 
-router.patch("/coupon/:id/disable", verifyToken, verifyIsDev, async (req, res) => {
+// PATCH /coupon/:id/disable
+router.patch("/:id/disable", verifyToken, verifyIsDev, async (req, res) => {
   const coupon = await Coupon.findById(req.params.id);
   if (!coupon) {
     return res.status(404).json({ success: false, message: "Coupon not found" });
@@ -35,24 +39,26 @@ router.patch("/coupon/:id/disable", verifyToken, verifyIsDev, async (req, res) =
   res.json({ success: true });
 });
 
-router.delete("/coupon/:id", verifyToken, verifyIsDev, async (req, res) => {
+// DELETE /coupon/:id
+router.delete("/:id", verifyToken, verifyIsDev, async (req, res) => {
   await Coupon.findByIdAndDelete(req.params.id);
   res.json({ success: true });
 });
 
-router.get("/coupons/filter", verifyToken, verifyIsDev, filterCoupons);
-
-/* ===============================
-   USER ROUTES
-================================= */
-
-// Apply coupon
-router.post("/coupon/apply", verifyToken, applyCoupon);
-
-// Get all coupons (if needed public or dev-only)
+// GET /coupon/coupons
 router.get("/coupons", verifyToken, getAllCoupons);
 
-// Get coupon by ID
-router.get("/coupon/:id", verifyToken, verifyIsDev, getCouponById);
+// GET /coupon/coupons/filter
+router.get("/coupons/filter", verifyToken, verifyIsDev, filterCoupons);
+
+// GET /coupon/:id
+router.get("/:id", verifyToken, verifyIsDev, getCouponById);
+
+/* ===============================
+   USER ROUTE
+================================= */
+
+// POST /coupon/apply
+router.post("/apply", verifyToken, applyCoupon);
 
 export default router;
