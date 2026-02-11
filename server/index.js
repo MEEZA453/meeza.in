@@ -35,6 +35,7 @@ import walletRoute from './routes/wallet.js';
 import appreciationRoute from './routes/appreciation.js'
 import cron from "node-cron";
 import { processHighlightQueue } from './corn/highlightQueueProcessor.js';
+import couponRoute from './routes/coupon.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -80,6 +81,7 @@ app.use("/appreciations", appreciationRoute);
 app.use("/payouts", payoutRoutes);
 app.use('/cart' , cartRoute)
 app.use('/wallet', walletRoute)
+app.use('/coupon', couponRoute)
 // Connect to DB and start server
 connectDB();
 // async function migrateImagesToMedia() {
@@ -120,11 +122,11 @@ async function testAchievements() {
   console.log("🏁 Testing achievement generation...");
 // await generatePendingAchievements("day", 1, 1); // for quick test
 // await finalizePendingAchievements();
- await generatePendingAchievements("month", 0, 0); // for quick test
+//  await generatePendingAchievements("month", 0, 0); // for quick test
  await finalizePendingAchievements();
- await generatePendingAchievements("week", 0, 0); // for quick test
+//  await generatePendingAchievements("week", 0, 0); // for quick test
  await finalizePendingAchievements();
- await generatePendingAchievements("day", 0, 0); // for quick test
+//  await generatePendingAchievements("day", 0, 0); // for quick test
  await finalizePendingAchievements();
   console.log("✅ Achievement test completed");
 }

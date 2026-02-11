@@ -288,67 +288,67 @@ export const getUploadSignature = (req, res) => {
 };
 
 // 2️⃣ Create Post (expects URLs from frontend)
-export const createPost = async (req, res) => {
-  console.log("Creating post...");
-  try {
-    const { description, category, voteFields, media } = req.body;
-console.log("Received data:", { description, category, voteFields, media });
-    if (!voteFields || !category) {
-      return res.status(400).json({ message: "Required fields missing" });
-    }
-
-    // parse category
-    let categoryArray= [];
-    if (typeof category === "string") {
-      try {
-        const parsed = JSON.parse(category);
-        categoryArray = Array.isArray(parsed)
-          ? parsed
-          : typeof parsed === "string"
-          ? parsed.split("/")
-          : [];
-      } catch {
-        categoryArray = category.split("/");
+  export const createPost = async (req, res) => {
+    console.log("Creating post...");
+    try {
+      const { description, category, voteFields, media } = req.body;
+  console.log("Received data:", { description, category, voteFields, media });
+      if (!voteFields || !category) {
+        return res.status(400).json({ message: "Required fields missing" });
       }
-    } else if (Array.isArray(category)) {
-      categoryArray = category;
-    }
 
-    if (categoryArray.length === 0) {
-      return res.status(400).json({ message: "Category array required" });
-    }
+      // parse category
+      let categoryArray= [];
+      if (typeof category === "string") {
+        try {
+          const parsed = JSON.parse(category);
+          categoryArray = Array.isArray(parsed)
+            ? parsed
+            : typeof parsed === "string"
+            ? parsed.split("/")
+            : [];
+        } catch {
+          categoryArray = category.split("/");
+        }
+      } else if (Array.isArray(category)) {
+        categoryArray = category;
+      }
 
-    // parse media array
-// parse media array
-let uploadedMedia = [];
-if (Array.isArray(media)) {
-  uploadedMedia = media;
-} else if (typeof media === "string") {
-  uploadedMedia = JSON.parse(media);
-}
+      if (categoryArray.length === 0) {
+        return res.status(400).json({ message: "Category array required" });
+      }
 
-    const post = new Post({
-      description,
-      category: categoryArray,
-voteFields: Array.isArray(voteFields) ? voteFields : JSON.parse(voteFields),
-      media: uploadedMedia,
-      createdBy: req.user.id,
-      recentNormalVotes: [],
-      recentJuryVotes: [],
-      score: { averages: {}, totalScore: 0 },
-    });
-
-    const keywords = extractKeywordsPost(post);
-    await saveKeywords(keywords);
-
-    const savedPost = await post.save();
-    console.log("Post created successfully");
-    res.status(201).json(savedPost);
-  } catch (err) {
-    console.error("Post creation failed:", err);
-    res.status(500).json({ message: err.message || "Internal server error" });
+      // parse media array
+  // parse media array
+  let uploadedMedia = [];
+  if (Array.isArray(media)) {
+    uploadedMedia = media;
+  } else if (typeof media === "string") {
+    uploadedMedia = JSON.parse(media);
   }
-};
+
+      const post = new Post({
+        description,
+        category: categoryArray,
+  voteFields: Array.isArray(voteFields) ? voteFields : JSON.parse(voteFields),
+        media: uploadedMedia,
+        createdBy: req.user.id,
+        recentNormalVotes: [],
+        recentJuryVotes: [],
+        score: { averages: {}, totalScore: 0 },
+      });
+
+      const keywords = extractKeywordsPost(post);
+      await saveKeywords(keywords);
+
+      const savedPost = await post.save();
+      console.log("Post created successfully");
+      res.status(201).json(savedPost);
+    } catch (err) {
+      console.error("Post creation failed:", err);
+      res.status(500).json({ message: err.message || "Internal server error" });
+    }
+  };
 
 // 3️⃣ Edit Post (also expects URLs from frontend)
 export const editPost = async (req, res) => {
@@ -896,7 +896,7 @@ export const getPostsByHandle = async (req, res) => {
     const { handle } = req.params;
     const limit = Math.max(1, parseInt(req.query.limit || "10"));
     const page = Math.max(1, parseInt(req.query.page || "1"));
-
+console.log('fetching the getPostsByhandle page no:', page)
     const user = await User.findOne({ handle })
       .select("_id name profile handle")
       .lean();
@@ -916,6 +916,7 @@ export const getPostsByHandle = async (req, res) => {
       .lean();
 
     // POSTS ALREADY CONTAIN recentNormalVotes & recentJuryVotes
+    
     return res.json({
       success: true,
       results: posts,
@@ -924,7 +925,6 @@ export const getPostsByHandle = async (req, res) => {
       count: total,
       hasMore: page * limit < total,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });
@@ -1472,7 +1472,7 @@ export const deletePost = async (req, res) => {
     }
 
     // ✅ Allow only post creator or admin to delete
-    if (post.createdBy.toString() !== req.user.id && req.user.role !== "admin") {
+    if (post.createdBy.toString() !== req.user.id && req.user.role !== "dev") {
       return res.status(403).json({ message: "Not authorized to delete this post" });
     }
 
@@ -1544,18 +1544,22 @@ const isFirstView = !everViewed;;
     });
 
     // 🚀 aggregate update
+// Update post
 await Post.findByIdAndUpdate(postId, {
   $inc: {
     views: 1,
-    drip: isOwner ? 0 : DRIP_PER_VIEW,
+    ...(isOwner ? {} : { drip: DRIP_PER_VIEW }),
     ...(isFirstView ? { uniqueViewers: 1 } : {}),
   },
 });
-    if (!isOwner) {
-      await User.findByIdAndUpdate(post.createdBy, {
-        $inc: { drip: DRIP_PER_VIEW },
-      });
-    }
+
+// Reward creator
+if (!isOwner) {
+  await User.findByIdAndUpdate(post.createdBy, {
+    $inc: { drip: DRIP_PER_VIEW },
+  });
+}
+
 await updateHotScore(postId);
 
 console.log('post viewed')
@@ -1641,17 +1645,23 @@ if (!existingVote) {
   const voteDrip =
     roleKey === "jury" ? DRIP.VOTE_JURY : DRIP.VOTE_NORMAL;
 
-  // add drip to post
-  post.drip = (post.drip || 0) + voteDrip;
+  // 🔥 Atomic update on post
+  await Post.findByIdAndUpdate(
+    postId,
+    { $inc: { drip: voteDrip } },
+    { session }
+  );
 
-  // add drip to post owner
+  // 🔥 Atomic update on post owner
   await User.findByIdAndUpdate(
     post.createdBy,
     { $inc: { drip: voteDrip } },
     { session }
   );
+
   await updateHotScore(postId);
-} 
+}
+
     // 6) Update recent votes array (update existing entry or unshift)
     const voteData = {
       user: {

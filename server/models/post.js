@@ -65,7 +65,9 @@ media: [
     totalScore: { type: Number, default: 0 }
   },
 
-  drip: { type: Number, default: 0 },
+drip: { type: Number, default: 0 },          
+monthlyDrip: { type: Number, default: 0 },
+
 views: { type: Number, default: 0 },
   hotScore: {
     type: Number,

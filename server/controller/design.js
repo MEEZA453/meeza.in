@@ -100,20 +100,25 @@ console.log('viewing product', productId, viewerId)
     });
 
     // 🚀 aggregate update
-    await Product.findByIdAndUpdate(productId, {
-      $inc: {
-        views: 1,
-        drip: isOwner ? 0 : DRIP_PER_VIEW,
-        ...(isFirstView ? { uniqueViewers: 1 } : {}),
-      },
-    });
+await Product.findByIdAndUpdate(productId, {
+  $inc: {
+    views: 1,
+    drip: isOwner ? 0 : DRIP_PER_VIEW,
+    monthlyDrip: isOwner ? 0 : DRIP_PER_VIEW,
+    ...(isFirstView ? { uniqueViewers: 1 } : {}),
+  },
+});
 
-    // 💰 reward creator
-    if (!isOwner) {
-      await user.findByIdAndUpdate(product.postedBy, {
-        $inc: { drip: DRIP_PER_VIEW },
-      });
-    }
+// reward creator
+if (!isOwner) {
+  await User.findByIdAndUpdate(product.postedBy, {
+    $inc: { 
+      drip: DRIP_PER_VIEW,
+      monthlyDrip: DRIP_PER_VIEW
+    },
+  });
+}
+
 
     // 🔥 HOT SCORE UPDATE
     await updateProductHotScore(productId);

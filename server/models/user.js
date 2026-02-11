@@ -13,7 +13,9 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  drip: { type: Number, default: 0 },
+drip: { type: Number, default: 0 },          // lifetime
+monthlyDrip: { type: Number, default: 0 },   // monthly
+
   googleId: {
     type: String,
     require: true,
@@ -60,6 +62,7 @@ normalApplied: {
   type: Boolean,
   default: false
 },
+credits: { type: Number, default: 0 },
   // Followers / Following
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

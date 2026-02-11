@@ -78,28 +78,41 @@ async function saveRecentlyVisitedUser(viewerId, visitedUserId) {
 //   }
 // };
 export const getTopCreators = async (req, res) => {
-  console.log('fetching to creators', req.user)
+  console.log("fetching top creators", req.user);
+
   try {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "10", 10)));
     const cursor = req.query.cursor || null;
     const minDrip = req.query.minDrip ? Number(req.query.minDrip) : 0;
 
-    const match = { drip: { $gte: minDrip } };
+    /* ==========================
+       ✅ Dynamic Ranking Type
+       ========================== */
+
+    let dripField = "drip"; // default lifetime
+
+    if (req.query.type === "monthly") dripField = "monthlyDrip";
+    if (req.query.type === "daily") dripField = "dailyDrip";
+    if (req.query.type === "weekly") dripField = "weeklyDrip"; // future ready
+
+    /* ========================== */
+
+    const match = { [dripField]: { $gte: minDrip } };
 
     if (cursor) {
       const [lastDripRaw, lastId] = String(cursor).split(":");
       const lastDrip = Number(lastDripRaw);
 
       match.$or = [
-        { drip: { $lt: lastDrip } },
-        { drip: lastDrip, _id: { $lt: lastId } },
+        { [dripField]: { $lt: lastDrip } },
+        { [dripField]: lastDrip, _id: { $lt: lastId } },
       ];
     }
 
     const docs = await User.find(match)
-      .sort({ drip: -1, _id: -1 })
+      .sort({ [dripField]: -1, _id: -1 })
       .limit(limit + 1)
-      .select("name handle profile drip role bio")
+      .select(`name handle profile ${dripField} role bio`)
       .lean();
 
     const hasMore = docs.length > limit;
@@ -107,45 +120,52 @@ export const getTopCreators = async (req, res) => {
 
     const nextCursor =
       hasMore && docs.length
-        ? `${docs[docs.length - 1].drip}:${docs[docs.length - 1]._id}`
+        ? `${docs[docs.length - 1][dripField]}:${docs[docs.length - 1]._id}`
         : null;
 
     let total = undefined;
     if (req.query.includeCount === "true") {
-      total = await User.countDocuments({ drip: { $gte: minDrip } });
+      total = await User.countDocuments({ [dripField]: { $gte: minDrip } });
     }
 
     /* =======================
-       ✅ ADD: my position logic
+       ✅ My Position Logic
        ======================= */
+
     let myPosition = null;
 
     if (req.user?.id) {
-      const me = await User.findById(req.user.id).select("drip");
+      const me = await User.findById(req.user.id).select(dripField);
 
       if (me) {
         const higherCount = await User.countDocuments({
-          drip: { $gt: me.drip },
+          [dripField]: { $gt: me[dripField] },
         });
 
         myPosition = higherCount + 1;
       }
     }
+
     /* ======================= */
-console.log('my postion ' ,myPosition, )
+
+    console.log("my position", myPosition);
+
     res.json({
       results: docs,
       nextCursor,
       hasMore,
       limit,
       count: total,
-      myPosition, // ✅ added safely
+      myPosition,
     });
   } catch (err) {
     console.error("getTopCreators error", err);
-    res.status(500).json({ message: "Server error while fetching top creators" });
+    res.status(500).json({
+      message: "Server error while fetching top creators",
+    });
   }
 };
+
 
 export const getUserByHandle = async (req, res) => {
   const { handle } = req.params;

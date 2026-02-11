@@ -24,7 +24,9 @@ hotScore: {
     driveLink: { type: String, required: false },
     amount: { type: Number, required: true },
 views: { type: Number, default: 0 },
-drip: { type: Number, default: 0 },
+drip: { type: Number, default: 0 },          
+monthlyDrip: { type: Number, default: 0 },
+
     faq: [{ question: { type: String }, answer: { type: String } }],
 
     sections: [

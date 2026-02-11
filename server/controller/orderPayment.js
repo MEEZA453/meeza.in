@@ -366,13 +366,18 @@ await User.findByIdAndUpdate(order.seller._id, {
     }], { session });
 
     await User.findByIdAndUpdate(seller._id, { $inc: { balance: creditUSD } }, { session });
-await Product.findByIdAndUpdate(order.product._id, {
-  $inc: { drip: 50 }
-}, { session });
+await Product.updateOne(
+  { _id: order.product._id },
+  { $inc: { drip: SALE_DRIP } },
+  { session }
+);
 
-await User.findByIdAndUpdate(order.seller._id, {
-  $inc: { drip: 50 }
-}, { session });
+await User.updateOne(
+  { _id: order.seller._id },
+  { $inc: { drip: SALE_DRIP } },
+  { session }
+);
+
     console.log("Credited seller:", order.seller._id, "amount USD:", creditUSD);
     
     await Notification.create([{
