@@ -68,7 +68,7 @@ export const createCoupon = async (req, res) => {
   } = req.body;
 
   const coupon = await Coupon.create({
-    code: code.toUpperCase(),
+    code,
     type,
     discountPercent,
     discountAmount,
@@ -77,7 +77,7 @@ export const createCoupon = async (req, res) => {
     expiresAt,
     createdBy: req.user._id,
   });
-
+console.log('coupon created successfully ',coupon)
   res.json({
     success: true,
     coupon,
@@ -132,14 +132,14 @@ export const filterCoupons = async (req, res) => {
 };
 export const toggleCoupon = async (req, res) => {
   const coupon = await Coupon.findById(req.params.id);
-
+console.log('toggling the coupon :', coupon?._id)
   if (!coupon) {
     return res.status(404).json({ success: false });
   }
 
   coupon.isActive = !coupon.isActive;
   await coupon.save();
-
+console.log('coupon status', coupon.isActive)
   res.json({
     success: true,
     isActive: coupon.isActive,

@@ -5,12 +5,11 @@ const couponSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    uppercase: true,
   },
 
   type: {
     type: String,
-    enum: ["SUBSCRIPTION_DISCOUNT", "FREE_CREDITS"],
+    enum: ["DISCOUNT_PERCENT", "CREDITS", "DISCOUNT_AMOUNT"],
     required: true,
   },
 
