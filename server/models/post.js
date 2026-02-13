@@ -29,6 +29,7 @@ const postSchema = new mongoose.Schema({
   hashtags: [String],
 media: [
   {
+        key: { type: String }, // S3 object key (posts/...
     url: { type: String, required: true },
 
     type: {

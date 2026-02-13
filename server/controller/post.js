@@ -13,6 +13,7 @@ import { extractKeywordsPost, saveKeywords } from "../utils/extractKeywords.js";
 import postView from "../models/postView.js";
 import { updateHotScore } from "../utils/updateHotScore.js";
 import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
+import { generatePresignedUpload, deleteObjectByKey, getS3KeyFromUrl } from "../config/s3Presigner.js";
 // controllers/assetController.js
 const DRIP = {
   APPRECIATION: 20,
@@ -258,101 +259,69 @@ export const getAssetsOfPost = async (req, res) => {
   }
 };
 
-
-// ✅ Create a post
-export const getUploadSignature = (req, res) => {
-  console.log("Generating Cloudinary upload signature");
+export const getPresigned = async (req, res) => {
   try {
-    const timestamp = Math.floor(Date.now() / 1000);
-
-    const signature = cloudinary.utils.api_sign_request(
-      {
-        timestamp,
-        folder: "posts",
-        resource_type: "auto", // image or video
-      },
-      process.env.CLOUDINARY_API_SECRET
-    );
-
-    res.json({
-      signature,
-      timestamp,
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-    });
-    console.log("Generated Cloudinary signature successfully");
+    const { fileName, contentType } = req.body;
+    console.log('getting presigned for s3. FileName:', fileName, 'contentType:', contentType)
+    if (!fileName || !contentType) {
+      return res.status(400).json({ message: "fileName and contentType required" });
+    }
+    const result = await generatePresignedUpload({ fileName, contentType, expiresInSeconds: 60 * 10 });
+    console.log('result', result)
+    console.log('presigned')
+    return res.json(result);
   } catch (err) {
-    console.error("Failed to generate Cloudinary signature", err);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("getPresigned error:", err);
+    return res.status(500).json({ message: "Failed to generate presigned URL" });
   }
 };
 
-// 2️⃣ Create Post (expects URLs from frontend)
-  export const createPost = async (req, res) => {
-    console.log("Creating post...");
-    try {
-      const { description, category, voteFields, media } = req.body;
-  console.log("Received data:", { description, category, voteFields, media });
-      if (!voteFields || !category) {
-        return res.status(400).json({ message: "Required fields missing" });
-      }
+export const createPost = async (req, res) => {
+  try {
+    const { description, category, voteFields, hashtags, media } = req.body;
 
-      // parse category
-      let categoryArray= [];
-      if (typeof category === "string") {
-        try {
-          const parsed = JSON.parse(category);
-          categoryArray = Array.isArray(parsed)
-            ? parsed
-            : typeof parsed === "string"
-            ? parsed.split("/")
-            : [];
-        } catch {
-          categoryArray = category.split("/");
-        }
-      } else if (Array.isArray(category)) {
-        categoryArray = category;
-      }
-
-      if (categoryArray.length === 0) {
-        return res.status(400).json({ message: "Category array required" });
-      }
-
-      // parse media array
-  // parse media array
-  let uploadedMedia = [];
-  if (Array.isArray(media)) {
-    uploadedMedia = media;
-  } else if (typeof media === "string") {
-    uploadedMedia = JSON.parse(media);
-  }
-
-      const post = new Post({
-        description,
-        category: categoryArray,
-  voteFields: Array.isArray(voteFields) ? voteFields : JSON.parse(voteFields),
-        media: uploadedMedia,
-        createdBy: req.user.id,
-        recentNormalVotes: [],
-        recentJuryVotes: [],
-        score: { averages: {}, totalScore: 0 },
-      });
-
-      const keywords = extractKeywordsPost(post);
-      await saveKeywords(keywords);
-
-      const savedPost = await post.save();
-      console.log("Post created successfully");
-      res.status(201).json(savedPost);
-    } catch (err) {
-      console.error("Post creation failed:", err);
-      res.status(500).json({ message: err.message || "Internal server error" });
+    if (!voteFields || !category) {
+      return res.status(400).json({ message: "Required fields missing" });
     }
-  };
 
-// 3️⃣ Edit Post (also expects URLs from frontend)
+    // parse category reliably (accept array or string)
+    let categoryArray = [];
+    if (typeof category === "string") {
+      try {
+        const parsed = JSON.parse(category);
+        categoryArray = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        categoryArray = category.split("/").filter(Boolean);
+      }
+    } else if (Array.isArray(category)) categoryArray = category;
+
+    if (!categoryArray.length) return res.status(400).json({ message: "Category array required" });
+
+    // media should be an array of { url, key, type }
+    const uploadedMedia = Array.isArray(media) ? media : (typeof media === "string" ? JSON.parse(media || "[]") : []);
+
+    const post = new Post({
+      description,
+      category: categoryArray,
+      hashtags: Array.isArray(hashtags) ? hashtags : (typeof hashtags === "string" ? JSON.parse(hashtags || "[]") : []),
+      voteFields: Array.isArray(voteFields) ? voteFields : (typeof voteFields === "string" ? JSON.parse(voteFields) : []),
+      media: uploadedMedia,
+      createdBy: req.user.id,
+      recentNormalVotes: [],
+      recentJuryVotes: [],
+      score: { averages: {}, totalScore: 0 }
+    });
+console.log(post, 'post created successfully')
+    // optional: extractKeywordsPost/post-save hooks etc
+    const saved = await post.save();
+    return res.status(201).json(saved);
+  } catch (err) {
+    console.error("createPost error:", err);
+    return res.status(500).json({ message: err.message || "Internal server error" });
+  }
+};
+
 export const editPost = async (req, res) => {
-  console.log("Editing post...");
   try {
     const { id } = req.params;
     const { description, category, hashtags, voteFields, media, removeImages } = req.body;
@@ -360,24 +329,28 @@ export const editPost = async (req, res) => {
     const post = await Post.findById(id);
     if (!post) return res.status(404).json({ success: false, message: "Post not found" });
 
-    // remove old media
     let updatedMedia = post.media || [];
-    if (removeImages) {
-      const mediaToRemove = JSON.parse(removeImages);
-      for (const item of mediaToRemove) {
-        const publicId = getCloudinaryPublicId(item.url);
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId, {
-            resource_type: item.type === "video" ? "video" : "image",
-          });
+
+    // removeImages: expect array of objects { url, key } (client should pass key from presigned response)
+    if (removeImages && Array.isArray(removeImages)) {
+      for (const rem of removeImages) {
+        // try delete by key
+        const key = rem.key || getS3KeyFromUrl(rem.url);
+        if (key) {
+          try {
+            await deleteObjectByKey(key);
+          } catch (err) {
+            console.warn("Failed to delete S3 object", key, err);
+          }
         }
-        updatedMedia = updatedMedia.filter(m => m.url !== item.url);
+        updatedMedia = updatedMedia.filter(m => m.url !== rem.url && m.key !== key);
       }
     }
 
-    // add new media (frontend sends array of {url, type})
-    if (media) {
-      updatedMedia = [...updatedMedia, ...JSON.parse(media)];
+    // add new media (should be array of { url, key, type })
+    const incomingMedia = Array.isArray(media) ? media : (typeof media === "string" ? JSON.parse(media || "[]") : []);
+    if (incomingMedia.length) {
+      updatedMedia = [...updatedMedia, ...incomingMedia];
     }
 
     // parse category
@@ -386,34 +359,182 @@ export const editPost = async (req, res) => {
       if (typeof category === "string") {
         try {
           const parsed = JSON.parse(category);
-          categoryArray = Array.isArray(parsed)
-            ? parsed
-            : typeof parsed === "string"
-            ? parsed.split("/")
-            : [];
+          categoryArray = Array.isArray(parsed) ? parsed : [parsed];
         } catch {
-          categoryArray = category.split("/");
+          categoryArray = category.split("/").filter(Boolean);
         }
-      } else if (Array.isArray(category)) {
-        categoryArray = category;
-      }
+      } else if (Array.isArray(category)) categoryArray = category;
     }
 
-    // update post
-    post.description = description || post.description;
+    post.description = description ?? post.description;
     post.category = categoryArray.length ? categoryArray : post.category;
-    post.hashtags = hashtags ? JSON.parse(hashtags) : post.hashtags;
-    post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
+    post.hashtags = hashtags ? (typeof hashtags === "string" ? JSON.parse(hashtags) : hashtags) : post.hashtags;
+    post.voteFields = voteFields ? (typeof voteFields === "string" ? JSON.parse(voteFields) : voteFields) : post.voteFields;
     post.media = updatedMedia;
 
     await post.save();
-    console.log("Post updated successfully");
-    res.status(200).json({ success: true, post });
+    return res.status(200).json({ success: true, post });
   } catch (err) {
-    console.error("Edit post failed:", err);
-    res.status(500).json({ success: false, message: err.message || "Internal server error" });
+    console.error("editPost error:", err);
+    return res.status(500).json({ success: false, message: err.message || "Internal server error" });
   }
 };
+
+// ✅ Create a post
+// export const getUploadSignature = (req, res) => {
+//   console.log("Generating Cloudinary upload signature");
+//   try {
+//     const timestamp = Math.floor(Date.now() / 1000);
+
+//     const signature = cloudinary.utils.api_sign_request(
+//       {
+//         timestamp,
+//         folder: "posts",
+//         resource_type: "auto", // image or video
+//       },
+//       process.env.CLOUDINARY_API_SECRET
+//     );
+
+//     res.json({
+//       signature,
+//       timestamp,
+//       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//       api_key: process.env.CLOUDINARY_API_KEY,
+//     });
+//     console.log("Generated Cloudinary signature successfully");
+//   } catch (err) {
+//     console.error("Failed to generate Cloudinary signature", err);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+
+// // 2️⃣ Create Post (expects URLs from frontend)
+//   export const createPost = async (req, res) => {
+//     console.log("Creating post...");
+//     try {
+//       const { description, category, voteFields, media } = req.body;
+//   console.log("Received data:", { description, category, voteFields, media });
+//       if (!voteFields || !category) {
+//         return res.status(400).json({ message: "Required fields missing" });
+//       }
+
+//       // parse category
+//       let categoryArray= [];
+//       if (typeof category === "string") {
+//         try {
+//           const parsed = JSON.parse(category);
+//           categoryArray = Array.isArray(parsed)
+//             ? parsed
+//             : typeof parsed === "string"
+//             ? parsed.split("/")
+//             : [];
+//         } catch {
+//           categoryArray = category.split("/");
+//         }
+//       } else if (Array.isArray(category)) {
+//         categoryArray = category;
+//       }
+
+//       if (categoryArray.length === 0) {
+//         return res.status(400).json({ message: "Category array required" });
+//       }
+
+//       // parse media array
+//   // parse media array
+//   let uploadedMedia = [];
+//   if (Array.isArray(media)) {
+//     uploadedMedia = media;
+//   } else if (typeof media === "string") {
+//     uploadedMedia = JSON.parse(media);
+//   }
+
+//       const post = new Post({
+//         description,
+//         category: categoryArray,
+//   voteFields: Array.isArray(voteFields) ? voteFields : JSON.parse(voteFields),
+//         media: uploadedMedia,
+//         createdBy: req.user.id,
+//         recentNormalVotes: [],
+//         recentJuryVotes: [],
+//         score: { averages: {}, totalScore: 0 },
+//       });
+
+//       const keywords = extractKeywordsPost(post);
+//       await saveKeywords(keywords);
+
+//       const savedPost = await post.save();
+//       console.log("Post created successfully");
+//       res.status(201).json(savedPost);
+//     } catch (err) {
+//       console.error("Post creation failed:", err);
+//       res.status(500).json({ message: err.message || "Internal server error" });
+//     }
+//   };
+
+// // 3️⃣ Edit Post (also expects URLs from frontend)
+// export const editPost = async (req, res) => {
+//   console.log("Editing post...");
+//   try {
+//     const { id } = req.params;
+//     const { description, category, hashtags, voteFields, media, removeImages } = req.body;
+
+//     const post = await Post.findById(id);
+//     if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+//     // remove old media
+//     let updatedMedia = post.media || [];
+//     if (removeImages) {
+//       const mediaToRemove = JSON.parse(removeImages);
+//       for (const item of mediaToRemove) {
+//         const publicId = getCloudinaryPublicId(item.url);
+//         if (publicId) {
+//           await cloudinary.uploader.destroy(publicId, {
+//             resource_type: item.type === "video" ? "video" : "image",
+//           });
+//         }
+//         updatedMedia = updatedMedia.filter(m => m.url !== item.url);
+//       }
+//     }
+
+//     // add new media (frontend sends array of {url, type})
+//     if (media) {
+//       updatedMedia = [...updatedMedia, ...JSON.parse(media)];
+//     }
+
+//     // parse category
+//     let categoryArray = [];
+//     if (category) {
+//       if (typeof category === "string") {
+//         try {
+//           const parsed = JSON.parse(category);
+//           categoryArray = Array.isArray(parsed)
+//             ? parsed
+//             : typeof parsed === "string"
+//             ? parsed.split("/")
+//             : [];
+//         } catch {
+//           categoryArray = category.split("/");
+//         }
+//       } else if (Array.isArray(category)) {
+//         categoryArray = category;
+//       }
+//     }
+
+//     // update post
+//     post.description = description || post.description;
+//     post.category = categoryArray.length ? categoryArray : post.category;
+//     post.hashtags = hashtags ? JSON.parse(hashtags) : post.hashtags;
+//     post.voteFields = voteFields ? JSON.parse(voteFields) : post.voteFields;
+//     post.media = updatedMedia;
+
+//     await post.save();
+//     console.log("Post updated successfully");
+//     res.status(200).json({ success: true, post });
+//   } catch (err) {
+//     console.error("Edit post failed:", err);
+//     res.status(500).json({ success: false, message: err.message || "Internal server error" });
+//   }
+// };
 export const getDefaultPosts = async (req, res) => {
   console.log("getting default posts");
   try {
