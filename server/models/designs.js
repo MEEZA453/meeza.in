@@ -20,8 +20,26 @@ hotScore: {
   default: 0,
   index: true,
 },
-    image: [],
-    driveLink: { type: String, required: false },
+media: [
+  {
+        key: { type: String }, // S3 object key (posts/...
+    url: { type: String, required: true },
+
+    type: {
+      type: String,
+      enum: ["image", "video"],
+      required: true,
+    },
+
+    // ✅ only used when type === "video"
+    cover: {
+      type: String,
+      required: function () {
+        return this.type === "video";
+      },
+    },
+  },
+],
     amount: { type: Number, required: true },
 views: { type: Number, default: 0 },
 drip: { type: Number, default: 0 },          

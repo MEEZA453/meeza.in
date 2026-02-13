@@ -23,18 +23,29 @@ const s3Client = new S3Client({
  * @param {Object} options { fileName, contentType, expiresInSeconds }
  * @returns { signedUrl, key, publicUrl }
  */
-export const generatePresignedUpload = async ({ fileName, contentType, expiresInSeconds = 600 }) => {
-  const key = `${UPLOAD_FOLDER}/${Date.now()}-${uuidv4()}-${fileName.replace(/\s+/g, "-")}`;
+export const generatePresignedUpload = async ({
+  fileName,
+  contentType,
+  folder = "posts", // 👈 default
+  expiresInSeconds = 600
+}) => {
+  if (!fileName || !contentType) {
+    throw new Error("fileName and contentType required");
+  }
+
+  const key = `${folder}/${Date.now()}-${uuidv4()}-${fileName.replace(/\s+/g, "-")}`;
+
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: key,
     ContentType: contentType,
-    // ACL: "public-read", // for public files; remove if you want private and serve via signed URLs
   });
 
-  const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: expiresInSeconds });
-const publicUrl = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
+  const signedUrl = await getSignedUrl(s3Client, command, {
+    expiresIn: expiresInSeconds,
+  });
 
+  const publicUrl = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 
   return { signedUrl, key, publicUrl, expiresInSeconds };
 };

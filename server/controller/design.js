@@ -12,6 +12,7 @@ import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.j
 import productView from "../models/productView.js";
 import { updateProductHotScore } from "../utils/updateProductHotScore.js";
 import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
+import { deleteObjectByKey, getS3KeyFromUrl } from "../config/s3Presigner.js";
 export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
@@ -196,7 +197,9 @@ if (isAsset !== null) {
 
     // ---------- FETCH DATA ----------
    let designs = await Product.find(findQuery)
-  .sort({ hotScore: -1, createdAt: -1 }) // 🔥 HOT FEED
+  // .sort({ hotScore: -1, createdAt: -1 })
+  .sort({ createdAt: -1 })
+
   .limit(limit)
   .populate("postedBy", "name profile handle followers")
   .lean();
@@ -520,215 +523,484 @@ console.log(`Found ${designs.length} designs matching query: "${query}"`);
     return res.status(500).json({ message: "Server error" });
   }
 };
+function normalizeImageEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === "string") {
+    // old Cloudinary string -> try to derive key (may be null)
+    return { url: entry, key: getS3KeyFromUrl(entry) || null };
+  }
+  // already object: { key, url } or similar
+  return { key: entry.key || getS3KeyFromUrl(entry.url) || null, url: entry.url };
+}
 
-
-export const deleteDesign = async (req, res) => {
-  console.log('reach to deleteDesign')
-  const { id } = req.params;
-
+/**
+ * POST /post
+ * Expect body fields: name, amount, sections (stringified), faq (stringified), hashtags (stringified),
+ * image: JSON-stringified array of { key, url } OR array in JSON body (client should send as JSON)
+ */
+export const postDesign = async (req, res) => {
   try {
-    // Step 1: Find the product by ID
+    const {
+      name,
+      amount,
+      sections,
+      faq,
+      hashtags,
+      sources,
+      description,
+      media,
+    } = req.body;
+
+    console.log(name, amount, sections, faq, hashtags, sources, description);
+
+const parsedSections =
+  typeof sections === "string"
+    ? JSON.parse(sections)
+    : sections || [];
+
+const parsedFaq =
+  typeof faq === "string"
+    ? JSON.parse(faq)
+    : faq || [];
+
+const parsedHashtags =
+  typeof hashtags === "string"
+    ? JSON.parse(hashtags)
+    : hashtags || [];
+
+const parsedSources =
+  typeof sources === "string"
+    ? JSON.parse(sources)
+    : sources || [];
+
+    // ✅ Handle media (array of { key, url, type, cover })
+    let uploadedMedia = [];
+    if (media) {
+      const parsed =
+        typeof media === "string" ? JSON.parse(media) : media;
+
+      uploadedMedia = Array.isArray(parsed)
+        ? parsed.filter(
+            (m) =>
+              m &&
+              m.url &&
+              m.type &&
+              (m.type === "image" || (m.type === "video" && m.cover))
+          )
+        : [];
+    }
+
+    const hasOrigin = parsedSections.some(
+      (s) =>
+        s &&
+        String(s.title).trim().toLowerCase() === "origin"
+    );
+
+    const product = new Product({
+      name,
+      amount,
+      media: uploadedMedia, // ✅ changed from image → media
+      description,
+      sections: parsedSections,
+      sources: parsedSources,
+      faq: parsedFaq,
+      isAsset: hasOrigin,
+      hashtags: parsedHashtags,
+      postedBy: req.user.id,
+    });
+
+    console.log("product posted successfully:", product);
+
+    await product.save();
+
+    res.status(201).json({ success: true, product });
+  } catch (error) {
+    console.error("postDesign error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * PUT /edit/:id
+ * Expect in body: name, amount, sections, faq, hashtags, image (array of existing+new {key,url}),
+ * removeImages: JSON-stringified array of urls or keys to remove.
+ */
+export const editDesign = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      name,
+      amount,
+      sections,
+      faq,
+      sources,
+      hashtags,
+      removeMedia,
+      media,
+      description,
+    } = req.body;
+
     const product = await Product.findById(id);
-  
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
+const parsedSections =
+  typeof sections === "string"
+    ? JSON.parse(sections)
+    : sections || [];
 
-    // Step 2: Delete associated images from Cloudinary
-    if (product.image && product.image.length > 0) {
-      const deletePromises = product.image.map(async (url) => {
-        // Extract the public ID from the Cloudinary URL
-        const publicId = getCloudinaryPublicId(url);
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId);
+const parsedFaq =
+  typeof faq === "string"
+    ? JSON.parse(faq)
+    : faq || [];
+
+const parsedHashtags =
+  typeof hashtags === "string"
+    ? JSON.parse(hashtags)
+    : hashtags || [];
+
+const parsedSources =
+  typeof sources === "string"
+    ? JSON.parse(sources)
+    : sources || [];
+
+
+    let updatedMedia = product.media || [];
+
+    // ✅ 1) Handle removals
+    if (removeMedia) {
+      let toRemove;
+      try {
+        toRemove =
+          typeof removeMedia === "string"
+            ? JSON.parse(removeMedia)
+            : removeMedia;
+      } catch {
+        toRemove = Array.isArray(removeMedia)
+          ? removeMedia
+          : [];
+      }
+
+      for (const entry of toRemove) {
+        const key =
+          typeof entry === "string"
+            ? entry.includes("/")
+              ? getS3KeyFromUrl(entry)
+              : entry
+            : entry.key || getS3KeyFromUrl(entry.url);
+
+        if (key) {
+          try {
+            await deleteObjectByKey(key);
+          } catch (err) {
+            console.warn(
+              "Failed to delete S3 object:",
+              key,
+              err.message
+            );
+          }
         }
-      });
-      await Promise.all(deletePromises);
+
+        updatedMedia = updatedMedia.filter(
+          (m) =>
+            m.key !== key &&
+            m.url !== entry &&
+            m.url !== entry?.url
+        );
+      }
     }
 
-    // Step 3: Delete the product from MongoDB
+    // ✅ 2) Merge incoming media
+    if (media) {
+      const incoming =
+        typeof media === "string"
+          ? JSON.parse(media)
+          : media;
+
+      const normalizedIncoming = Array.isArray(incoming)
+        ? incoming.filter(
+            (m) =>
+              m &&
+              m.url &&
+              m.type &&
+              (m.type === "image" ||
+                (m.type === "video" && m.cover))
+          )
+        : [];
+
+      for (const nm of normalizedIncoming) {
+        const exists = updatedMedia.some(
+          (um) =>
+            (um.key && nm.key && um.key === nm.key) ||
+            um.url === nm.url
+        );
+
+        if (!exists) updatedMedia.push(nm);
+      }
+    }
+
+    // ✅ Update fields
+    product.name = name ?? product.name;
+    product.amount = amount ?? product.amount;
+    product.sections = parsedSections;
+    product.sources = parsedSources;
+    product.faq = parsedFaq;
+    product.description = description ?? product.description;
+    product.hashtags = parsedHashtags;
+    product.media = updatedMedia;
+
+    await product.save();
+
+    res.status(200).json({ success: true, product });
+  } catch (error) {
+    console.error("editDesign error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * DELETE /delete/:id
+ * Delete product and attempt to delete S3 objects (if we have keys).
+ */
+export const deleteDesign = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+    // handle product.image entries which might be objects or legacy strings
+    const imgs = (product.image || []).map(normalizeImageEntry).filter(Boolean);
+    const deletePromises = imgs.map(async (img) => {
+      const key = img.key || getS3KeyFromUrl(img.url);
+      if (key) {
+        try {
+          await deleteObjectByKey(key);
+        } catch (err) {
+          console.warn("Failed to delete S3 object:", key, err.message);
+        }
+      }
+    });
+    await Promise.all(deletePromises);
+
     await Product.findByIdAndDelete(id);
-console.log('product deleted')
+
     res.status(200).json({ success: true, message: 'Product deleted successfully', id });
   } catch (error) {
-    console.error("Delete design error:", error.message);
+    console.error("Delete design error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// Helper function to extract Cloudinary public ID from URL
-function getCloudinaryPublicId(imageUrl) {
-  try {
-    const parts = imageUrl.split('/');
-    const fileName = parts[parts.length - 1]; // e.g., 1724402345533-filename.png
-    const publicId = fileName.substring(0, fileName.lastIndexOf('.')); // remove .png or .jpg
-    const folder = parts.slice(parts.indexOf("uploads")).slice(0, -1).join('/'); // e.g., uploads/folder
-    return `${folder}/${publicId}`; // full public ID for Cloudinary
-  } catch (err) {
-    console.error("Failed to parse Cloudinary public_id from URL:", imageUrl);
-    return null;
-  }
-}
+// export const deleteDesign = async (req, res) => {
+//   console.log('reach to deleteDesign')
+//   const { id } = req.params;
+
+//   try {
+//     // Step 1: Find the product by ID
+//     const product = await Product.findById(id);
+  
+
+//     if (!product) {
+//       return res.status(404).json({ success: false, message: 'Product not found' });
+//     }
+
+//     // Step 2: Delete associated images from Cloudinary
+//     if (product.image && product.image.length > 0) {
+//       const deletePromises = product.image.map(async (url) => {
+//         // Extract the public ID from the Cloudinary URL
+//         const publicId = getCloudinaryPublicId(url);
+//         if (publicId) {
+//           await cloudinary.uploader.destroy(publicId);
+//         }
+//       });
+//       await Promise.all(deletePromises);
+//     }
+
+//     // Step 3: Delete the product from MongoDB
+//     await Product.findByIdAndDelete(id);
+// console.log('product deleted')
+//     res.status(200).json({ success: true, message: 'Product deleted successfully', id });
+//   } catch (error) {
+//     console.error("Delete design error:", error.message);
+//     res.status(500).json({ success: false, message: "Internal server error" });
+//   }
+// };
+
+// // Helper function to extract Cloudinary public ID from URL
+// function getCloudinaryPublicId(imageUrl) {
+//   try {
+//     const parts = imageUrl.split('/');
+//     const fileName = parts[parts.length - 1]; // e.g., 1724402345533-filename.png
+//     const publicId = fileName.substring(0, fileName.lastIndexOf('.')); // remove .png or .jpg
+//     const folder = parts.slice(parts.indexOf("uploads")).slice(0, -1).join('/'); // e.g., uploads/folder
+//     return `${folder}/${publicId}`; // full public ID for Cloudinary
+//   } catch (err) {
+//     console.error("Failed to parse Cloudinary public_id from URL:", imageUrl);
+//     return null;
+//   }
+// }
 
 
-// Configure Cloudinary
-  cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
-  });
+// // Configure Cloudinary
+//   cloudinary.config({
+//       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//       api_key: process.env.CLOUDINARY_API_KEY,
+//       api_secret: process.env.CLOUDINARY_API_SECRET
+//   });
 
-  // Configure Multer to use Cloudinary
-  const storage = new CloudinaryStorage({
-      cloudinary: cloudinary,
-      params: {
-          folder: "uploads", // Cloudinary folder
-          public_id: (req, file) => Date.now() + "-" + file.originalname,
-      },
-  });
+//   // Configure Multer to use Cloudinary
+//   const storage = new CloudinaryStorage({
+//       cloudinary: cloudinary,
+//       params: {
+//           folder: "uploads", // Cloudinary folder
+//           public_id: (req, file) => Date.now() + "-" + file.originalname,
+//       },
+//   });
 
-  const upload = multer({ storage });
+//   const upload = multer({ storage });
 
-  export default upload;
-
-
-
-  export const postDesign = async (req, res) => {
-    console.log("Reached postDesign route");
-
-    upload.array("images", 10)(req, res, async (err) => {
-      if (err) {
-        console.error("Multer error:", err);
-        return res.status(400).json({ success: false, message: "Image upload failed" });
-      }
-
-      try {
-        const { name, amount, driveLink, sections, faq, hashtags, sources, description } = req.body;
-
-        const parsedSections = sections ? JSON.parse(sections) : [];
-        const parsedSources = sources ? JSON.parse(sources): []
-        const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
-
-        const parsedFaq = faq ? JSON.parse(faq) : [];
-
-        const imagePaths = req.files ? req.files.map((file) => file.path) : [];
-const hasOrigin = parsedSections.some(s => {
-  if (!s || !s.title) return false;
-  return String(s.title).trim().toLowerCase() === 'origin';
-});
-
-        const product = new Product({
-          name,
-          amount,
-          image: imagePaths,
-          driveLink,
-          description,
-          sections: parsedSections,
-          sources : parsedSources,
-          faq: parsedFaq,
-            isAsset: hasOrigin, 
-          hashtags: parsedHashtags, // ✅ correct spelling matches schema
-          postedBy: req.user.id,
-        });
-  const keywords = extractKeywordsProduct(product);
-    await saveKeywords(keywords);
-        await product.save();
-
-        res.status(201).json({ success: true, product });
-      } catch (error) {
-        console.error("Error:", error.message);
-        res.status(500).json({ success: false, message: error.message });
-      }
-    });
-  };
+//   export default upload;
 
 
 
-export const editDesign = async (req, res) => {
-  console.log("Reached editDesign route");
+//   export const postDesign = async (req, res) => {
+//     console.log("Reached postDesign route");
 
-  // Handle file uploads with multer
-  upload.array("images", 10)(req, res, async (err) => {
-    if (err) {
-      console.error("Multer error:", err);
-      return res.status(400).json({ success: false, message: "Image upload failed" });
-    }
+//     upload.array("images", 10)(req, res, async (err) => {
+//       if (err) {
+//         console.error("Multer error:", err);
+//         return res.status(400).json({ success: false, message: "Image upload failed" });
+//       }
 
-    try {
-      const { id } = req.params;
-      const { name, amount, driveLink, sections, faq, sources,  hashtags, removeImages, description } = req.body;
-console.log(removeImages)
-      // 1️⃣ Find the product
-      const product = await Product.findById(id);
-      if (!product) {
-        return res.status(404).json({ success: false, message: "Product not found" });
-      }
+//       try {
+//         const { name, amount, driveLink, sections, faq, hashtags, sources, description } = req.body;
 
-      // 2️⃣ Parse JSON fields safely
-      const parsedSections = sections ? JSON.parse(sections) : product.sections;
-      const parsedFaq = faq ? JSON.parse(faq) : product.faq;
-      const parsedHashtags = hashtags ? JSON.parse(hashtags) : product.hashtags;
-        const parsedSources = sources ? JSON.parse(sources): []
+//         const parsedSections = sections ? JSON.parse(sections) : [];
+//         const parsedSources = sources ? JSON.parse(sources): []
+//         const parsedHashtags = hashtags ? JSON.parse(hashtags) : [];
+
+//         const parsedFaq = faq ? JSON.parse(faq) : [];
+
+//         const imagePaths = req.files ? req.files.map((file) => file.path) : [];
+// const hasOrigin = parsedSections.some(s => {
+//   if (!s || !s.title) return false;
+//   return String(s.title).trim().toLowerCase() === 'origin';
+// });
+
+//         const product = new Product({
+//           name,
+//           amount,
+//           image: imagePaths,
+//           driveLink,
+//           description,
+//           sections: parsedSections,
+//           sources : parsedSources,
+//           faq: parsedFaq,
+//             isAsset: hasOrigin, 
+//           hashtags: parsedHashtags, // ✅ correct spelling matches schema
+//           postedBy: req.user.id,
+//         });
+//   const keywords = extractKeywordsProduct(product);
+//     await saveKeywords(keywords);
+//         await product.save();
+
+//         res.status(201).json({ success: true, product });
+//       } catch (error) {
+//         console.error("Error:", error.message);
+//         res.status(500).json({ success: false, message: error.message });
+//       }
+//     });
+//   };
 
 
-      // 3️⃣ Handle newly uploaded images (upload to Cloudinary)
-      let newImages = [];
-      if (req.files && req.files.length > 0) {
-        newImages = await Promise.all(
-          req.files.map(async (file) => {
-            const result = await cloudinary.uploader.upload(file.path, {
-              folder: "designs",
-            });
-            return result.secure_url;
-          })
-        );
-      }
 
-      // 4️⃣ Handle removing old images
-      let updatedImages = [...product.image];
-      if (removeImages) {
-        try {
-          const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
-          for (const url of imagesToRemove) {
-            try {
+// export const editDesign = async (req, res) => {
+//   console.log("Reached editDesign route");
+
+//   // Handle file uploads with multer
+//   upload.array("images", 10)(req, res, async (err) => {
+//     if (err) {
+//       console.error("Multer error:", err);
+//       return res.status(400).json({ success: false, message: "Image upload failed" });
+//     }
+
+//     try {
+//       const { id } = req.params;
+//       const { name, amount, driveLink, sections, faq, sources,  hashtags, removeImages, description } = req.body;
+// console.log(removeImages)
+//       // 1️⃣ Find the product
+//       const product = await Product.findById(id);
+//       if (!product) {
+//         return res.status(404).json({ success: false, message: "Product not found" });
+//       }
+
+//       // 2️⃣ Parse JSON fields safely
+//       const parsedSections = sections ? JSON.parse(sections) : product.sections;
+//       const parsedFaq = faq ? JSON.parse(faq) : product.faq;
+//       const parsedHashtags = hashtags ? JSON.parse(hashtags) : product.hashtags;
+//         const parsedSources = sources ? JSON.parse(sources): []
+
+
+//       // 3️⃣ Handle newly uploaded images (upload to Cloudinary)
+//       let newImages = [];
+//       if (req.files && req.files.length > 0) {
+//         newImages = await Promise.all(
+//           req.files.map(async (file) => {
+//             const result = await cloudinary.uploader.upload(file.path, {
+//               folder: "designs",
+//             });
+//             return result.secure_url;
+//           })
+//         );
+//       }
+
+//       // 4️⃣ Handle removing old images
+//       let updatedImages = [...product.image];
+//       if (removeImages) {
+//         try {
+//           const imagesToRemove = JSON.parse(removeImages); // expect array of URLs
+//           for (const url of imagesToRemove) {
+//             try {
           
-              if (publicId) {
-                await cloudinary.uploader.destroy(publicId);
-              }
-            } catch (cloudErr) {
-              console.error("Cloudinary deletion failed for:", url, cloudErr.message);
-            }
-            updatedImages = updatedImages.filter((img) => img !== url);
-          }
-        } catch (parseErr) {
-          console.error("Error parsing removeImages:", parseErr.message);
-        }
-      }
+//               if (publicId) {
+//                 await cloudinary.uploader.destroy(publicId);
+//               }
+//             } catch (cloudErr) {
+//               console.error("Cloudinary deletion failed for:", url, cloudErr.message);
+//             }
+//             updatedImages = updatedImages.filter((img) => img !== url);
+//           }
+//         } catch (parseErr) {
+//           console.error("Error parsing removeImages:", parseErr.message);
+//         }
+//       }
 
-      // 5️⃣ Merge old images with newly uploaded images
-      updatedImages = [...updatedImages, ...newImages];
+//       // 5️⃣ Merge old images with newly uploaded images
+//       updatedImages = [...updatedImages, ...newImages];
 
-      // 6️⃣ Update product fields
-      product.name = name ?? product.name;
-      product.amount = amount ?? product.amount;
-      product.driveLink = driveLink ?? product.driveLink;
-      product.sections = parsedSections;
-      product.sources = parsedSources;
+//       // 6️⃣ Update product fields
+//       product.name = name ?? product.name;
+//       product.amount = amount ?? product.amount;
+//       product.driveLink = driveLink ?? product.driveLink;
+//       product.sections = parsedSections;
+//       product.sources = parsedSources;
 
-      product.faq = parsedFaq;
-      product.description = description
-      product.hashtags = parsedHashtags;
-      product.image = updatedImages;
+//       product.faq = parsedFaq;
+//       product.description = description
+//       product.hashtags = parsedHashtags;
+//       product.image = updatedImages;
 
-      // 7️⃣ Save updated product
-      await product.save();
+//       // 7️⃣ Save updated product
+//       await product.save();
 
-      console.log("✅ Product updated successfully:", product, );
-      res.status(200).json({ success: true, product });
-    } catch (error) {
-      console.error("Edit design error:", error.message);
-      res.status(500).json({ success: false, message: error.message });
-    }
-  });
-};
+//       console.log("✅ Product updated successfully:", product, );
+//       res.status(200).json({ success: true, product });
+//     } catch (error) {
+//       console.error("Edit design error:", error.message);
+//       res.status(500).json({ success: false, message: error.message });
+//     }
+//   });
+// };
