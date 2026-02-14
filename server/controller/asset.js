@@ -17,11 +17,13 @@ function makeKeyForUser(userId, fileName) {
 export const getPresignedForAsset = async (req, res) => {
   try {
     const { fileName, contentType, folder, expectedSize } = req.body;
+    console.log('getting presign for assets :', fileName, contentType, folder, expectedSize)
     if (!fileName || !contentType) {
       return res.status(400).json({ message: "fileName and contentType required" });
     }
     const key = makeKeyForUser(req.user.id, fileName);
     const result = await generatePresignedUpload({ key, contentType, expires: Number(process.env.PRESIGN_EXPIRES || 600) });
+    console.log('presigned', result)
     return res.json({ key: result.key, url: result.url });
   } catch (err) {
     console.error("getPresignedForAsset:", err);
@@ -269,6 +271,7 @@ export const removeMultipleAssetsFromFolder = async (req, res) => {
 export const createAssetRecord = async (req, res) => {
   try {
     const { key, name, originalFileName, size, mimeType, folderId } = req.body;
+    console.log('creating assets record :', key, name, originalFileName, size, mimeType, folderId )
     if (!key || !name || !size) return res.status(400).json({ message: "key, name and size required" });
 
     // Basic head check to confirm file exists (optional)
@@ -294,7 +297,6 @@ export const createAssetRecord = async (req, res) => {
     });
 
     await newAsset.save();
-
     // increment user storageUsed
     await User.findByIdAndUpdate(req.user.id, { $inc: { storageUsed: Number(size) } });
 
@@ -302,6 +304,7 @@ export const createAssetRecord = async (req, res) => {
     if (folderId) {
       await AssetFolder.findByIdAndUpdate(folderId, { $inc: { totalSize: Number(size), assetCount: 1 } });
     }
+console.log('record creted', newAsset)
 
     return res.status(201).json({ success: true, asset: newAsset });
   } catch (err) {
