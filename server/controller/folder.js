@@ -19,49 +19,39 @@ import mongoose from "mongoose";
 
 export const createFolder = async (req, res) => {
   try {
-    const { name, description, visibility } = req.body;
+    const { name, description, visibility, profileUrl } = req.body;
     const owner = req.user.id;
-    console.log("Creating folder", name, description, visibility, owner);
+
     if (!name) {
       return res.status(400).json({
         success: false,
-        message: "Folder name is required"
+        message: "Folder name is required",
       });
-    }
-
-    let profileUrl = "";
-
-    // upload folder cover image
-    if (req.file?.path) {
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "folders"
-      });
-      profileUrl = result.secure_url;
     }
 
     const folder = new Folder({
       name,
       description,
       visibility,
-      profile: profileUrl,
-      owner
+      profile: profileUrl || "",
+      owner,
     });
-    console.log("Saving new folder", folder);
+
     await folder.save();
 
     return res.status(201).json({
       success: true,
-      folder
+      folder,
     });
-
   } catch (error) {
     console.error("createFolder error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
+
 
 
 export const getFoldersByItemId = async (req, res) => {
@@ -120,9 +110,7 @@ export const getFoldersByItemId = async (req, res) => {
 export const editFolder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, visibility } = req.body;
-
-    console.log("editing folder", id, name, description, visibility);
+    const { name, description, visibility, profileUrl } = req.body;
 
     const folder = await Folder.findById(id);
     if (!folder) {
@@ -132,7 +120,7 @@ export const editFolder = async (req, res) => {
       });
     }
 
-    // ✅ ownership check
+    // Ownership check
     if (folder.owner.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
@@ -140,34 +128,24 @@ export const editFolder = async (req, res) => {
       });
     }
 
-    // ✅ If new folder image uploaded
-    if (req.file?.path) {
+    // ✅ If new image provided
+    if (profileUrl && profileUrl !== folder.profile) {
       if (folder.profile) {
-        const publicId = getCloudinaryPublicId(folder.profile);
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId);
-        }
+        const oldKey = getS3KeyFromUrl(folder.profile);
+        if (oldKey) await deleteObjectByKey(oldKey);
       }
 
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "folders",
-      });
-
-      folder.profile = result.secure_url;
+      folder.profile = profileUrl;
     }
 
-    // ✅ update fields safely
     if (name !== undefined) folder.name = name;
     if (description !== undefined) folder.description = description;
     if (visibility !== undefined) folder.visibility = visibility;
 
     await folder.save();
 
-    // 🔥 IMPORTANT: re-fetch & populate owner
     const populatedFolder = await Folder.findById(folder._id)
       .populate("owner", "_id handle profile");
-
-    console.log("done editing", populatedFolder);
 
     return res.status(200).json({
       success: true,
@@ -181,6 +159,7 @@ export const editFolder = async (req, res) => {
     });
   }
 };
+;
 
 
 
@@ -219,12 +198,10 @@ export const deleteFolder = async (req, res) => {
     );
 
     // 🧹 Delete folder image from Cloudinary
-    if (folder.profile) {
-      const publicId = getCloudinaryPublicId(folder.profile);
-      if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
-      }
-    }
+if (folder.profile) {
+  const key = getS3KeyFromUrl(folder.profile);
+  if (key) await deleteObjectByKey(key);
+}
 
     // ❌ Finally delete folder
     await folder.deleteOne();

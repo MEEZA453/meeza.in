@@ -22,6 +22,7 @@ import { googleLogin } from "../controller/googleLogin.js";
 import { verifyToken } from '../middleweres/auth.js';
 import { upload } from "../config/cloudinery.js";
 import { followUser, getFollowers, getFollowing, unfollowUser } from "../controller/follow.js";
+import { generatePresignedUpload } from "../config/s3Presigner.js";
 
 const router = express.Router();
 
@@ -49,7 +50,8 @@ router.post("/verify-otp", verifyOtp);  // verify OTP
 // Get user by handle
 
 // Update user profile
-router.put('/:id/profile', verifyToken, upload.single('image'), updateUserProfile);
+router.put('/:id/profile', verifyToken, updateUserProfile);
+
 
 router.post("/follow/:id", verifyToken, followUser);
 router.post("/unfollow/:id", verifyToken, unfollowUser);

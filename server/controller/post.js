@@ -268,7 +268,7 @@ console.log('getting presigned with :', fileName, contentType, folder)
     }
 
     // Only allow safe folders (important for security)
-    const allowedFolders = ["posts", "products", "assets"];
+    const allowedFolders = ["posts", "products", "assets", "profile", "folderProfile"];
     const uploadFolder = allowedFolders.includes(folder)
       ? folder
       : "posts";

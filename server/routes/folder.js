@@ -52,8 +52,9 @@ router.get("/my-folders", verifyToken, getMyFolders);
   - PUT  /edit/:id     (multipart, profile) -> editFolder
   - DELETE /delete/:id                      -> deleteFolder
 */
-router.post("/create", verifyToken, upload.single("profile"), createFolder);
-router.put("/edit/:id", verifyToken, upload.single("profile"), editFolder);
+router.post("/create", verifyToken, createFolder);
+router.put("/edit/:id", verifyToken, editFolder);
+
 router.delete("/delete/:id", verifyToken, deleteFolder);
 
 /*
