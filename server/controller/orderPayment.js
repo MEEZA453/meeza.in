@@ -1,5 +1,7 @@
 // controller/orderPayment.js
 import Razorpay from "razorpay";
+import Asset from '../models/asset.js'
+import { copyObject } from "../services/s3Client.js"
 import crypto from "crypto";
 import Order from "../models/Order.js";
 import Product from "../models/designs.js";
@@ -144,7 +146,47 @@ console.log("Created Stripe PaymentIntent:", paymentIntent.id);
 
 // Verify payment (Stripe PaymentIntent or Razorpay signature)
 // controller/orderPayment.js (only the verifyProductPayment function replaced)
+async function deliverProductAssets(order, session) {
+  const buyerId = order.buyer._id;
+  const product = order.product;
 
+  if (!product.assets || product.assets.length === 0) {
+    return;
+  }
+
+  const deliveredAssets = [];
+
+  for (const snapshot of product.assets) {
+    const asset = await Asset.findById(snapshot.assetId).session(session);
+    if (!asset) continue;
+
+    const destinationKey = `users/${buyerId}/purchases/${product._id}/${Date.now()}-${asset.name}.${asset.extension}`;
+
+    await copyObject(asset.key, destinationKey);
+
+    // increase buyer storage usage
+    await User.findByIdAndUpdate(
+      buyerId,
+      { $inc: { storageUsed: asset.size } },
+      { session }
+    );
+
+    deliveredAssets.push({
+      assetId: asset._id,
+      name: asset.name,
+      size: asset.size,
+      extension: asset.extension,
+      key: destinationKey
+    });
+  }
+
+  await Purchase.create([{
+    buyer: buyerId,
+    product: product._id,
+    deliveredAssets,
+    totalAmount: order.amount
+  }], { session });
+}
 export const verifyProductPayment = async (req, res) => {
   console.log("verifyProductPayment:", req.body);
   const session = await mongoose.startSession();
@@ -239,7 +281,7 @@ export const verifyProductPayment = async (req, res) => {
 await Product.findByIdAndUpdate(order.product._id, {
   $inc: { drip: 50 }
 }, { session });
-
+await deliverProductAssets(order, session);
 await User.findByIdAndUpdate(order.seller._id, {
   $inc: { drip: 50 }
 }, { session });

@@ -71,6 +71,8 @@ credits: { type: Number, default: 0 },
     default: [],
   },
   // inside your existing userSchema definition:
+   storageUsed: { type: Number, default: 0 }, // bytes
+  storageLimit: { type: Number, default: 2 * 1024 * 1024 * 1024 }, // 2GB by default
 premium: { type: Boolean, default: false },
 premiumExpiresAt: { type: Date, default: null },
 // optional quick link to an upcoming subscription (not required, but handy)

@@ -48,3 +48,21 @@ export const verifyIsDev = (req, res, next) => {
   if (req.user.role !== "dev") return res.status(403).json({ success: false, message: "Forbidden: devs only" });
   next();
 };
+export  async function checkStorageLimit(req, res, next) {
+  try {
+    // expectedSize (bytes) provided by client when requesting presigned upload
+    const expectedSize = Number(req.body.expectedSize || req.query.expectedSize || 0);
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const newUsage = user.storageUsed + expectedSize;
+    if (user.storageLimit && newUsage > user.storageLimit) {
+      return res.status(400).json({ message: "Storage limit exceeded" });
+    }
+    // attach user to req for later use
+    req.currentUser = user;
+    next();
+  } catch (err) {
+    console.error("checkStorageLimit error:", err);
+    next(err);
+  }
+}

@@ -1,6 +1,15 @@
 // models/Product.js
 import mongoose from "mongoose";
-
+const assetSnapshotSchema = new mongoose.Schema({
+  assetId: { type: mongoose.Schema.Types.ObjectId, ref: "Asset" },
+  snapshot: {
+    name: String,
+    extension: String,
+    size: Number,
+    mimeType: String,
+    folderPath: String,
+  }
+}, { _id: false });
 const productSchema = new mongoose.Schema(
   {
     postedBy: {
@@ -20,6 +29,7 @@ hotScore: {
   default: 0,
   index: true,
 },
+  assets: [assetSnapshotSchema],
 media: [
   {
         key: { type: String }, // S3 object key (posts/...

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 import Order from "../models/Order.js";
 import user from "../models/user.js";
+import Asset from '../models/asset.js'
 dotenv.config();
 import mongoose from "mongoose";
 import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.js";
@@ -17,7 +18,79 @@ export const pingServer = (req, res) => {
   console.log("Ping received at:", new Date().toISOString());
   res.status(200).send("Server is awake!");
 };
+export const attachAssetsToProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { assetIds } = req.body; // array of ids
+    if (!Array.isArray(assetIds) || assetIds.length === 0) return res.status(400).json({ message: "assetIds required" });
 
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (String(product.postedBy) !== String(req.user.id)) return res.status(403).json({ message: "Forbidden" });
+
+    const assets = await Asset.find({ _id: { $in: assetIds }, owner: req.user.id });
+
+    const toAdd = assets.map(a => ({
+      assetId: a._id,
+      snapshot: {
+        name: a.name,
+        extension: a.extension,
+        size: a.size,
+        mimeType: a.mimeType,
+        folderPath: a.folder ? a.folder.toString() : null
+      }
+    }));
+
+    // Append unique (avoid duplicates)
+    for (const entry of toAdd) {
+      const exists = product.assets.some(x => String(x.assetId) === String(entry.assetId));
+      if (!exists) product.assets.push(entry);
+    }
+
+    await product.save();
+
+    // update asset documents
+    for (const a of assets) {
+      a.isDocumented = true;
+      a.storageStatus = "published";
+      a.documents.push({ productId: product._id, productName: product.name, snapshotAt: new Date() });
+      await a.save();
+    }
+
+    return res.json({ success: true, assets: product.assets });
+  } catch (err) {
+    console.error("attachAssetsToProduct err:", err);
+    res.status(500).json({ message: "Attach failed" });
+  }
+};
+
+export const detachAssetFromProduct = async (req, res) => {
+  try {
+    const { productId, assetId } = req.params;
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (String(product.postedBy) !== String(req.user.id)) return res.status(403).json({ message: "Forbidden" });
+
+    product.assets = product.assets.filter(a => String(a.assetId) !== String(assetId));
+    await product.save();
+
+    // remove product doc ref from asset
+    const asset = await Asset.findById(assetId);
+    if (asset) {
+      asset.documents = asset.documents.filter(d => String(d.productId) !== String(product._id));
+      if (asset.documents.length === 0) {
+        asset.isDocumented = false;
+        asset.storageStatus = "draft";
+      }
+      await asset.save();
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("detachAssetFromProduct err:", err);
+    res.status(500).json({ message: "Detach failed" });
+  }
+};
 export const getDefaultDesigns = async (req, res) => {
   try {
     // Read limit & page from query params, with defaults
