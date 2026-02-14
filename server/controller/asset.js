@@ -28,6 +28,242 @@ export const getPresignedForAsset = async (req, res) => {
     res.status(500).json({ message: "Failed to generate presigned URL" });
   }
 };
+export const getAssets = async (req, res) => {
+  try {
+    const ownerId = req.user.id;
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || "20", 10)));
+    const rawCursor = req.query.cursor || null;
+    const queryText = req.query.query?.trim() || "";
+    const folderId = req.query.folderId || null;
+    const mimeType = req.query.mimeType || null;
+    const extension = req.query.extension || null;
+    const isDocumented = typeof req.query.isDocumented !== "undefined" ? (req.query.isDocumented === "true") : null;
+    const storageStatus = req.query.storageStatus || null;
+    const sortBy = req.query.sort || "createdAt"; // createdAt or size
+
+    // basic search condition - always filter by owner
+    const baseCond = { owner: ownerId };
+
+    if (folderId) {
+      if (!mongoose.isValidObjectId(folderId)) return res.status(400).json({ message: "Invalid folderId" });
+      baseCond.folder = mongoose.Types.ObjectId(folderId);
+    }
+
+    if (mimeType) baseCond.mimeType = mimeType;
+    if (extension) baseCond.extension = extension;
+    if (isDocumented !== null) baseCond.isDocumented = isDocumented;
+    if (storageStatus) baseCond.storageStatus = storageStatus;
+
+    // search by name (best-effort). If you want full-text, add text index and use $text.
+    let searchCondition = {};
+    if (queryText) {
+      const regex = { $regex: queryText, $options: "i" };
+      searchCondition = {
+        $or: [
+          { name: regex },
+          { originalFileName: regex }
+        ]
+      };
+    }
+
+    // cursor parsing
+    let cursorSize = null;
+    let cursorId = null;
+    if (sortBy === "size" && rawCursor && typeof rawCursor === "string" && rawCursor.includes("|")) {
+      const parts = rawCursor.split("|");
+      cursorSize = Number(parts[0]);
+      cursorId = parts[1];
+      if (!Number.isFinite(cursorSize)) cursorSize = null;
+      if (!mongoose.isValidObjectId(cursorId)) cursorId = null;
+    } else if (rawCursor && mongoose.isValidObjectId(rawCursor)) {
+      cursorId = rawCursor;
+    }
+
+    // build cursor condition
+    let cursorCondition = {};
+    if (sortBy === "size") {
+      if (cursorSize !== null && cursorId) {
+        // get assets with (size < cursorSize) OR (size == cursorSize and _id < cursorId)
+        cursorCondition = {
+          $or: [
+            { size: { $lt: cursorSize } },
+            { size: cursorSize, _id: { $lt: mongoose.Types.ObjectId(cursorId) } }
+          ]
+        };
+      }
+    } else {
+      // createdAt/_id cursor (recent)
+      if (cursorId) {
+        cursorCondition = { _id: { $lt: mongoose.Types.ObjectId(cursorId) } };
+      }
+    }
+
+    // final query
+    const finalCond = { ...baseCond, ...searchCondition, ...cursorCondition };
+
+    const sortQuery = sortBy === "size" ? { size: -1, _id: -1 } : { _id: -1 };
+
+    // fetch one extra when needed to detect hasMore
+    const fetchLimit = limit;
+
+    const assets = await Asset.find(finalCond)
+      .sort(sortQuery)
+      .limit(fetchLimit)
+      .select("-__v")
+      .lean();
+
+    const nextCursor = assets.length ? (
+      sortBy === "size"
+        ? `${assets[assets.length - 1].size}|${assets[assets.length - 1]._id}`
+        : assets[assets.length - 1]._id.toString()
+    ) : null;
+
+    const hasMore = assets.length === fetchLimit;
+
+    // count for client UI (not expensive because owner filter indexed). Optionally omit for heavy usage.
+    const count = await Asset.countDocuments(baseCond);
+
+    return res.json({ success: true, results: assets, limit: fetchLimit, nextCursor, hasMore, count });
+  } catch (err) {
+    console.error("getAssets err:", err);
+    res.status(500).json({ message: "Failed to get assets", error: err.message });
+  }
+};
+
+/**
+ * GET /products/:productId/assets
+ * Returns product.assets (snapshots) and optionally full Asset docs (populated)
+ * Query param: populate=true to include full Asset documents (only allowed to product owner).
+ */
+export const getConnectedAssetsByProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: "Invalid productId" });
+
+    const product = await Product.findById(productId).lean();
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    // permission: product owner can see full asset info; others get snapshot only
+    const isOwner = String(product.postedBy) === String(req.user.id);
+    const populateFull = req.query.populate === "true" && isOwner;
+
+    if (!product.assets || product.assets.length === 0) {
+      return res.json({ success: true, results: [] });
+    }
+
+    if (populateFull) {
+      // fetch assets in bulk
+      const assetIds = product.assets.map(a => a.assetId).filter(id => mongoose.isValidObjectId(id));
+      const assets = await Asset.find({ _id: { $in: assetIds } }).select("-__v").lean();
+
+      // map by id for ordering
+      const assetsMap = new Map(assets.map(a => [a._id.toString(), a]));
+      const ordered = product.assets.map(a => ({
+        snapshot: a.snapshot,
+        asset: assetsMap.get(String(a.assetId)) || null
+      }));
+
+      return res.json({ success: true, results: ordered });
+    } else {
+      // just return snapshots
+      return res.json({ success: true, results: product.assets.map(a => a.snapshot) });
+    }
+  } catch (err) {
+    console.error("getConnectedAssetsByProduct err:", err);
+    res.status(500).json({ message: "Failed to get connected assets", error: err.message });
+  }
+};
+
+/**
+ * POST /assets/folder/move
+ * Body: { assetIds: [...], targetFolderId: <id|null> }
+ * Moves multiple assets into target folder (or root if null).
+ * Updates folder totalSize/assetCount for source & target.
+ * Uses mongoose transaction (requires replica set).
+ */
+export const moveMultipleAssetsToFolder = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    const ownerId = req.user.id;
+    let { assetIds, targetFolderId } = req.body;
+    if (!Array.isArray(assetIds) || !assetIds.length) return res.status(400).json({ message: "assetIds required" });
+
+    assetIds = assetIds.filter(id => mongoose.isValidObjectId(id));
+    if (!assetIds.length) return res.status(400).json({ message: "No valid assetIds provided" });
+
+    // validate target folder belongs to user or null
+    let targetFolder = null;
+    if (targetFolderId) {
+      if (!mongoose.isValidObjectId(targetFolderId)) return res.status(400).json({ message: "Invalid targetFolderId" });
+      targetFolder = await AssetFolder.findById(targetFolderId);
+      if (!targetFolder || String(targetFolder.owner) !== String(ownerId)) {
+        return res.status(403).json({ message: "Forbidden or target folder not found" });
+      }
+    }
+
+    session.startTransaction();
+
+    // fetch assets to move (owner check)
+    const assets = await Asset.find({ _id: { $in: assetIds }, owner: ownerId }).session(session);
+    if (!assets.length) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "No assets found to move" });
+    }
+
+    // compute size totals per source folder and target
+    const sizesBySource = {}; // { folderIdOr_null: totalSize }
+    for (const a of assets) {
+      const key = a.folder ? String(a.folder) : "root";
+      sizesBySource[key] = (sizesBySource[key] || 0) + (a.size || 0);
+    }
+
+    // update assets' folder
+    const update = { $set: { folder: targetFolder ? targetFolder._id : null } };
+    await Asset.updateMany({ _id: { $in: assets.map(a => a._id) } }, update).session(session);
+
+    // decrement source folder stats
+    for (const [srcKey, totalSize] of Object.entries(sizesBySource)) {
+      if (srcKey === "root") {
+        // nothing to update for root
+        continue;
+      }
+      await AssetFolder.findByIdAndUpdate(srcKey, {
+        $inc: { totalSize: -totalSize, assetCount: -( /* count of assets from this src */ assets.filter(a => String(a.folder) === srcKey).length) }
+      }).session(session);
+    }
+
+    // increment target folder stats
+    if (targetFolder) {
+      const totalSizeMoved = assets.reduce((s, a) => s + (a.size || 0), 0);
+      const countMoved = assets.length;
+      await AssetFolder.findByIdAndUpdate(targetFolder._id, {
+        $inc: { totalSize: totalSizeMoved, assetCount: countMoved }
+      }).session(session);
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.json({ success: true, moved: assets.length });
+  } catch (err) {
+    console.error("moveMultipleAssetsToFolder err:", err);
+    try { await session.abortTransaction(); } catch (e) {}
+    session.endSession();
+    res.status(500).json({ message: "Failed to move assets", error: err.message });
+  }
+};
+
+/**
+ * POST /assets/folder/remove
+ * Body: { assetIds: [...] }
+ * Removes folder association (moves to root) for multiple assets.
+ * This is a convenience wrapper around moveMultipleAssetsToFolder with targetFolderId = null
+ */
+export const removeMultipleAssetsFromFolder = async (req, res) => {
+  req.body.targetFolderId = null;
+  return moveMultipleAssetsToFolder(req, res);
+};
 
 // After client uploads to S3, it calls this endpoint to create Asset doc
 export const createAssetRecord = async (req, res) => {

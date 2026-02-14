@@ -5,7 +5,11 @@ import {
   getPresignedForAsset,
   createAssetRecord,
   renameAsset,
-  deleteAsset
+  deleteAsset,
+  moveMultipleAssetsToFolder,
+  removeMultipleAssetsFromFolder,
+  getConnectedAssetsByProduct,
+  getAssets
 } from "../controller/asset.js";
 import {
   createFolder,
@@ -21,6 +25,16 @@ router.post("/presign", checkStorageLimit, getPresignedForAsset); // body: fileN
 router.post("/create", createAssetRecord); // body: key, name, originalFileName, size, mimeType, folderId
 router.put("/rename/:assetId", renameAsset);
 router.delete("/delete/:assetId", deleteAsset);
+router.get("/", getAssets);
+
+// move multiple assets to folder (or root)
+router.post("/folder/move", moveMultipleAssetsToFolder);
+
+// remove multiple assets from folder (move to root)
+router.post("/folder/remove", removeMultipleAssetsFromFolder);
+
+// get connected assets by product id (snapshots or full docs with populate=true for owner)
+router.get("/product/:productId", getConnectedAssetsByProduct);
 
 // folders
 router.post("/folder/create", createFolder);
