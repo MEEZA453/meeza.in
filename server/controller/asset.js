@@ -39,16 +39,34 @@ export const getAssets = async (req, res) => {
     const folderId = req.query.folderId || null;
     const mimeType = req.query.mimeType || null;
     const extension = req.query.extension || null;
-    const isDocumented = typeof req.query.isDocumented !== "undefined" ? (req.query.isDocumented === "true") : null;
+    const isDocumented =
+      typeof req.query.isDocumented !== "undefined"
+        ? req.query.isDocumented === "true"
+        : null;
     const storageStatus = req.query.storageStatus || null;
     const sortBy = req.query.sort || "createdAt"; // createdAt or size
+
+    console.log(
+      ownerId,
+      limit,
+      rawCursor,
+      queryText,
+      folderId,
+      mimeType,
+      extension,
+      isDocumented,
+      storageStatus,
+      sortBy
+    );
 
     // basic search condition - always filter by owner
     const baseCond = { owner: ownerId };
 
     if (folderId) {
-      if (!mongoose.isValidObjectId(folderId)) return res.status(400).json({ message: "Invalid folderId" });
-      baseCond.folder = mongoose.Types.ObjectId(folderId);
+      if (!mongoose.isValidObjectId(folderId)) {
+        return res.status(400).json({ message: "Invalid folderId" });
+      }
+      baseCond.folder = new mongoose.Types.ObjectId(folderId);
     }
 
     if (mimeType) baseCond.mimeType = mimeType;
@@ -56,25 +74,29 @@ export const getAssets = async (req, res) => {
     if (isDocumented !== null) baseCond.isDocumented = isDocumented;
     if (storageStatus) baseCond.storageStatus = storageStatus;
 
-    // search by name (best-effort). If you want full-text, add text index and use $text.
+    // search by name
     let searchCondition = {};
     if (queryText) {
       const regex = { $regex: queryText, $options: "i" };
       searchCondition = {
-        $or: [
-          { name: regex },
-          { originalFileName: regex }
-        ]
+        $or: [{ name: regex }, { originalFileName: regex }],
       };
     }
 
     // cursor parsing
     let cursorSize = null;
     let cursorId = null;
-    if (sortBy === "size" && rawCursor && typeof rawCursor === "string" && rawCursor.includes("|")) {
+
+    if (
+      sortBy === "size" &&
+      rawCursor &&
+      typeof rawCursor === "string" &&
+      rawCursor.includes("|")
+    ) {
       const parts = rawCursor.split("|");
       cursorSize = Number(parts[0]);
       cursorId = parts[1];
+
       if (!Number.isFinite(cursorSize)) cursorSize = null;
       if (!mongoose.isValidObjectId(cursorId)) cursorId = null;
     } else if (rawCursor && mongoose.isValidObjectId(rawCursor)) {
@@ -83,29 +105,38 @@ export const getAssets = async (req, res) => {
 
     // build cursor condition
     let cursorCondition = {};
+
     if (sortBy === "size") {
       if (cursorSize !== null && cursorId) {
-        // get assets with (size < cursorSize) OR (size == cursorSize and _id < cursorId)
         cursorCondition = {
           $or: [
             { size: { $lt: cursorSize } },
-            { size: cursorSize, _id: { $lt: mongoose.Types.ObjectId(cursorId) } }
-          ]
+            {
+              size: cursorSize,
+              _id: { $lt: new mongoose.Types.ObjectId(cursorId) },
+            },
+          ],
         };
       }
     } else {
-      // createdAt/_id cursor (recent)
+      // createdAt/_id cursor
       if (cursorId) {
-        cursorCondition = { _id: { $lt: mongoose.Types.ObjectId(cursorId) } };
+        cursorCondition = {
+          _id: { $lt: new mongoose.Types.ObjectId(cursorId) },
+        };
       }
     }
 
     // final query
-    const finalCond = { ...baseCond, ...searchCondition, ...cursorCondition };
+    const finalCond = {
+      ...baseCond,
+      ...searchCondition,
+      ...cursorCondition,
+    };
 
-    const sortQuery = sortBy === "size" ? { size: -1, _id: -1 } : { _id: -1 };
+    const sortQuery =
+      sortBy === "size" ? { size: -1, _id: -1 } : { _id: -1 };
 
-    // fetch one extra when needed to detect hasMore
     const fetchLimit = limit;
 
     const assets = await Asset.find(finalCond)
@@ -114,21 +145,30 @@ export const getAssets = async (req, res) => {
       .select("-__v")
       .lean();
 
-    const nextCursor = assets.length ? (
-      sortBy === "size"
+    const nextCursor = assets.length
+      ? sortBy === "size"
         ? `${assets[assets.length - 1].size}|${assets[assets.length - 1]._id}`
         : assets[assets.length - 1]._id.toString()
-    ) : null;
+      : null;
 
     const hasMore = assets.length === fetchLimit;
 
-    // count for client UI (not expensive because owner filter indexed). Optionally omit for heavy usage.
     const count = await Asset.countDocuments(baseCond);
 
-    return res.json({ success: true, results: assets, limit: fetchLimit, nextCursor, hasMore, count });
+    return res.json({
+      success: true,
+      results: assets,
+      limit: fetchLimit,
+      nextCursor,
+      hasMore,
+      count,
+    });
   } catch (err) {
     console.error("getAssets err:", err);
-    res.status(500).json({ message: "Failed to get assets", error: err.message });
+    res.status(500).json({
+      message: "Failed to get assets",
+      error: err.message,
+    });
   }
 };
 
@@ -337,6 +377,37 @@ export const renameAsset = async (req, res) => {
   } catch (err) {
     console.error("renameAsset err:", err);
     res.status(500).json({ message: "Rename failed" });
+  }
+};
+export const getFolders = async (req, res) => {
+  try {
+    const owner = req.user.id;
+
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || "20")));
+    const page = Math.max(1, parseInt(req.query.page || "1"));
+    const skip = (page - 1) * limit;
+
+    const query = { owner };
+
+    const total = await AssetFolder.countDocuments(query);
+
+    const folders = await AssetFolder.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      folders,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        limit,
+      },
+    });
+  } catch (err) {
+    console.error("getFolders err:", err);
+    res.status(500).json({ message: "Failed to fetch folders" });
   }
 };
 

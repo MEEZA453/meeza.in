@@ -9,7 +9,8 @@ import {
   moveMultipleAssetsToFolder,
   removeMultipleAssetsFromFolder,
   getConnectedAssetsByProduct,
-  getAssets
+  getAssets,
+  getFolders
 } from "../controller/asset.js";
 import {
   createFolder,
@@ -32,6 +33,7 @@ router.post("/folder/move", moveMultipleAssetsToFolder);
 
 // remove multiple assets from folder (move to root)
 router.post("/folder/remove", removeMultipleAssetsFromFolder);
+router.get("/folders", getFolders);
 
 // get connected assets by product id (snapshots or full docs with populate=true for owner)
 router.get("/product/:productId", getConnectedAssetsByProduct);
