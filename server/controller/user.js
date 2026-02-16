@@ -535,15 +535,24 @@ export const registerUser = async (req, res) => {
       ...(profile && { profile }), // only add profile if exists
     });
 
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      token: generateToken(user._id),
-      premium: user.premium,
-    });
+const token = generateToken(user._id);
+
+res.cookie("token", token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+res.status(201).json({
+  _id: user._id,
+  name: user.name,
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  premium: user.premium,
+});
+
 console.log(user)
     console.log("✅ User created successfully:", user.email, "Role:", user.role);
   } catch (err) {
@@ -583,17 +592,24 @@ export const loginUser = async (req, res) => {
       await user.save();
       console.log("🔄 User upgraded to DEV:", user.email);
     }
+const token = generateToken(user._id);
 
-    res.json({
-      _id: user._id,
-      name: user.name,
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      token: generateToken(user._id),
-      premium: user.premium,
-    });
-console.log(user)
+res.cookie("token", token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+res.json({
+  _id: user._id,
+  name: user.name,
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  premium: user.premium,
+});
+
     console.log("✅ Login successful:", user.email);
   } catch (err) {
     console.error(err);

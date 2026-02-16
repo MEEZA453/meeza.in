@@ -61,7 +61,15 @@ export const googleLogin = async (req, res) => {
       console.log(`🔄 Updated existing user to DEV: ${user.email}`);
     }
 
-    // Respond with user info + token
+    const token = generateToken(user._id);
+
+res.cookie("token", token, {
+  httpOnly: true,
+  secure : false,
+  // secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
     res.status(200).json({
       _id: user._id,
       name: user.name,
@@ -72,7 +80,6 @@ export const googleLogin = async (req, res) => {
       bio: user.bio,
       premium: user.premium,
       role: user.role,
-      token: generateToken(user._id),
       isAlreadyUser,
     });
   } catch (err) {
