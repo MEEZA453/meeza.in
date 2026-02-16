@@ -18,7 +18,11 @@ import {
 import {
   createFolder,
   renameFolder,
-  deleteFolder
+  deleteFolder,
+  attachAssetsToProduct,
+  detachAssetsFromProduct,
+  attachFolderToProduct,
+  detachFolderFromProduct
 } from "../controller/folderOfAsset.js";
 
 const router = express.Router();
@@ -47,5 +51,10 @@ router.get("/product/:productId", getConnectedAssetsByProduct);
 router.post("/folder/create", createFolder);
 router.put("/folder/rename/:folderId", renameFolder);
 router.delete("/folder/:folderId", deleteFolder);
+router.post("/attach", attachAssetsToProduct); // body: productId, assetIds
+router.post("/detach", detachAssetsFromProduct); // body: productId, assetIds
 
+// Attach/detach folder of assets
+router.post("/folder/attach", attachFolderToProduct); // body: productId, folderId
+router.post("/folder/detach", detachFolderFromProduct); // body: productId, folderId
 export default router;

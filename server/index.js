@@ -38,7 +38,7 @@ import { processHighlightQueue } from './corn/highlightQueueProcessor.js';
 import couponRoute from './routes/coupon.js'
 import assetsRouter from "./routes/asset.js";
 import cookieParser from "cookie-parser";
-
+import productAssetsRouter from './routes/productAssets.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -91,7 +91,7 @@ app.use('/cart' , cartRoute)
 app.use('/wallet', walletRoute)
 app.use('/coupon', couponRoute)
 app.use("/assets", assetsRouter);
-
+app.use('/productAssets', productAssetsRouter)
 
 // Connect to DB and start server
 connectDB();
