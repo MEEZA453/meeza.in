@@ -63,13 +63,14 @@ export const googleLogin = async (req, res) => {
 
     const token = generateToken(user._id);
 
+const isProduction = process.env.NODE_ENV === "production";
+
 res.cookie("token", token, {
   httpOnly: true,
-  secure : false,
-  // secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
+  secure: isProduction,        // ✅ true in production
+  sameSite: isProduction ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000,
-});
+})
     res.status(200).json({
       _id: user._id,
       name: user.name,
