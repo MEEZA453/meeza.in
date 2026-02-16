@@ -6,6 +6,127 @@ import Product from "../models/designs.js";
 import { generatePresignedUpload, copyObject, deleteObject, headObject } from "../services/s3Client.js";
 import path from "path";
 import mongoose from "mongoose";
+export const addAssetsToFolders = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const ownerId = req.user.id;
+    let { assetIds, folderIds } = req.body;
+
+    if (!Array.isArray(assetIds) || !assetIds.length)
+      return res.status(400).json({ message: "assetIds required" });
+
+    if (!Array.isArray(folderIds) || !folderIds.length)
+      return res.status(400).json({ message: "folderIds required" });
+
+    assetIds = assetIds.filter(id => mongoose.isValidObjectId(id));
+    folderIds = folderIds.filter(id => mongoose.isValidObjectId(id));
+
+    session.startTransaction();
+
+    const assets = await Asset.find({
+      _id: { $in: assetIds },
+      owner: ownerId
+    }).session(session);
+
+    const folders = await AssetFolder.find({
+      _id: { $in: folderIds },
+      owner: ownerId
+    }).session(session);
+
+    if (!assets.length || !folders.length)
+      throw new Error("Assets or folders not found");
+
+    for (const asset of assets) {
+
+      const existingFolderIds = asset.folders.map(f => String(f));
+
+      const newFolders = folderIds.filter(
+        id => !existingFolderIds.includes(String(id))
+      );
+
+      // 🚫 Already connected → skip
+      if (newFolders.length === 0) continue;
+
+      await Asset.findByIdAndUpdate(asset._id, {
+        $addToSet: { folders: { $each: newFolders } }
+      }).session(session);
+
+      const totalSize = asset.size || 0;
+
+      for (const folderId of newFolders) {
+        await AssetFolder.findByIdAndUpdate(folderId, {
+          $inc: { assetCount: 1, totalSize }
+        }).session(session);
+      }
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const removeAssetsFromFolders = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const ownerId = req.user.id;
+    let { assetIds, folderIds } = req.body;
+console.log('removing asset ', assetIds, folderIds)
+    if (!Array.isArray(assetIds) || !assetIds.length)
+      return res.status(400).json({ message: "assetIds required" });
+
+    if (!Array.isArray(folderIds) || !folderIds.length)
+      return res.status(400).json({ message: "folderIds required" });
+
+    assetIds = assetIds.filter(id => mongoose.isValidObjectId(id));
+    folderIds = folderIds.filter(id => mongoose.isValidObjectId(id));
+
+    session.startTransaction();
+
+    const assets = await Asset.find({
+      _id: { $in: assetIds },
+      owner: ownerId
+    }).session(session);
+
+    for (const asset of assets) {
+      const foldersToRemove = asset.folders.filter(f =>
+        folderIds.includes(String(f))
+      );
+
+      if (!foldersToRemove.length) continue;
+
+      await Asset.findByIdAndUpdate(asset._id, {
+        $pull: { folders: { $in: folderIds } }
+      }).session(session);
+
+      const totalSize = asset.size || 0;
+
+      for (const folderId of foldersToRemove) {
+        await AssetFolder.findByIdAndUpdate(folderId, {
+          $inc: { assetCount: -1, totalSize: -totalSize }
+        }).session(session);
+      }
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+console.log('remoced')
+    res.json({ success: true });
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+};
 
 function makeKeyForUser(userId, fileName) {
   // e.g. users/{userId}/assets/{timestamp}-{sanitizedFilename}
@@ -61,13 +182,15 @@ export const getAssets = async (req, res) => {
 
     // basic search condition - always filter by owner
     const baseCond = { owner: ownerId };
+if (folderId) {
+  if (!mongoose.isValidObjectId(folderId)) {
+    return res.status(400).json({ message: "Invalid folderId" });
+  }
 
-    if (folderId) {
-      if (!mongoose.isValidObjectId(folderId)) {
-        return res.status(400).json({ message: "Invalid folderId" });
-      }
-      baseCond.folder = new mongoose.Types.ObjectId(folderId);
-    }
+  baseCond.folders = {
+    $in: [new mongoose.Types.ObjectId(folderId)]
+  };
+}
 
     if (mimeType) baseCond.mimeType = mimeType;
     if (extension) baseCond.extension = extension;
@@ -223,78 +346,62 @@ export const getConnectedAssetsByProduct = async (req, res) => {
  * Updates folder totalSize/assetCount for source & target.
  * Uses mongoose transaction (requires replica set).
  */
-export const moveMultipleAssetsToFolder = async (req, res) => {
+export const moveAssetsToFolders = async (req, res) => {
   const session = await mongoose.startSession();
+
   try {
     const ownerId = req.user.id;
-    let { assetIds, targetFolderId } = req.body;
-    if (!Array.isArray(assetIds) || !assetIds.length) return res.status(400).json({ message: "assetIds required" });
+    let { assetIds, folderIds } = req.body;
 
-    assetIds = assetIds.filter(id => mongoose.isValidObjectId(id));
-    if (!assetIds.length) return res.status(400).json({ message: "No valid assetIds provided" });
+    if (!Array.isArray(assetIds) || !assetIds.length)
+      return res.status(400).json({ message: "assetIds required" });
 
-    // validate target folder belongs to user or null
-    let targetFolder = null;
-    if (targetFolderId) {
-      if (!mongoose.isValidObjectId(targetFolderId)) return res.status(400).json({ message: "Invalid targetFolderId" });
-      targetFolder = await AssetFolder.findById(targetFolderId);
-      if (!targetFolder || String(targetFolder.owner) !== String(ownerId)) {
-        return res.status(403).json({ message: "Forbidden or target folder not found" });
-      }
-    }
+    folderIds = Array.isArray(folderIds)
+      ? folderIds.filter(id => mongoose.isValidObjectId(id))
+      : [];
 
     session.startTransaction();
 
-    // fetch assets to move (owner check)
-    const assets = await Asset.find({ _id: { $in: assetIds }, owner: ownerId }).session(session);
-    if (!assets.length) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ message: "No assets found to move" });
-    }
+    const assets = await Asset.find({
+      _id: { $in: assetIds },
+      owner: ownerId
+    }).session(session);
 
-    // compute size totals per source folder and target
-    const sizesBySource = {}; // { folderIdOr_null: totalSize }
-    for (const a of assets) {
-      const key = a.folder ? String(a.folder) : "root";
-      sizesBySource[key] = (sizesBySource[key] || 0) + (a.size || 0);
-    }
+    for (const asset of assets) {
+      const oldFolders = asset.folders || [];
+      const totalSize = asset.size || 0;
 
-    // update assets' folder
-    const update = { $set: { folder: targetFolder ? targetFolder._id : null } };
-    await Asset.updateMany({ _id: { $in: assets.map(a => a._id) } }, update).session(session);
-
-    // decrement source folder stats
-    for (const [srcKey, totalSize] of Object.entries(sizesBySource)) {
-      if (srcKey === "root") {
-        // nothing to update for root
-        continue;
+      // decrement old
+      for (const oldId of oldFolders) {
+        await AssetFolder.findByIdAndUpdate(oldId, {
+          $inc: { assetCount: -1, totalSize: -totalSize }
+        }).session(session);
       }
-      await AssetFolder.findByIdAndUpdate(srcKey, {
-        $inc: { totalSize: -totalSize, assetCount: -( /* count of assets from this src */ assets.filter(a => String(a.folder) === srcKey).length) }
-      }).session(session);
-    }
 
-    // increment target folder stats
-    if (targetFolder) {
-      const totalSizeMoved = assets.reduce((s, a) => s + (a.size || 0), 0);
-      const countMoved = assets.length;
-      await AssetFolder.findByIdAndUpdate(targetFolder._id, {
-        $inc: { totalSize: totalSizeMoved, assetCount: countMoved }
-      }).session(session);
+      // set new
+      asset.folders = folderIds;
+      await asset.save({ session });
+
+      // increment new
+      for (const newId of folderIds) {
+        await AssetFolder.findByIdAndUpdate(newId, {
+          $inc: { assetCount: 1, totalSize }
+        }).session(session);
+      }
     }
 
     await session.commitTransaction();
     session.endSession();
 
-    return res.json({ success: true, moved: assets.length });
+    res.json({ success: true });
+
   } catch (err) {
-    console.error("moveMultipleAssetsToFolder err:", err);
-    try { await session.abortTransaction(); } catch (e) {}
+    await session.abortTransaction();
     session.endSession();
-    res.status(500).json({ message: "Failed to move assets", error: err.message });
+    res.status(500).json({ message: err.message });
   }
 };
+
 
 /**
  * POST /assets/folder/remove

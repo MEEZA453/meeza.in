@@ -6,11 +6,14 @@ import {
   createAssetRecord,
   renameAsset,
   deleteAsset,
-  moveMultipleAssetsToFolder,
+  // moveMultipleAssetsToFolder,
   removeMultipleAssetsFromFolder,
   getConnectedAssetsByProduct,
   getAssets,
-  getFolders
+  getFolders,
+  addAssetsToFolders,
+  removeAssetsFromFolders,
+  moveAssetsToFolders
 } from "../controller/asset.js";
 import {
   createFolder,
@@ -29,7 +32,9 @@ router.delete("/delete/:assetId", deleteAsset);
 router.get("/", getAssets);
 
 // move multiple assets to folder (or root)
-router.post("/folder/move", moveMultipleAssetsToFolder);
+router.post("/folder/add", addAssetsToFolders);
+router.post("/folder/remove", removeAssetsFromFolders);
+router.post("/folder/move", moveAssetsToFolders);
 
 // remove multiple assets from folder (move to root)
 router.post("/folder/remove", removeMultipleAssetsFromFolder);

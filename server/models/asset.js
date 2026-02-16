@@ -9,7 +9,10 @@ const assetSchema = new mongoose.Schema({
   size: { type: Number, required: true },                // bytes
   mimeType: { type: String },
   extension: { type: String },
-  folder: { type: mongoose.Schema.Types.ObjectId, ref: "AssetFolder", default: null },
+folders: [{
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "AssetFolder"
+}],
   isDocumented: { type: Boolean, default: false },      // used in product(s)
   isMyAsset: { type: Boolean, default: true },          // seller's private asset flag
   storageStatus: { type: String, enum: ["draft","published"], default: "draft" },
