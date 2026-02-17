@@ -1,6 +1,76 @@
 // controllers/folderController.js
 import AssetFolder from "../models/folderOfAsset.js";
 import Asset from "../models/asset.js";
+import path from "path";
+import mongoose from "mongoose";
+
+function normalizeFolderPath(p) {
+  // Ensure posix style and remove leading/trailing slashes
+  const normalized = path.posix.normalize(p).replace(/^\/+|\/+$/g, "");
+  if (normalized.includes("..")) throw new Error("Invalid path");
+  return normalized;
+}
+
+/**
+ * POST /api/asset-folders/bulk-create
+ * body: { paths: string[] }  // e.g. ["summer", "summer/dogs"]
+ * returns: { mapping: { "<path>": "<folderId>" } }
+ */
+export const bulkCreateFolders = async (req, res) => {
+  const owner = req.user.id;
+  const { paths } = req.body;
+  if (!Array.isArray(paths)) return res.status(400).json({ message: "paths array required" });
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // ensure unique, normalized and sorted by depth asc
+    const normalizedPaths = Array.from(new Set(paths.map(normalizeFolderPath))).filter(Boolean);
+    normalizedPaths.sort((a, b) => a.split("/").length - b.split("/").length);
+
+    const pathToId = {}; // mapping to return
+    // Cache to reduce DB lookups
+    const cache = new Map(); // key: parentId||'root' + '::' + name => folder doc
+
+    for (const fullPath of normalizedPaths) {
+      const segments = fullPath.split("/");
+      let parentId = null;
+
+      // iterate segments, creating each level if missing
+      let cumPath = "";
+      for (const seg of segments) {
+        cumPath = cumPath ? `${cumPath}/${seg}` : seg;
+        const cacheKey = `${parentId || "root"}::${seg}`;
+
+        if (cache.has(cacheKey)) {
+          parentId = cache.get(cacheKey)._id;
+          continue;
+        }
+
+        // check existing folder with same owner, same name, same parent
+        let folder = await AssetFolder.findOne({ owner, name: seg, parentFolder: parentId }).session(session);
+        if (!folder) {
+          folder = await AssetFolder.create([{ owner, name: seg, parentFolder: parentId }], { session });
+          folder = folder[0];
+        }
+        cache.set(cacheKey, folder);
+        parentId = folder._id;
+      }
+
+      // for the fullPath, the folder id is parentId after loop
+      pathToId[fullPath] = parentId;
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+    return res.json({ mapping: pathToId });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("bulkCreateFolders err:", err);
+    return res.status(500).json({ message: "Failed to create folders", error: err.message });
+  }
+};
 export const attachAssetsToProduct = async (req, res) => {
   try {
     const { productId, assetIds } = req.body;

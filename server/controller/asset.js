@@ -6,6 +6,187 @@ import Product from "../models/designs.js";
 import { generatePresignedUpload, copyObject, deleteObject, headObject } from "../services/s3Client.js";
 import path from "path";
 import mongoose from "mongoose";
+export const createFoldersBulk = async (req, res) => {
+  try {
+    const owner = req.user.id;
+    const { paths } = req.body; // array of strings like ["summer", "summer/dogs"]
+console.log('creating bulks ', paths)
+    if (!Array.isArray(paths) || paths.length === 0)
+      return res.status(400).json({ message: "paths array required" });
+
+    const pathToId = {}; // result mapping
+
+    // We'll cache existing folders to avoid repeated DB hits
+    // key: `${parentId || 'root'}|name` -> folderDoc
+    const cache = new Map();
+
+    // preload root-level folders for owner
+    const rootFolders = await AssetFolder.find({ owner, parentFolder: null });
+    rootFolders.forEach(f => cache.set(`root|${f.name}`, f));
+
+    for (const rawPath of paths) {
+      if (!rawPath || typeof rawPath !== "string") continue;
+      const parts = rawPath.split("/").filter(Boolean);
+      let parentId = null;
+      let currentPath = "";
+
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const cacheKey = `${parentId || "root"}|${part}`;
+
+        let folder = cache.get(cacheKey);
+
+        if (!folder) {
+          // try find in DB
+          folder = await AssetFolder.findOne({ owner, name: part, parentFolder: parentId || null });
+        }
+
+        if (!folder) {
+          folder = new AssetFolder({
+            owner,
+            name: part,
+            parentFolder: parentId || null,
+            totalSize: 0,
+            assetCount: 0
+          });
+          await folder.save();
+        }
+
+        // cache it
+        cache.set(cacheKey, folder);
+
+        // map full path -> id
+        pathToId[currentPath] = folder._id.toString();
+
+        // set parentId for next level
+        parentId = folder._id;
+      }
+    }
+console.log('bulk created')
+    return res.json({ success: true, mapping: pathToId });
+  } catch (err) {
+    console.error("createFoldersBulk error:", err);
+    return res.status(500).json({ message: "Failed to create folders" });
+  }
+};
+// controllers/assetController.js (append)
+export const createAssetsBulk = async (req, res) => {
+  /**
+   * body: { assets: [{ key, name, originalFileName, size, mimeType, relativePath }] }
+   */
+
+
+  const owner = req.user.id;
+  const { assets } = req.body;
+console.log('creating folder', owner, assets)
+  if (!Array.isArray(assets) || assets.length === 0)
+    return res.status(400).json({ message: "assets array required" });
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const createdAssets = [];
+
+    for (const asset of assets) {
+      let parentFolderId = null;
+
+      // 🔥 1️⃣ HANDLE NESTED FOLDER STRUCTURE
+      if (asset.relativePath) {
+        const parts = asset.relativePath.split("/");
+        parts.pop(); // remove file name
+
+        for (const folderName of parts) {
+          let folder = await AssetFolder.findOne({
+            owner,
+            name: folderName,
+            parentFolder: parentFolderId,
+          }).session(session);
+
+          // create folder if not exists
+          if (!folder) {
+            folder = await AssetFolder.create(
+              [
+                {
+                  owner,
+                  name: folderName,
+                  parentFolder: parentFolderId,
+                  totalSize: 0,
+                  assetCount: 0,
+                },
+              ],
+              { session }
+            );
+
+            folder = folder[0];
+          }
+
+          parentFolderId = folder._id;
+        }
+      }
+
+      // 2️⃣ CREATE ASSET
+      const doc = {
+        owner,
+        name: asset.name,
+        originalFileName: asset.originalFileName || asset.name,
+        key: asset.key,
+        size: Number(asset.size || 0),
+        mimeType: asset.mimeType,
+        extension:
+          asset.extension ||
+          (asset.originalFileName
+            ? path.extname(asset.originalFileName).replace(".", "")
+            : ""),
+        folders: parentFolderId ? [parentFolderId] : [],
+        isDocumented: false,
+        storageStatus: "draft",
+      };
+
+      const created = await Asset.create([doc], { session });
+
+
+console.log('cdrerse', created)      
+      createdAssets.push(created[0]);
+
+      // 3️⃣ UPDATE FOLDER STATS
+      if (parentFolderId) {
+        await AssetFolder.findByIdAndUpdate(
+          parentFolderId,
+          {
+            $inc: {
+              totalSize: doc.size || 0,
+              assetCount: 1,
+            },
+          },
+          { session }
+        );
+      }
+
+      // 4️⃣ UPDATE USER STORAGE
+      await User.findByIdAndUpdate(
+        owner,
+        { $inc: { storageUsed: doc.size || 0 } },
+        { session }
+      );
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+console.log('creaed', createdAssets)
+    return res.status(201).json({ created: createdAssets });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("createAssetsBulk:", err);
+    return res.status(500).json({
+      message: "Failed to create assets bulk",
+      error: err.message,
+    });
+  }
+};
+
+
 export const addAssetsToFolders = async (req, res) => {
   const session = await mongoose.startSession();
 
@@ -137,18 +318,24 @@ function makeKeyForUser(userId, fileName) {
 
 export const getPresignedForAsset = async (req, res) => {
   try {
-    const { fileName, contentType, folder, expectedSize } = req.body;
-    console.log('getting presign for assets :', fileName, contentType, folder, expectedSize)
-    if (!fileName || !contentType) {
-      return res.status(400).json({ message: "fileName and contentType required" });
+    const { fileName, contentType, folder, expectedSize, relativePath } = req.body;
+    if (!fileName || !contentType) return res.status(400).json({ message: "fileName and contentType required" });
+
+    // sanitize relativePath
+    let keyPath = fileName;
+    if (relativePath && typeof relativePath === "string") {
+      // normalize to posix
+      const posix = path.posix.normalize(relativePath).replace(/^\/+|\/+$/g, "");
+      if (posix.includes("..")) return res.status(400).json({ message: "Invalid relativePath" });
+      keyPath = posix; // includes subfolders + filename
     }
-    const key = makeKeyForUser(req.user.id, fileName);
+
+    const key = makeKeyForUser(req.user.id, keyPath); // keep makeKeyForUser safe
     const result = await generatePresignedUpload({ key, contentType, expires: Number(process.env.PRESIGN_EXPIRES || 600) });
-    console.log('presigned', result)
     return res.json({ key: result.key, url: result.url });
   } catch (err) {
     console.error("getPresignedForAsset:", err);
-    res.status(500).json({ message: "Failed to generate presigned URL" });
+    return res.status(500).json({ message: "Failed to generate presigned URL" });
   }
 };
 export const getAssets = async (req, res) => {
@@ -438,7 +625,7 @@ export const createAssetRecord = async (req, res) => {
       size: Number(size),
       mimeType,
       extension,
-      folder: folderId || null,
+     folders: folderId ? [folderId] : [],
       isDocumented: false,
       storageStatus: "draft"
     });
@@ -486,15 +673,31 @@ export const renameAsset = async (req, res) => {
     res.status(500).json({ message: "Rename failed" });
   }
 };
+// controllers/assetFolder.js
+
 export const getFolders = async (req, res) => {
   try {
     const owner = req.user.id;
+
+    const { parentId } = req.query; 
+    // parentId can be:
+    // undefined → fetch all
+    // "root" → fetch root folders
+    // folderId → fetch children
 
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || "20")));
     const page = Math.max(1, parseInt(req.query.page || "1"));
     const skip = (page - 1) * limit;
 
     const query = { owner };
+
+    if (parentId) {
+      if (parentId === "root") {
+        query.parentFolder = null;
+      } else {
+        query.parentFolder = parentId;
+      }
+    }
 
     const total = await AssetFolder.countDocuments(query);
 
@@ -517,6 +720,7 @@ export const getFolders = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch folders" });
   }
 };
+
 
 export const deleteAsset = async (req, res) => {
   try {

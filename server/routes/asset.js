@@ -13,7 +13,9 @@ import {
   getFolders,
   addAssetsToFolders,
   removeAssetsFromFolders,
-  moveAssetsToFolders
+  moveAssetsToFolders,
+  createAssetsBulk,
+  createFoldersBulk,
 } from "../controller/asset.js";
 import {
   createFolder,
@@ -28,7 +30,7 @@ import {
 const router = express.Router();
 
 router.use(verifyToken);
-
+router.post("/folder/create-bulk", createFoldersBulk);
 router.post("/presign", checkStorageLimit, getPresignedForAsset); // body: fileName, contentType, expectedSize
 router.post("/create", createAssetRecord); // body: key, name, originalFileName, size, mimeType, folderId
 router.put("/rename/:assetId", renameAsset);
@@ -43,7 +45,6 @@ router.post("/folder/move", moveAssetsToFolders);
 // remove multiple assets from folder (move to root)
 router.post("/folder/remove", removeMultipleAssetsFromFolder);
 router.get("/folders", getFolders);
-
 // get connected assets by product id (snapshots or full docs with populate=true for owner)
 router.get("/product/:productId", getConnectedAssetsByProduct);
 
@@ -53,8 +54,6 @@ router.put("/folder/rename/:folderId", renameFolder);
 router.delete("/folder/:folderId", deleteFolder);
 router.post("/attach", attachAssetsToProduct); // body: productId, assetIds
 router.post("/detach", detachAssetsFromProduct); // body: productId, assetIds
-
-// Attach/detach folder of assets
 router.post("/folder/attach", attachFolderToProduct); // body: productId, folderId
 router.post("/folder/detach", detachFolderFromProduct); // body: productId, folderId
 export default router;
