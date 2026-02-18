@@ -69,6 +69,75 @@ console.log('bulk created')
     return res.status(500).json({ message: "Failed to create folders" });
   }
 };
+export const createAssetRecord = async (req, res) => {
+  try {
+    const { key, name, originalFileName, size, mimeType, folderId } = req.body;
+    console.log('creating assets record :', key, name, originalFileName, size, mimeType, folderId )
+    if (!key || !name || !size) return res.status(400).json({ message: "key, name and size required" });
+
+    // Basic head check to confirm file exists (optional)
+    try {
+      await headObject({ key });
+    } catch (e) {
+      console.warn("headObject failed; continuing. Client might still be uploading.");
+    }
+
+    const extension = path.extname(originalFileName || name).replace(".", "").toLowerCase();
+
+    const newAsset = new Asset({
+      owner: req.user.id,
+      name,
+      originalFileName: originalFileName || name,
+      key,
+      size: Number(size),
+      mimeType,
+      extension,
+folders:
+  folderId && mongoose.Types.ObjectId.isValid(folderId)
+    ? [folderId]
+    : [],
+      isDocumented: false,
+      storageStatus: "draft"
+    });
+
+    await newAsset.save();
+    // increment user storageUsed
+    await User.findByIdAndUpdate(req.user.id, { $inc: { storageUsed: Number(size) } });
+
+    // update folder counts if folderId provided
+    if (folderId) {
+      await AssetFolder.findByIdAndUpdate(folderId, { $inc: { totalSize: Number(size), assetCount: 1 } });
+    }
+console.log('record creted', newAsset)
+
+    return res.status(201).json({ success: true, asset: newAsset });
+  } catch (err) {
+    console.error("createAssetRecord err:", err);
+    res.status(500).json({ message: "Failed to create asset record" });
+  }
+};
+export const getPresignedForAsset = async (req, res) => {
+  try {
+    const { fileName, contentType, folder, expectedSize, relativePath } = req.body;
+    if (!fileName || !contentType) return res.status(400).json({ message: "fileName and contentType required" });
+
+    // sanitize relativePath
+    let keyPath = fileName;
+    if (relativePath && typeof relativePath === "string") {
+      // normalize to posix
+      const posix = path.posix.normalize(relativePath).replace(/^\/+|\/+$/g, "");
+      if (posix.includes("..")) return res.status(400).json({ message: "Invalid relativePath" });
+      keyPath = posix; // includes subfolders + filename
+    }
+
+    const key = makeKeyForUser(req.user.id, keyPath); // keep makeKeyForUser safe
+    const result = await generatePresignedUpload({ key, contentType, expires: Number(process.env.PRESIGN_EXPIRES || 600) });
+    return res.json({ key: result.key, url: result.url });
+  } catch (err) {
+    console.error("getPresignedForAsset:", err);
+    return res.status(500).json({ message: "Failed to generate presigned URL" });
+  }
+};
 // controllers/assetController.js (append)
 export const createAssetsBulk = async (req, res) => {
   /**
@@ -316,28 +385,7 @@ function makeKeyForUser(userId, fileName) {
   return `users/${userId}/assets/${stamp}-${safe}`;
 }
 
-export const getPresignedForAsset = async (req, res) => {
-  try {
-    const { fileName, contentType, folder, expectedSize, relativePath } = req.body;
-    if (!fileName || !contentType) return res.status(400).json({ message: "fileName and contentType required" });
 
-    // sanitize relativePath
-    let keyPath = fileName;
-    if (relativePath && typeof relativePath === "string") {
-      // normalize to posix
-      const posix = path.posix.normalize(relativePath).replace(/^\/+|\/+$/g, "");
-      if (posix.includes("..")) return res.status(400).json({ message: "Invalid relativePath" });
-      keyPath = posix; // includes subfolders + filename
-    }
-
-    const key = makeKeyForUser(req.user.id, keyPath); // keep makeKeyForUser safe
-    const result = await generatePresignedUpload({ key, contentType, expires: Number(process.env.PRESIGN_EXPIRES || 600) });
-    return res.json({ key: result.key, url: result.url });
-  } catch (err) {
-    console.error("getPresignedForAsset:", err);
-    return res.status(500).json({ message: "Failed to generate presigned URL" });
-  }
-};
 export const getAssets = async (req, res) => {
   try {
     const ownerId = req.user.id;
@@ -370,6 +418,7 @@ export const getAssets = async (req, res) => {
     // basic search condition - always filter by owner
     const baseCond = { owner: ownerId };
 if (folderId) {
+  // If folderId exists → show assets inside that folder
   if (!mongoose.isValidObjectId(folderId)) {
     return res.status(400).json({ message: "Invalid folderId" });
   }
@@ -377,6 +426,13 @@ if (folderId) {
   baseCond.folders = {
     $in: [new mongoose.Types.ObjectId(folderId)]
   };
+
+} else {
+  // If no folderId → show only root assets (not inside any folder)
+  baseCond.$or = [
+    { folders: { $exists: false } },
+    { folders: { $size: 0 } }
+  ];
 }
 
     if (mimeType) baseCond.mimeType = mimeType;
@@ -602,50 +658,6 @@ export const removeMultipleAssetsFromFolder = async (req, res) => {
 };
 
 // After client uploads to S3, it calls this endpoint to create Asset doc
-export const createAssetRecord = async (req, res) => {
-  try {
-    const { key, name, originalFileName, size, mimeType, folderId } = req.body;
-    console.log('creating assets record :', key, name, originalFileName, size, mimeType, folderId )
-    if (!key || !name || !size) return res.status(400).json({ message: "key, name and size required" });
-
-    // Basic head check to confirm file exists (optional)
-    try {
-      await headObject({ key });
-    } catch (e) {
-      console.warn("headObject failed; continuing. Client might still be uploading.");
-    }
-
-    const extension = path.extname(originalFileName || name).replace(".", "").toLowerCase();
-
-    const newAsset = new Asset({
-      owner: req.user.id,
-      name,
-      originalFileName: originalFileName || name,
-      key,
-      size: Number(size),
-      mimeType,
-      extension,
-     folders: folderId ? [folderId] : [],
-      isDocumented: false,
-      storageStatus: "draft"
-    });
-
-    await newAsset.save();
-    // increment user storageUsed
-    await User.findByIdAndUpdate(req.user.id, { $inc: { storageUsed: Number(size) } });
-
-    // update folder counts if folderId provided
-    if (folderId) {
-      await AssetFolder.findByIdAndUpdate(folderId, { $inc: { totalSize: Number(size), assetCount: 1 } });
-    }
-console.log('record creted', newAsset)
-
-    return res.status(201).json({ success: true, asset: newAsset });
-  } catch (err) {
-    console.error("createAssetRecord err:", err);
-    res.status(500).json({ message: "Failed to create asset record" });
-  }
-};
 
 export const renameAsset = async (req, res) => {
   try {
