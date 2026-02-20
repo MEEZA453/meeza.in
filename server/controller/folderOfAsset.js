@@ -235,24 +235,27 @@ export const renameFolder = async (req, res) => {
     res.status(500).json({ message: "Failed to rename" });
   }
 };
-
 export const deleteFolder = async (req, res) => {
   try {
     const { folderId } = req.params;
+
     const folder = await AssetFolder.findById(folderId);
-    if (!folder) return res.status(404).json({ message: "Folder not found" });
-    if (String(folder.owner) !== String(req.user.id)) return res.status(403).json({ message: "Forbidden" });
+    if (!folder)
+      return res.status(404).json({ message: "Folder not found" });
 
-    // Option A: move assets to root (null) OR Option B: forbid delete if contains assets.
-    const assetsCount = await Asset.countDocuments({ folder: folder._id });
-    if (assetsCount > 0) {
-      return res.status(400).json({ message: "Folder not empty. Move or delete assets first." });
-    }
+    if (String(folder.owner) !== String(req.user.id))
+      return res.status(403).json({ message: "Forbidden" });
 
+    // 🔥 Delete all assets inside this folder
+    await Asset.deleteMany({ folder: folder._id });
+
+    // 🔥 Then delete folder
     await folder.deleteOne();
+
     res.json({ success: true });
   } catch (err) {
     console.error("deleteFolder err:", err);
     res.status(500).json({ message: "Failed to delete folder" });
   }
 };
+
