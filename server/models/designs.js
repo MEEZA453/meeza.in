@@ -10,16 +10,7 @@ const assetEntrySchema = new mongoose.Schema(
     },
 
     // which model the itemId points to
-    itemType: {
-      type: String,
-      required: true,
-      enum: ["Asset", "AssetFolder"],
-    },
-  status: {
-    type: String,
-    enum: ["draft", "published"],
-    default: "published"
-  },
+   
   draftMeta: {
     savedAt: { type: Date },
     autosaved: { type: Boolean, default: false }
@@ -52,7 +43,16 @@ const productSchema = new mongoose.Schema(
 uniqueViewers: { type: Number, default: 0 },
 drip: { type: Number, default: 0 },
 appreciationCount: { type: Number, default: 0 },
-
+ itemType: {
+      type: String,
+      // required: true,
+      enum: ["Asset", "AssetFolder"],
+    },
+  status: {
+    type: String,
+    enum: ["draft", "published"],
+    default: "published"
+  },
 hotScore: {
   type: Number,
   default: 0,

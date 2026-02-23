@@ -184,8 +184,11 @@ console.log("createProductDraft req.body:", req.body);
 export const updateProductDraft = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("updateProductDraft req.body:", req.body);
+    console.log("updateProductDraft id:", id);
     const product = await Product.findOne({ _id: id, postedBy: req.user.id, status: "draft" });
+ 
+console.log("FOUND PRODUCT:", product);
+console.log("REQ USER:", req.user.id);
     if (!product) return res.status(404).json({ message: "Draft not found" });
     Object.assign(product, req.body);
     product.draftMeta = product.draftMeta || {};
