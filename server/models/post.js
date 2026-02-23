@@ -47,7 +47,15 @@ media: [
     },
   },
 ],
-
+  status: {
+    type: String,
+    enum: ["draft", "published"],
+    default: "published" // keep existing posts published by default
+  },
+  draftMeta: {
+    savedAt: { type: Date },
+    autosaved: { type: Boolean, default: false }
+  },
   voteFields: [{ type: String }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   votes: [voteSchema],

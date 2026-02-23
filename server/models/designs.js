@@ -1,15 +1,44 @@
 // models/Product.js
 import mongoose from "mongoose";
-const assetSnapshotSchema = new mongoose.Schema({
-  assetId: { type: mongoose.Schema.Types.ObjectId, ref: "Asset" },
-  snapshot: {
-    name: String,
-    extension: String,
-    size: Number,
-    mimeType: String,
-    folderPath: String,
-  }
-}, { _id: false });
+const assetEntrySchema = new mongoose.Schema(
+  {
+    // points to either Asset or AssetFolder depending on itemType
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      refPath: "assets.itemType",
+    },
+
+    // which model the itemId points to
+    itemType: {
+      type: String,
+      required: true,
+      enum: ["Asset", "AssetFolder"],
+    },
+  status: {
+    type: String,
+    enum: ["draft", "published"],
+    default: "published"
+  },
+  draftMeta: {
+    savedAt: { type: Date },
+    autosaved: { type: Boolean, default: false }
+  },
+    // snapshot: lightweight store for quick UI display
+    snapshot: {
+      name: { type: String },
+      extension: { type: String },
+      size: { type: Number },
+      mimeType: { type: String },
+      folderPath: { type: String }, // optional, can be filled later
+      // for folder entries:
+      itemCount: { type: Number }, // number of items inside (optional)
+      totalSize: { type: Number }, // folder total size (optional)
+    },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     postedBy: {
@@ -29,7 +58,7 @@ hotScore: {
   default: 0,
   index: true,
 },
-  assets: [assetSnapshotSchema],
+ assets: [assetEntrySchema],
 media: [
   {
         key: { type: String }, // S3 object key (posts/...

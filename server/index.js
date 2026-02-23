@@ -34,6 +34,7 @@ import Post from './models/post.js';
 import walletRoute from './routes/wallet.js';
 import appreciationRoute from './routes/appreciation.js'
 import cron from "node-cron";
+import draftRoutes from './routes/draft.js'
 import { processHighlightQueue } from './corn/highlightQueueProcessor.js';
 import couponRoute from './routes/coupon.js'
 import assetsRouter from "./routes/asset.js";
@@ -85,6 +86,7 @@ app.use('/hotlist', hotListRouter);
 app.use('/connect', connectRoute)
 app.use('/orders', orderPaymentRoutes)
 app.use('/order' , orderRouter )
+app.use('/drafts', draftRoutes  )
 app.use("/appreciations", appreciationRoute);
 app.use("/payouts", payoutRoutes);
 app.use('/cart' , cartRoute)
