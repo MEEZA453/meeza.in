@@ -392,6 +392,7 @@ export const getAssets = async (req, res) => {
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || "20", 10)));
     const rawCursor = req.query.cursor || null;
     const queryText = req.query.query?.trim() || "";
+    const productId = req.query.productId || null;
     const folderId = req.query.folderId || null;
     const mimeType = req.query.mimeType || null;
     const extension = req.query.extension || null;
@@ -401,8 +402,10 @@ export const getAssets = async (req, res) => {
         : null;
     const storageStatus = req.query.storageStatus || null;
     const sortBy = req.query.sort || "createdAt"; // createdAt or size
-
+console.log('product id in getAssets:', productId)
     console.log(
+      'getAssets called with:',
+      
       ownerId,
       limit,
       rawCursor,
@@ -417,24 +420,28 @@ export const getAssets = async (req, res) => {
 
     // basic search condition - always filter by owner
     const baseCond = { owner: ownerId };
+// Folder + Product logic
 if (folderId) {
-  // If folderId exists → show assets inside that folder
   if (!mongoose.isValidObjectId(folderId)) {
     return res.status(400).json({ message: "Invalid folderId" });
   }
 
   baseCond.folders = {
-    $in: [new mongoose.Types.ObjectId(folderId)]
+    $in: [new mongoose.Types.ObjectId(folderId)],
   };
-
-} else {
-  // If no folderId → show only root assets (not inside any folder)
+} else if (!productId) {
+  // ONLY apply root condition if NOT product query
   baseCond.$or = [
     { folders: { $exists: false } },
-    { folders: { $size: 0 } }
+    { folders: { $size: 0 } },
   ];
 }
 
+if (productId && !folderId) {
+  // apply ONLY when NOT browsing inside folder
+  baseCond["documents.productId"] =
+    new mongoose.Types.ObjectId(productId);
+}
     if (mimeType) baseCond.mimeType = mimeType;
     if (extension) baseCond.extension = extension;
     if (isDocumented !== null) baseCond.isDocumented = isDocumented;
@@ -519,8 +526,8 @@ if (folderId) {
 
     const hasMore = assets.length === fetchLimit;
 
-    const count = await Asset.countDocuments(baseCond);
-
+const count = await Asset.countDocuments(finalCond);
+console.log('my final assetsis :', assets.length)
     return res.json({
       success: true,
       results: assets,
@@ -543,42 +550,76 @@ if (folderId) {
  * Returns product.assets (snapshots) and optionally full Asset docs (populated)
  * Query param: populate=true to include full Asset documents (only allowed to product owner).
  */
+// controllers/productController.js
+
 export const getConnectedAssetsByProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-    if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: "Invalid productId" });
+    let { page = 1, limit = 20 } = req.query;
+
+    page = Number(page);
+    
+    limit = Number(limit);
 
     const product = await Product.findById(productId).lean();
-    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // permission: product owner can see full asset info; others get snapshot only
-    const isOwner = String(product.postedBy) === String(req.user.id);
-    const populateFull = req.query.populate === "true" && isOwner;
-
-    if (!product.assets || product.assets.length === 0) {
-      return res.json({ success: true, results: [] });
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
     }
 
-    if (populateFull) {
-      // fetch assets in bulk
-      const assetIds = product.assets.map(a => a.assetId).filter(id => mongoose.isValidObjectId(id));
-      const assets = await Asset.find({ _id: { $in: assetIds } }).select("-__v").lean();
+    // 🔥 split ids
+    const assetIds = [];
+    const folderIds = [];
 
-      // map by id for ordering
-      const assetsMap = new Map(assets.map(a => [a._id.toString(), a]));
-      const ordered = product.assets.map(a => ({
-        snapshot: a.snapshot,
-        asset: assetsMap.get(String(a.assetId)) || null
-      }));
-
-      return res.json({ success: true, results: ordered });
-    } else {
-      // just return snapshots
-      return res.json({ success: true, results: product.assets.map(a => a.snapshot) });
+    for (const item of product.assets || []) {
+      if (item.itemType === "Asset") {
+        assetIds.push(item.itemId);
+      } else if (item.itemType === "AssetFolder") {
+        folderIds.push(item.itemId);
+      }
     }
+
+    // 🔥 pagination logic (combined list)
+    const combined = [
+      ...assetIds.map(id => ({ id, type: "asset" })),
+      ...folderIds.map(id => ({ id, type: "folder" })),
+    ];
+
+    const total = combined.length;
+
+    const start = (page - 1) * limit;
+    const paginated = combined.slice(start, start + limit);
+
+    const paginatedAssetIds = paginated
+      .filter(i => i.type === "asset")
+      .map(i => i.id);
+
+    const paginatedFolderIds = paginated
+      .filter(i => i.type === "folder")
+      .map(i => i.id);
+
+    // 🔥 fetch actual data
+    const [assets, folders] = await Promise.all([
+      Asset.find({ _id: { $in: paginatedAssetIds } }).lean(),
+      AssetFolder.find({ _id: { $in: paginatedFolderIds } }).lean(),
+    ]);
+
+    return res.json({
+      results: {
+        assets,
+        folders,
+      },
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        limit,
+      },
+    });
+
   } catch (err) {
-    console.error("getConnectedAssetsByProduct err:", err);
-    res.status(500).json({ message: "Failed to get connected assets", error: err.message });
+    console.error("getConnectedAssetsByProduct:", err);
+    res.status(500).json({ message: "Failed to fetch connected assets" });
   }
 };
 
@@ -690,19 +731,18 @@ export const renameAsset = async (req, res) => {
 export const getFolders = async (req, res) => {
   try {
     const owner = req.user.id;
-
-    const { parentId } = req.query; 
-    // parentId can be:
-    // undefined → fetch all
-    // "root" → fetch root folders
-    // folderId → fetch children
+    const { parentId } = req.query;
+    const productId = req.query.productId || null;
 
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || "20")));
     const page = Math.max(1, parseInt(req.query.page || "1"));
     const skip = (page - 1) * limit;
 
+    console.log('fetching folders for', owner, parentId, productId);
+
     const query = { owner };
 
+    // Parent filter (apply first)
     if (parentId) {
       if (parentId === "root") {
         query.parentFolder = null;
@@ -711,15 +751,67 @@ export const getFolders = async (req, res) => {
       }
     }
 
+    // If productId provided, we need special behavior:
+    // - For root listing: only return folders explicitly referenced by product (product.assets).
+    // - For fetching children of a folder: return actual child folders (parentFolder = parentId)
+    //   *without* restricting to product.folderIds (since children will likely not be listed directly in product.assets).
+    let folderIds = [];
+    let folderIdsSet = new Set();
+
+    if (productId) {
+      if (!mongoose.isValidObjectId(productId)) {
+        return res.status(400).json({ message: "Invalid productId" });
+      }
+
+      const product = await Product.findById(productId).lean();
+
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      folderIds = product.assets
+        .filter(item => item.itemType === "AssetFolder")
+        .map(item => item.itemId?.toString())
+        .filter(Boolean);
+
+      console.log('folderIds from product:', folderIds);
+
+      folderIdsSet = new Set(folderIds);
+
+      // if requesting root list -> restrict to product's folder ids
+      if (!parentId || parentId === "root") {
+        if (folderIds.length === 0) {
+          return res.json({
+            folders: [],
+            pagination: { total: 0, page, pages: 0, limit },
+          });
+        }
+        query._id = { $in: folderIds.map(id => mongoose.Types.ObjectId(id)) };
+        // keep parentFolder null (already set above for root)
+      } else {
+        // parentId is a folder id -> do NOT restrict by product.folderIds.
+        // We'll return children where parentFolder = parentId (query already set).
+        // Optionally: we'll annotate response with isReferenced flag so the frontend knows which folders are directly in product.assets.
+      }
+    }
+
     const total = await AssetFolder.countDocuments(query);
 
+    // Use .lean() so we can annotate easily
     const folders = await AssetFolder.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
+
+    // Annotate whether each folder is directly referenced by the product (useful for UI)
+    const annotated = folders.map(f => ({
+      ...f,
+      isReferenced: productId ? folderIdsSet.has(String(f._id)) : false,
+    }));
 
     res.json({
-      folders,
+      folders: annotated,
       pagination: {
         total,
         page,
@@ -727,6 +819,7 @@ export const getFolders = async (req, res) => {
         limit,
       },
     });
+
   } catch (err) {
     console.error("getFolders err:", err);
     res.status(500).json({ message: "Failed to fetch folders" });

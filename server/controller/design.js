@@ -7,6 +7,7 @@ import { sanitizeProduct } from "../utils/sanitizeProduct.js";
 import Order from "../models/Order.js";
 import user from "../models/user.js";
 import Asset from '../models/asset.js'
+import AssetFolder from '../models/folderOfAsset.js'
 dotenv.config();
 import mongoose from "mongoose";
 import { extractKeywordsProduct, saveKeywords } from "../utils/extractKeywords.js";
@@ -612,6 +613,8 @@ function normalizeImageEntry(entry) {
  * image: JSON-stringified array of { key, url } OR array in JSON body (client should send as JSON)
  */
 export const postDesign = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
     const {
       name,
@@ -622,76 +625,179 @@ export const postDesign = async (req, res) => {
       sources,
       description,
       media,
+      assets
     } = req.body;
 
-    console.log(name, amount, sections, faq, hashtags, sources, description);
-
-const parsedSections =
-  typeof sections === "string"
-    ? JSON.parse(sections)
-    : sections || [];
-
-const parsedFaq =
-  typeof faq === "string"
-    ? JSON.parse(faq)
-    : faq || [];
-
-const parsedHashtags =
-  typeof hashtags === "string"
-    ? JSON.parse(hashtags)
-    : hashtags || [];
-
-const parsedSources =
-  typeof sources === "string"
-    ? JSON.parse(sources)
-    : sources || [];
-
-    // ✅ Handle media (array of { key, url, type, cover })
-    let uploadedMedia = [];
-    if (media) {
-      const parsed =
-        typeof media === "string" ? JSON.parse(media) : media;
-
-      uploadedMedia = Array.isArray(parsed)
-        ? parsed.filter(
-            (m) =>
-              m &&
-              m.url &&
-              m.type &&
-              (m.type === "image" || (m.type === "video" && m.cover))
-          )
-        : [];
+    if (!name || !amount) {
+      return res.status(400).json({ message: "Missing required fields." });
     }
 
-    const hasOrigin = parsedSections.some(
-      (s) =>
-        s &&
-        String(s.title).trim().toLowerCase() === "origin"
-    );
+    const parsedSections = typeof sections === "string" ? JSON.parse(sections) : sections || [];
+    const parsedFaq = typeof faq === "string" ? JSON.parse(faq) : faq || [];
+    const parsedHashtags = typeof hashtags === "string" ? JSON.parse(hashtags) : hashtags || [];
+    const parsedSources = typeof sources === "string" ? JSON.parse(sources) : sources || [];
+    const parsedMedia = typeof media === "string" ? JSON.parse(media) : media || [];
+    const parsedAssets = typeof assets === "string" ? JSON.parse(assets) : assets || [];
 
-    const product = new Product({
-      name,
-      amount,
-      media: uploadedMedia, // ✅ changed from image → media
-      description,
-      sections: parsedSections,
-      sources: parsedSources,
-      faq: parsedFaq,
-      isAsset: hasOrigin,
-      hashtags: parsedHashtags,
-      postedBy: req.user.id,
+    // ✅ Normalize assets (NO SNAPSHOT)
+    const cleanAssets = parsedAssets.map(a => ({
+      itemId: mongoose.Types.ObjectId(a.itemId),
+      itemType: a.itemType
+    }));
+
+    // ✅ Validate ownership
+    const assetIdsByType = {
+      Asset: cleanAssets.filter(a => a.itemType === "Asset").map(a => a.itemId),
+      AssetFolder: cleanAssets.filter(a => a.itemType === "AssetFolder").map(a => a.itemId)
+    };
+
+    if (assetIdsByType.Asset.length) {
+      const found = await Asset.find({ _id: { $in: assetIdsByType.Asset } }, "postedBy");
+      const invalid = found.filter(f => String(f.postedBy) !== String(req.user.id));
+      if (invalid.length) {
+        return res.status(403).json({ message: "Invalid asset ownership." });
+      }
+    }
+
+    if (assetIdsByType.AssetFolder.length) {
+      const found = await AssetFolder.find({ _id: { $in: assetIdsByType.AssetFolder } }, "owner");
+      const invalid = found.filter(f => String(f.owner) !== String(req.user.id));
+      if (invalid.length) {
+        return res.status(403).json({ message: "Invalid folder ownership." });
+      }
+    }
+
+    let created;
+
+    await session.withTransaction(async () => {
+      created = await Product.create([{
+        name,
+        amount,
+        media: parsedMedia,
+        description,
+        sections: parsedSections,
+        sources: parsedSources,
+        faq: parsedFaq,
+        hashtags: parsedHashtags,
+        postedBy: req.user.id,
+        assets: cleanAssets,
+        status: "published"
+      }], { session });
+
+      const productId = created[0]._id;
+
+      // ✅ Update assets
+      if (assetIdsByType.Asset.length) {
+        await Asset.updateMany(
+          { _id: { $in: assetIdsByType.Asset } },
+          { $addToSet: { usedInProducts: productId } },
+          { session }
+        );
+      }
+
+      if (assetIdsByType.AssetFolder.length) {
+        await AssetFolder.updateMany(
+          { _id: { $in: assetIdsByType.AssetFolder } },
+          { $addToSet: { usedInProducts: productId } },
+          { session }
+        );
+      }
     });
 
-    console.log("product posted successfully:", product);
+    session.endSession();
 
-    await product.save();
+    res.status(201).json({
+      success: true,
+      product: created[0]
+    });
 
-    res.status(201).json({ success: true, product });
-  } catch (error) {
-    console.error("postDesign error:", error);
-    res.status(500).json({ success: false, message: error.message });
+  } catch (err) {
+    session.endSession();
+    console.error("postDesign error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
+// export const postDesign = async (req, res) => {
+//   try {
+//     const {
+//       name,
+//       amount,
+//       sections,
+//       faq,
+//       hashtags,
+//       sources,
+//       description,
+//       media,
+//     } = req.body;
+
+//     console.log(name, amount, sections, faq, hashtags, sources, description);
+
+// const parsedSections =
+//   typeof sections === "string"
+//     ? JSON.parse(sections)
+//     : sections || [];
+
+// const parsedFaq =
+//   typeof faq === "string"
+//     ? JSON.parse(faq)
+//     : faq || [];
+
+// const parsedHashtags =
+//   typeof hashtags === "string"
+//     ? JSON.parse(hashtags)
+//     : hashtags || [];
+
+// const parsedSources =
+//   typeof sources === "string"
+//     ? JSON.parse(sources)
+//     : sources || [];
+
+//     // ✅ Handle media (array of { key, url, type, cover })
+//     let uploadedMedia = [];
+//     if (media) {
+//       const parsed =
+//         typeof media === "string" ? JSON.parse(media) : media;
+
+//       uploadedMedia = Array.isArray(parsed)
+//         ? parsed.filter(
+//             (m) =>
+//               m &&
+//               m.url &&
+//               m.type &&
+//               (m.type === "image" || (m.type === "video" && m.cover))
+//           )
+//         : [];
+//     }
+
+//     const hasOrigin = parsedSections.some(
+//       (s) =>
+//         s &&
+//         String(s.title).trim().toLowerCase() === "origin"
+//     );
+
+//     const product = new Product({
+//       name,
+//       amount,
+//       media: uploadedMedia, // ✅ changed from image → media
+//       description,
+//       sections: parsedSections,
+//       sources: parsedSources,
+//       faq: parsedFaq,
+//       isAsset: hasOrigin,
+//       hashtags: parsedHashtags,
+//       postedBy: req.user.id,
+//     });
+
+//     console.log("product posted successfully:", product);
+
+//     await product.save();
+
+//     res.status(201).json({ success: true, product });
+//   } catch (error) {
+//     console.error("postDesign error:", error);
+//     res.status(500).json({ success: false, message: error.message });
+//   }
+// };
 
 /**
  * PUT /edit/:id

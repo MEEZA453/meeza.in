@@ -36,7 +36,11 @@ router.post("/create", createAssetRecord); // body: key, name, originalFileName,
 router.put("/rename/:assetId", renameAsset);
 router.delete("/delete/:assetId", deleteAsset);
 router.get("/", getAssets);
-
+router.get(
+  "/:productId/connected-assets",
+  verifyToken,
+  getConnectedAssetsByProduct
+);
 // move multiple assets to folder (or root)
 router.post("/folder/add", addAssetsToFolders);
 router.post("/folder/remove", removeAssetsFromFolders);

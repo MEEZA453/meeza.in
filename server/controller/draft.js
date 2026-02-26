@@ -2,7 +2,8 @@
 import Post from "../models/post.js";
 import Product from "../models/designs.js";
 import mongoose from "mongoose";
-
+import Asset from "../models/asset.js";
+import AssetFolder from "../models/folderOfAsset.js";
 /**
  * POST /posts/draft
  * Create a new draft post
@@ -157,12 +158,20 @@ console.log("createProductDraft req.body:", req.body);
     const parsedHashtags = typeof hashtags === "string" ? JSON.parse(hashtags || "[]") : hashtags || [];
     const parsedSources = typeof sources === "string" ? JSON.parse(sources || "[]") : sources || [];
     const parsedMedia = typeof media === "string" ? JSON.parse(media || "[]") : media || [];
+      const parsedAssets = typeof req.body.assets === "string"
+  ? JSON.parse(req.body.assets || "[]")
+  : req.body.assets || [];
 
     const product = new Product({
       name,
       amount,
       sections: parsedSections,
       faq: parsedFaq,
+      assets: parsedAssets.map(a => ({
+    itemId: a.itemId,
+    itemType: a.itemType
+  })),
+  
       hashtags: parsedHashtags,
       sources: parsedSources,
       description,
@@ -216,15 +225,34 @@ export const listProductDrafts = async (req, res) => {
 
 export const getProductDraft = async (req, res) => {
   try {
-    const draft = await Product.findOne({ _id: req.params.id, postedBy: req.user.id, status: "draft" });
-    if (!draft) return res.status(404).json({ message: "Draft not found" });
-    return res.json(draft);
+    const draft = await Product.findOne({
+      _id: req.params.id,
+      postedBy: req.user.id,
+      status: "draft"
+    }).populate("assets.itemId");
+
+    if (!draft) {
+      return res.status(404).json({ message: "Draft not found" });
+    }
+
+    // 🔥 Transform here
+    const formattedDraft = {
+      ...draft.toObject(),
+      assets: draft.assets.map((a) => ({
+        itemType: a.itemType,
+        id: a.itemId?._id,
+        name: a.itemId?.name || "Untitled",
+        data: a.itemId // optional full object
+      }))
+    };
+
+    return res.json(formattedDraft);
+
   } catch (err) {
     console.error("getProductDraft error:", err);
     return res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
-
 export const deleteProductDraft = async (req, res) => {
   try {
     const deleted = await Product.findOneAndDelete({ _id: req.params.id, postedBy: req.user.id, status: "draft" });
@@ -238,18 +266,67 @@ export const deleteProductDraft = async (req, res) => {
 };
 
 export const publishProductDraft = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const draft = await Product.findOne({ _id: req.params.id, postedBy: req.user.id, status: "draft" });
-console.log("publishProductDraft req.body:", req.body);    
+    const { id } = req.params;
+    const draft = await Product.findOne({ _id: id, postedBy: req.user.id, status: "draft" }).session(session);
     if (!draft) return res.status(404).json({ message: "Draft not found" });
+
+    // Optional: merge req.body changes
     Object.assign(draft, req.body || {});
+
+    // Validate assets
+    const assetEntries = draft.assets || [];
+    const assetIdsByType = {
+      Asset: assetEntries.filter(a => a.itemType === "Asset").map(a => a.itemId),
+      AssetFolder: assetEntries.filter(a => a.itemType === "AssetFolder").map(a => a.itemId)
+    };
+
+    // fetch and verify
+    const [assetsFound, foldersFound] = await Promise.all([
+      Asset.find({ _id: { $in: assetIdsByType.Asset } }).session(session).select("_id postedBy public"),
+      AssetFolder.find({ _id: { $in: assetIdsByType.AssetFolder } }).session(session).select("_id postedBy public"),
+    ]);
+
+    // if some assets missing -> respond with error or remove them depending on policy
+    if (assetsFound.length !== assetIdsByType.Asset.length || foldersFound.length !== assetIdsByType.AssetFolder.length) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Some referenced assets/folders are missing" });
+    }
+
+    // Optionally check ownership/visibility:
+    // assetsFound.forEach(a => { if(String(a.postedBy) !== String(req.user.id) && !a.public) throw ... })
+
+    // Mark product published
     draft.status = "published";
     draft.draftMeta = undefined;
+    await draft.save({ session });
 
-    await draft.save();
-    console.log("publishProductDraft published successfully:", draft);
+    // Update assets: add product id to usedInProducts (avoid duplicates)
+    if (assetIdsByType.Asset.length) {
+      await Asset.updateMany(
+        { _id: { $in: assetIdsByType.Asset } },
+        { $addToSet: { usedInProducts: draft._id } },
+        { session }
+      );
+    }
+    if (assetIdsByType.AssetFolder.length) {
+      await AssetFolder.updateMany(
+        { _id: { $in: assetIdsByType.AssetFolder } },
+        { $addToSet: { usedInProducts: draft._id } },
+        { session }
+      );
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
     return res.json(draft);
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("publishProductDraft error:", err);
     return res.status(500).json({ message: err.message || "Internal server error" });
   }
