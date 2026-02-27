@@ -12,6 +12,7 @@ import nodemailer from "nodemailer";
 import { stripe } from "../lib/stripe.js";
 import  WalletTransaction  from "../models/wallet.js";
 import mongoose from "mongoose";
+import { deliverProductAssets } from "../utils/delivery.js";
 const USD_TO_INR = process.env.USD_TO_INR ? Number(process.env.USD_TO_INR) : 83;
 
 // Utility to compute normalized USD amount from whatever currency
@@ -146,47 +147,7 @@ console.log("Created Stripe PaymentIntent:", paymentIntent.id);
 
 // Verify payment (Stripe PaymentIntent or Razorpay signature)
 // controller/orderPayment.js (only the verifyProductPayment function replaced)
-async function deliverProductAssets(order, session) {
-  const buyerId = order.buyer._id;
-  const product = order.product;
 
-  if (!product.assets || product.assets.length === 0) {
-    return;
-  }
-
-  const deliveredAssets = [];
-
-  for (const snapshot of product.assets) {
-    const asset = await Asset.findById(snapshot.assetId).session(session);
-    if (!asset) continue;
-
-    const destinationKey = `users/${buyerId}/purchases/${product._id}/${Date.now()}-${asset.name}.${asset.extension}`;
-
-    await copyObject(asset.key, destinationKey);
-
-    // increase buyer storage usage
-    await User.findByIdAndUpdate(
-      buyerId,
-      { $inc: { storageUsed: asset.size } },
-      { session }
-    );
-
-    deliveredAssets.push({
-      assetId: asset._id,
-      name: asset.name,
-      size: asset.size,
-      extension: asset.extension,
-      key: destinationKey
-    });
-  }
-
-  await Purchase.create([{
-    buyer: buyerId,
-    product: product._id,
-    deliveredAssets,
-    totalAmount: order.amount
-  }], { session });
-}
 export const verifyProductPayment = async (req, res) => {
   console.log("verifyProductPayment:", req.body);
   const session = await mongoose.startSession();

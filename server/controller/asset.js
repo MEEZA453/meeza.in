@@ -786,7 +786,7 @@ export const getFolders = async (req, res) => {
             pagination: { total: 0, page, pages: 0, limit },
           });
         }
-        query._id = { $in: folderIds.map(id => mongoose.Types.ObjectId(id)) };
+        query._id = { $in: folderIds.map(id => new mongoose.Types.ObjectId(id)) };
         // keep parentFolder null (already set above for root)
       } else {
         // parentId is a folder id -> do NOT restrict by product.folderIds.
