@@ -29,7 +29,8 @@ const postSchema = new mongoose.Schema({
   hashtags: [String],
 media: [
   {
-        key: { type: String }, // S3 object key (posts/...
+    key: { type: String },
+
     url: { type: String, required: true },
 
     type: {
@@ -38,13 +39,27 @@ media: [
       required: true,
     },
 
-    // ✅ only used when type === "video"
     cover: {
       type: String,
       required: function () {
         return this.type === "video";
       },
     },
+
+    // 🔥 NEW TRANSFORM FIELD
+    transform: {
+      cropH: Number,
+      cropW: Number,
+      cropLeft: Number,
+      cropTop: Number,
+      naturalH: Number,
+      naturalW: Number,
+      ratio: Number,
+      scale: Number,
+      viewportSize: Number,
+      x: Number,
+      y: Number,
+    }
   },
 ],
   status: {
