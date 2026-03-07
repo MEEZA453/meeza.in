@@ -1708,10 +1708,10 @@ console.log('post viewed')
 
 export const votePost = async (req, res) => {
   const session = await mongoose.startSession();
+  console.log('voting the post ', req.params.id, ' by user ', req.user.id)
   try {
     const postId = req.params.id;
     const userId = req.user.id;
-console.log(req.user)
     // 1) parse fields & compute totalVote
     const fields = {};
     for (const k in req.body) {
@@ -1791,7 +1791,7 @@ if (!existingVote) {
     { session }
   );
 
-  await updateHotScore(postId);
+ 
 }
 
     // 6) Update recent votes array (update existing entry or unshift)
@@ -1869,7 +1869,7 @@ await updateHotScore(postId, session);
         userId
       );
     }
-    
+      console.log('post voted')
     return res.json({ post: updatedPost });
 
   } catch (err) {
