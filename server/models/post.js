@@ -6,7 +6,37 @@ const voteSchema = new mongoose.Schema({
   fields: { type: mongoose.Schema.Types.Mixed, default: {} }, 
   totalVote: Number,
 }, { _id: false });
-
+const mediaSchema = new mongoose.Schema({
+  id: { type: String, required: true }, // mediaId (UUID)
+  key: { type: String }, // S3 original key
+  url: { type: String }, // optional pre-processed URL (old flow)
+  type: { type: String, enum: ["image","video"], required: true },
+  cover: { type: String }, // video cover url (old)
+  transform: { // keep your existing transform object
+    cropH: Number, cropW: Number, cropLeft: Number, cropTop: Number,
+    naturalH: Number, naturalW: Number, ratio: Number, scale: Number,
+    viewportSize: Number, x: Number, y: Number
+  },
+  processingState: { // NEW
+    type: String,
+    enum: ["pending","processing","processed","failed"],
+    default: "pending",
+    index: true
+  },
+  versions: { // NEW
+    original: { key: String, url: String },
+    large: { key: String, url: String },
+    medium: { key: String, url: String },
+    small: { key: String, url: String },
+  },
+  videoMeta: { // for videos
+    duration: Number,
+    width: Number,
+    height: Number,
+    thumbnail: { key: String, url: String }
+  },
+  uploadedAt: { type: Date, default: Date.now }
+}, { _id: false });
 const achievementSchema = new mongoose.Schema({ 
   type: { type: String }, // e.g. "design_of_the_day"
   awardedAt: { type: Date, default: Date.now },
@@ -27,41 +57,7 @@ const postSchema = new mongoose.Schema({
   description: String,
   category: [{ type: String, required: true }],
   hashtags: [String],
-media: [
-  {
-    key: { type: String },
-
-    url: { type: String, required: true },
-
-    type: {
-      type: String,
-      enum: ["image", "video"],
-      required: true,
-    },
-
-    cover: {
-      type: String,
-      required: function () {
-        return this.type === "video";
-      },
-    },
-
-    // 🔥 NEW TRANSFORM FIELD
-    transform: {
-      cropH: Number,
-      cropW: Number,
-      cropLeft: Number,
-      cropTop: Number,
-      naturalH: Number,
-      naturalW: Number,
-      ratio: Number,
-      scale: Number,
-      viewportSize: Number,
-      x: Number,
-      y: Number,
-    }
-  },
-],
+media: [mediaSchema],
   status: {
     type: String,
     enum: ["draft", "published"],

@@ -14,6 +14,7 @@ import postView from "../models/postView.js";
 import { updateHotScore } from "../utils/updateHotScore.js";
 import { attachIsAppreciated } from "../utils/attactIsAppreciated.js";
 import { generatePresignedUpload, deleteObjectByKey, getS3KeyFromUrl } from "../config/s3Presigner.js";
+import { v4 as uuidv4 } from "uuid";
 // controllers/assetController.js
 const DRIP = {
   APPRECIATION: 20,
@@ -259,78 +260,125 @@ export const getAssetsOfPost = async (req, res) => {
   }
 };
 
-export const getPresigned = async (req, res) => {
-  try {
-    const { fileName, contentType, folder } = req.body;
-console.log('getting presigned with :', fileName, contentType, folder)
-    if (!fileName || !contentType) {
-      return res.status(400).json({ message: "fileName and contentType required" });
+  export const getPresigned = async (req, res) => {
+    try {
+      const { fileName, contentType, folder, postId, transform, type } = req.body;
+  console.log("getPresigned called ");
+      if (!fileName || !contentType)
+        return res.status(400).json({ message: "fileName and contentType required" });
+
+      if (!postId)
+        return res.status(400).json({ message: "postId required" });
+
+      const allowedFolders = ["posts", "products", "assets", "profile", "folderProfile"];
+      const uploadFolder = allowedFolders.includes(folder) ? folder : "posts";
+
+      const mediaId = uuidv4();
+      const ext = fileName.split(".").pop().toLowerCase();
+
+      const key = `${uploadFolder}/originals/${postId}/${mediaId}.${ext}`;
+
+      const post = await Post.findById(postId);
+      if (!post) return res.status(404).json({ message: "Post not found" });
+
+      const mediaItem = {
+        id: mediaId,
+        key,
+        type: type || (contentType.startsWith("video") ? "video" : "image"),
+        transform: transform || {},
+        processingState: "pending",
+        versions: {},
+        createdAt: new Date()
+      };
+      post.media.push(mediaItem);
+console.log('presigned url generated successfully');
+   
+      await post.save();
+
+ const { signedUrl } = await generatePresignedUpload({
+  key,
+  contentType,
+  expires: 600
+});
+
+      return res.json({
+       uploadUrl: signedUrl,
+        key,
+        mediaId,
+        expiresIn: 600
+      });
+    } catch (err) {
+      console.error("getPresigned error:", err);
+      return res.status(500).json({ message: "Failed to generate presigned URL" });
     }
+  };
 
-    // Only allow safe folders (important for security)
-    const allowedFolders = ["posts", "products", "assets", "profile", "folderProfile"];
-    const uploadFolder = allowedFolders.includes(folder)
-      ? folder
-      : "posts";
-console.log('uploadfolder:', uploadFolder)
-    const result = await generatePresignedUpload({
-      fileName,
-      contentType,
-      folder: uploadFolder,
-      expiresInSeconds: 60 * 10,
-    });
-console.log('result : ', result)
-    return res.json(result);
-  } catch (err) {
-    console.error("getPresigned error:", err);
-    return res.status(500).json({ message: "Failed to generate presigned URL" });
-  }
-};
+  export const createPost = async (req, res) => {
+    try {
+      const { description, category, voteFields, hashtags, media } = req.body;
 
-export const createPost = async (req, res) => {
-  try {
-    const { description, category, voteFields, hashtags, media } = req.body;
-
-    if (!voteFields || !category) {
-      return res.status(400).json({ message: "Required fields missing" });
-    }
-
-    // parse category reliably (accept array or string)
-    let categoryArray = [];
-    if (typeof category === "string") {
-      try {
-        const parsed = JSON.parse(category);
-        categoryArray = Array.isArray(parsed) ? parsed : [parsed];
-      } catch {
-        categoryArray = category.split("/").filter(Boolean);
+      if (!voteFields || !category) {
+        return res.status(400).json({ message: "Required fields missing" });
       }
-    } else if (Array.isArray(category)) categoryArray = category;
 
-    if (!categoryArray.length) return res.status(400).json({ message: "Category array required" });
+      // parse category reliably (accept array or string)
+      let categoryArray = [];
+      if (typeof category === "string") {
+        try {
+          const parsed = JSON.parse(category);
+          categoryArray = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          categoryArray = category.split("/").filter(Boolean);
+        }
+      } else if (Array.isArray(category)) categoryArray = category;
 
-    // media should be an array of { url, key, type }
-    const uploadedMedia = Array.isArray(media) ? media : (typeof media === "string" ? JSON.parse(media || "[]") : []);
+      if (!categoryArray.length)
+        return res.status(400).json({ message: "Category array required" });
 
-    const post = new Post({
-      description,
-      category: categoryArray,
-      hashtags: Array.isArray(hashtags) ? hashtags : (typeof hashtags === "string" ? JSON.parse(hashtags || "[]") : []),
-      voteFields: Array.isArray(voteFields) ? voteFields : (typeof voteFields === "string" ? JSON.parse(voteFields) : []),
-      media: uploadedMedia,
-      createdBy: req.user.id,
-      recentNormalVotes: [],
-      recentJuryVotes: [],
-      score: { averages: {}, totalScore: 0 }
-    });
-console.log(post, 'post created successfully')
-    // optional: extractKeywordsPost/post-save hooks etc
-    const saved = await post.save();
-    return res.status(201).json(saved);
-  } catch (err) {
-    console.error("createPost error:", err);
-    return res.status(500).json({ message: err.message || "Internal server error" });
-  }
-};
+      const uploadedMedia = Array.isArray(media)
+        ? media
+        : typeof media === "string"
+        ? JSON.parse(media || "[]")
+        : [];
+
+      const normalizedMedia = uploadedMedia.map((m) => ({
+        id: m.mediaId || m.id,
+        key: m.key,
+        type: m.type,
+        transform: m.transform || {},
+        processingState: "pending",
+        versions: {},
+      }));
+
+      const post = new Post({
+        description,
+        category: categoryArray,
+        hashtags: Array.isArray(hashtags)
+          ? hashtags
+          : typeof hashtags === "string"
+          ? JSON.parse(hashtags || "[]")
+          : [],
+        voteFields: Array.isArray(voteFields)
+          ? voteFields
+          : typeof voteFields === "string"
+          ? JSON.parse(voteFields)
+          : [],
+        media: normalizedMedia,
+        createdBy: req.user.id,
+        recentNormalVotes: [],
+        recentJuryVotes: [],
+        score: { averages: {}, totalScore: 0 },
+      });
+
+      console.log(post, "post created successfully");
+
+      const saved = await post.save();
+      return res.status(201).json(saved);
+    } catch (err) {
+      console.error("createPost error:", err);
+      return res.status(500).json({ message: err.message || "Internal server error" });
+    }
+  };
 
 export const editPost = async (req, res) => {
   try {

@@ -123,27 +123,53 @@ export const deletePostDraft = async (req, res) => {
  */
 export const publishPostDraft = async (req, res) => {
   console.log("publishPostDraft req.body:", req.body);
-  try {
-    const draft = await Post.findOne({ _id: req.params.id, createdBy: req.user.id, status: "draft" });
-    if (!draft) return res.status(404).json({ message: "Draft not found" });
 
-    // Update fields from req.body if provided
+  try {
+    const draft = await Post.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id,
+      status: "draft",
+    });
+
+    if (!draft) {
+      return res.status(404).json({ message: "Draft not found" });
+    }
+
     const updates = req.body || {};
+
+    // ensure media objects contain required id
+    if (Array.isArray(updates.media)) {
+      updates.media = updates.media.map((m, index) => ({
+        id: m.id || m.key || `media-${Date.now()}-${index}`,
+        url: m.url,
+        key: m.key,
+        type: m.type,
+        transform: m.transform || null,
+        cover: m.cover || null,
+      }));
+    }
+
     Object.assign(draft, updates);
 
     draft.status = "published";
+
     // clear draftMeta
     draft.draftMeta = undefined;
 
     await draft.save();
+
     console.log("publishPostDraft published successfully:", draft);
+
     return res.json(draft);
+
   } catch (err) {
     console.error("publishPostDraft error:", err);
-    return res.status(500).json({ message: err.message || "Internal server error" });
+
+    return res.status(500).json({
+      message: err.message || "Internal server error",
+    });
   }
 };
-
 
 /* --- Product draft controllers (mirror of post ones) --- */
 

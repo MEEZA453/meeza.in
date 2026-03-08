@@ -24,32 +24,39 @@ const s3Client = new S3Client({
  * @returns { signedUrl, key, publicUrl }
  */
 export const generatePresignedUpload = async ({
-  fileName,
+  key,
   contentType,
-  folder = "posts", // 👈 default
-  expiresInSeconds = 600
+  expires = 600
 }) => {
-  if (!fileName || !contentType) {
-    throw new Error("fileName and contentType required");
+  if (!key || !contentType) {
+    throw new Error("key and contentType required");
   }
 
-  const key = `${folder}/${Date.now()}-${uuidv4()}-${fileName.replace(/\s+/g, "-")}`;
+  try {
+    const command = new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType
+    });
 
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    ContentType: contentType,
-  });
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: expires
+    });
 
-  const signedUrl = await getSignedUrl(s3Client, command, {
-    expiresIn: expiresInSeconds,
-  });
+    const publicUrl = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 
-  const publicUrl = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
+    return {
+      signedUrl,
+      key,
+      publicUrl,
+      expiresIn: expires
+    };
 
-  return { signedUrl, key, publicUrl, expiresInSeconds };
+  } catch (error) {
+    console.error("generatePresignedUpload error:", error);
+    throw error;
+  }
 };
-
 /** Delete object by key */
 export const deleteObjectByKey = async (key) => {
   if (!key) return;
