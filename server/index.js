@@ -40,6 +40,7 @@ import couponRoute from './routes/coupon.js'
 import assetsRouter from "./routes/asset.js";
 import cookieParser from "cookie-parser";
 import productAssetsRouter from './routes/productAssets.js'
+import uploadRoute from './routes/upload.js'
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -73,6 +74,7 @@ server.setTimeout(10 * 60 * 1000); // 10 minutes
 app.use('/', designRoute);
 app.use('/post',postRoute)
 app.use("/user", userRoute);
+app.use('upload', uploadRoute)
 app.use('/fav', favRoute);
 app.use('/highlight', highlightRoute)
 app.use('/notification', notificationRoute)

@@ -14,7 +14,7 @@ const s3 = new S3Client({ region: REGION });
 let mongoClient = null;
 async function getMongo() {
   if (!mongoClient) {
-    mongoClient = new MongoClient(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+    mongoClient = new MongoClient(process.env.MONGO_URI);
     await mongoClient.connect();
   }
   return mongoClient.db(); // default db from connection string
@@ -77,11 +77,10 @@ function transformToCrop(transform, naturalW, naturalH) {
 exports.handler = async (event) => {
   // SQS event wrapper: iterate records
   for (const rec of event.Records) {
-    const msg = JSON.parse(rec.body);
-    // S3 event detail will be nested if you forward S3 event messages to SQS
-    const s3Info = msg.Records ? msg.Records[0].s3 : msg.s3;
+    const s3Info = rec.s3;
     const bucket = s3Info.bucket.name;
     const key = decodeURIComponent(s3Info.object.key.replace(/\+/g, " "));
+    console.log("Processing:", key);
     if (bucket !== BUCKET) {
       console.warn("Message for different bucket:", bucket);
       continue;
