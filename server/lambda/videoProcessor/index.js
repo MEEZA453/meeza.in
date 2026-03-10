@@ -179,7 +179,10 @@ exports.handler = async (event) => {
       const posts = db.collection("posts");
 
       // lookup post/media by key
-      const post = await posts.findOne({ "media.key": key }, { projection: { "media.$": 1, _id: 1 } });
+      const post = await posts.findOne(
+        { "media.key": key },
+        { projection: { media: { $elemMatch: { key } }, _id: 1 } }
+      );
       if (!post || !post.media || post.media.length === 0) {
         console.warn("No post/media found for key:", key);
         continue;
@@ -196,11 +199,24 @@ exports.handler = async (event) => {
 
       // mark processing
       const mark = await posts.updateOne(
-        { _id: post._id, "media.id": media.id, "media.processingState": { $ne: "processing" } },
-        { $set: { "media.$.processingState": "processing", "media.$.processingStartedAt": new Date() } }
+        {
+          _id: post._id,
+          media: {
+            $elemMatch: {
+              key: key,
+              processingState: { $ne: "processing" }
+            }
+          }
+        },
+        {
+          $set: {
+            "media.$.processingState": "processing",
+            "media.$.processingStartedAt": new Date()
+          }
+        }
       );
       if (mark.matchedCount === 0) {
-        console.info("Another worker is processing this media:", media.id);
+        console.info("Another worker is processing this media:", media.key);
         continue;
       }
 
@@ -298,7 +314,7 @@ tmpFiles.push(originalTmp);
       };
 
       await posts.updateOne(
-        { _id: post._id, "media.id": media.id },
+        { _id: post._id, "media.key": media.key },
         {
           $set: {
             "media.$.versions": versionObj,

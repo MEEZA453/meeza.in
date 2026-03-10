@@ -262,8 +262,24 @@ export const getAssetsOfPost = async (req, res) => {
 
   export const getPresigned = async (req, res) => {
     try {
-      const { fileName, contentType, folder, postId, transform, type } = req.body;
-  console.log("getPresigned called ");
+      let { fileName, contentType, folder, postId, transform, type } = req.body;
+      if (!contentType) {
+  const ext = fileName.split(".").pop().toLowerCase();
+
+  const mimeMap = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    heic: "image/heic",
+    heif: "image/heif",
+    mp4: "video/mp4",
+    mov: "video/quicktime"
+  };
+
+  contentType = mimeMap[ext] || "application/octet-stream";
+}
+  console.log("getPresigned called ", fileName, contentType, folder, postId);
       if (!fileName || !contentType)
         return res.status(400).json({ message: "fileName and contentType required" });
 
