@@ -18,9 +18,9 @@ router.post("/processing-update", async (req, res) => {
     const token = req.headers["x-processing-webhook-secret"];
     if (!token || token !== SECRET) return res.status(401).json({ error: "Unauthorized" });
     
-    const { postId, mediaId, state, progress = null, extra = null } = req.body;
+    const { postId, mediaId, state, progress = null, extra = null } = req.body
+    console.log('date from processing update ',postId, state, progress)
     if (!postId || !mediaId || !state) return res.status(400).json({ error: "postId, mediaId and state required" });
-console.log(postId, state, progress)
     // find post to get owner
     const post = await Post.findById(postId).select("createdBy media");
     if (!post) return res.status(404).json({ error: "Post not found" });
