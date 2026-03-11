@@ -6,7 +6,7 @@ export function initSocket(server) {
   io = new Server(server, {
     cors: { origin: process.env.CLIENT_URL }
   });
-
+console.log( 'client url', process.env.CLIENT_URL )
   io.on("connection", (socket) => {
     console.log("🔌 socket connected:", socket.id);
 
