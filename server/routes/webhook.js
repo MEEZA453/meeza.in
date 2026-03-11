@@ -16,7 +16,7 @@ router.post("/processing-update", async (req, res) => {
   try {
     const token = req.headers["x-processing-webhook-secret"];
     if (!token || token !== SECRET) return res.status(401).json({ error: "Unauthorized" });
-
+    
     const { postId, mediaId, state, progress = null, extra = null } = req.body;
     if (!postId || !mediaId || !state) return res.status(400).json({ error: "postId, mediaId and state required" });
 console.log(postId, state, progress)

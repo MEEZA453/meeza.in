@@ -41,6 +41,7 @@ import assetsRouter from "./routes/asset.js";
 import cookieParser from "cookie-parser";
 import productAssetsRouter from './routes/productAssets.js'
 import uploadRoute from './routes/upload.js'
+import { initSocket } from './config/soket.js';
 // Define the server port
 const PORT = env.PORT || 8080;
 const app = express();
@@ -50,12 +51,7 @@ const server = http.createServer(app);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const io = new IOServer(server, {
-  cors: {
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000",
-    methods: ["GET","POST"]
-  }
-});
+const io = initSocket(server);
 io.on("connection", (socket) => {
   console.log("🔌 socket connected:", socket.id);
 
