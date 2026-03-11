@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import Subscription from "../models/subscription.js";
 import User from "../models/user.js";
 import Post from "../models/post.js";
-import { io } from '../config/soket.js';
+import { getIO } from '../config/soket.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -14,6 +14,7 @@ const SECRET = process.env.PROCESSING_WEBHOOK_SECRET;
 router.post("/processing-update", async (req, res) => {
   console.log('calling the prossing update')
   try {
+    const io = getIO();
     const token = req.headers["x-processing-webhook-secret"];
     if (!token || token !== SECRET) return res.status(401).json({ error: "Unauthorized" });
     

@@ -38,7 +38,7 @@
     "nodemon": "^3.1.10",
     "razorpay": "^2.9.6",
     "sharp": "^0.34.5",
-    "socket.io": "^4.8.1",
+    "socket.io": "^4.8.3",
     "stripe": "^17.7.0",
     "uuid": "^13.0.0"
   }
