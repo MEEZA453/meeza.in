@@ -16,6 +16,7 @@ router.post("/processing-update", async (req, res) => {
   try {
     const io = getIO();
     const token = req.headers["x-processing-webhook-secret"];
+    console.log('my fucing token it ', token, 'secret ', SECRET)
     if (!token || token !== SECRET) return res.status(401).json({ error: "Unauthorized" });
     
     const { postId, mediaId, state, progress = null, extra = null } = req.body
@@ -28,7 +29,7 @@ router.post("/processing-update", async (req, res) => {
     // choose which room to send to. We send to user room:
     const userRoom = `user:${post.createdBy.toString()}`;
     const payload = { postId, mediaId, state, progress, extra };
-
+    console.log('payload', payload)
     // Emit "post:processing" event to the post owner
     io.to(userRoom).emit("post:processing", payload);
 
