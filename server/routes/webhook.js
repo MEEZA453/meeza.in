@@ -3,9 +3,43 @@ import crypto from "crypto";
 import Stripe from "stripe";
 import Subscription from "../models/subscription.js";
 import User from "../models/user.js";
+import Post from "../models/post.js";
+import { io } from '../config/soket.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const SECRET = process.env.PROCESSING_WEBHOOK_SECRET;
+
+router.post("/processing-update", async (req, res) => {
+  console.log('calling the prossing update')
+  try {
+    const token = req.headers["x-processing-webhook-secret"];
+    if (!token || token !== SECRET) return res.status(401).json({ error: "Unauthorized" });
+
+    const { postId, mediaId, state, progress = null, extra = null } = req.body;
+    if (!postId || !mediaId || !state) return res.status(400).json({ error: "postId, mediaId and state required" });
+console.log(postId, state, progress)
+    // find post to get owner
+    const post = await Post.findById(postId).select("createdBy media");
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    // choose which room to send to. We send to user room:
+    const userRoom = `user:${post.createdBy.toString()}`;
+    const payload = { postId, mediaId, state, progress, extra };
+
+    // Emit "post:processing" event to the post owner
+    io.to(userRoom).emit("post:processing", payload);
+
+    // Optionally also emit a post-level aggregate event
+    io.to(userRoom).emit("post:processing:update", payload);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("webhook error:", err);
+    res.status(500).json({ error: "internal" });
+  }
+});
 
 /* ===========================
    🔴 RAZORPAY WEBHOOK

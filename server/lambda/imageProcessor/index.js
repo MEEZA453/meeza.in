@@ -10,7 +10,27 @@ const REGION = process.env.AWS_REGION;
 const BUCKET = process.env.S3_BUCKET;
 const CLOUDFRONT = process.env.CLOUDFRONT_DOMAIN; // e.g. d111111abcdef8.cloudfront.net
 const s3 = new S3Client({ region: REGION });
+const https = require("https");
+const BACKEND_WEBHOOK = process.env.BACKEND_PROCESSING_WEBHOOK || 'http://localhost:8080/webhooks/processing-update'; // e.g. https://api.example.com/api/webhooks/processing-update
+const WEBHOOK_SECRET = process.env.PROCESSING_WEBHOOK_SECRET;
+let postId = null;
+let mediaId = null;
+async function notifyBackend(body) {
+  try {
+    const res = await fetch(BACKEND_WEBHOOK, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-processing-webhook-secret": WEBHOOK_SECRET
+      },
+      body: JSON.stringify(body)
+    });
 
+    return await res.json().catch(() => ({}));
+  } catch (err) {
+    console.warn("notify error", err);
+  }
+}
 let mongoClient = null;
 async function getMongo() {
   if (!mongoClient) {
@@ -170,15 +190,21 @@ exports.handler = async (event) => {
         {
           $set: {
             "media.$.processingState": "processing",
+            
             "media.$.processingStartedAt": new Date()
           }
         }
       );
+
       if (mark.matchedCount === 0) {
         console.info("Another worker is processing:", key);
         continue;
       }
-
+      await notifyBackend({
+  postId: post._id.toString(),
+  mediaId: media.id,
+  state: "processing"
+});
       // Download original
       const buffer = await downloadToBuffer(key);
 
@@ -254,9 +280,17 @@ exports.handler = async (event) => {
       );
 
       console.info("Processed image:", key);
+      await notifyBackend({
+  postId: post._id.toString(),
+  mediaId: media.id,
+  state: "processed"
+});
     } catch (err) {
       console.error("Processing failed for key:", key, err);
-
+await notifyBackend({
+  postId: post._id.toString(),
+  state: "failed"
+});
       // Try to mark failed in DB
       try {
         const db = await getMongo();

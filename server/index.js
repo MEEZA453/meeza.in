@@ -56,7 +56,27 @@ const io = new IOServer(server, {
     methods: ["GET","POST"]
   }
 });
+io.on("connection", (socket) => {
+  console.log("🔌 socket connected:", socket.id);
 
+  socket.on("joinUserRoom", ({ userId }) => {
+    if (!userId) return;
+    const room = `user:${userId}`;
+    socket.join(room);
+    console.log("👤 joined user room:", room);
+  });
+
+  socket.on("joinPostRoom", ({ postId }) => {
+    if (!postId) return;
+    const room = `post:${postId}`;
+    socket.join(room);
+    console.log("📦 joined post room:", room);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("❌ socket disconnected:", socket.id);
+  });
+});
 // attach to app so controllers can access it via req.app.get('io')
 app.set('io', io);
 app.use(
@@ -74,7 +94,7 @@ server.setTimeout(10 * 60 * 1000); // 10 minutes
 app.use('/', designRoute);
 app.use('/post',postRoute)
 app.use("/user", userRoute);
-app.use('upload', uploadRoute)
+app.use('/upload', uploadRoute)
 app.use('/fav', favRoute);
 app.use('/highlight', highlightRoute)
 app.use('/notification', notificationRoute)

@@ -259,75 +259,156 @@ export const getAssetsOfPost = async (req, res) => {
       .json({ success: false, message: "Server error", error: error.message });
   }
 };
+export const getPresigned = async (req, res) => {
+  try {
 
-  export const getPresigned = async (req, res) => {
-    try {
-      let { fileName, contentType, folder, postId, transform, type } = req.body;
+    const { files, postId, folder } = req.body;
+console.log("getPresigned called ", { files, postId, folder });
+    if (!files || !Array.isArray(files))
+      return res.status(400).json({ message: "files array required" });
+
+    if (!postId)
+      return res.status(400).json({ message: "postId required" });
+
+    const allowedFolders = ["posts","products","assets","profile","folderProfile"];
+    const uploadFolder = allowedFolders.includes(folder) ? folder : "posts";
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    const results = [];
+
+    for (const file of files) {
+
+      let { fileName, contentType, transform, id } = file;
+
       if (!contentType) {
-  const ext = fileName.split(".").pop().toLowerCase();
+        const ext = fileName.split(".").pop().toLowerCase();
 
-  const mimeMap = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    webp: "image/webp",
-    heic: "image/heic",
-    heif: "image/heif",
-    mp4: "video/mp4",
-    mov: "video/quicktime"
-  };
+        const mimeMap = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          webp: "image/webp",
+          heic: "image/heic",
+          heif: "image/heif",
+          mp4: "video/mp4",
+          mov: "video/quicktime"
+        };
 
-  contentType = mimeMap[ext] || "application/octet-stream";
-}
-  console.log("getPresigned called ", fileName, contentType, folder, postId);
-      if (!fileName || !contentType)
-        return res.status(400).json({ message: "fileName and contentType required" });
-
-      if (!postId)
-        return res.status(400).json({ message: "postId required" });
-
-      const allowedFolders = ["posts", "products", "assets", "profile", "folderProfile"];
-      const uploadFolder = allowedFolders.includes(folder) ? folder : "posts";
+        contentType = mimeMap[ext] || "application/octet-stream";
+      }
 
       const mediaId = uuidv4();
       const ext = fileName.split(".").pop().toLowerCase();
 
       const key = `${uploadFolder}/originals/${postId}/${mediaId}.${ext}`;
 
-      const post = await Post.findById(postId);
-      if (!post) return res.status(404).json({ message: "Post not found" });
-
       const mediaItem = {
         id: mediaId,
         key,
-        type: type || (contentType.startsWith("video") ? "video" : "image"),
+        type: contentType.startsWith("video") ? "video" : "image",
         transform: transform || {},
         processingState: "pending",
         versions: {},
         createdAt: new Date()
       };
+
       post.media.push(mediaItem);
-console.log('presigned url generated successfully');
-   
-      await post.save();
 
- const { signedUrl } = await generatePresignedUpload({
-  key,
-  contentType,
-  expires: 600
-});
+      const { signedUrl } = await generatePresignedUpload({
+        key,
+        contentType,
+        expires: 600
+      });
 
-      return res.json({
-       uploadUrl: signedUrl,
+      results.push({
+        id,
+        uploadUrl: signedUrl,
         key,
         mediaId,
         expiresIn: 600
       });
-    } catch (err) {
-      console.error("getPresigned error:", err);
-      return res.status(500).json({ message: "Failed to generate presigned URL" });
     }
-  };
+console.log('presigned urls generated successfully');
+    await post.save();
+
+    return res.json(results);
+
+  } catch (err) {
+    console.error("getPresigned error:", err);
+    return res.status(500).json({ message: "Failed to generate presigned URL" });
+  }
+};
+
+//   export const getPresigned = async (req, res) => {
+//     try {
+//       let { fileName, contentType, folder, postId, transform, type } = req.body;
+//       if (!contentType) {
+//   const ext = fileName.split(".").pop().toLowerCase();
+
+//   const mimeMap = {
+//     jpg: "image/jpeg",
+//     jpeg: "image/jpeg",
+//     png: "image/png",
+//     webp: "image/webp",
+//     heic: "image/heic",
+//     heif: "image/heif",
+//     mp4: "video/mp4",
+//     mov: "video/quicktime"
+//   };
+
+//   contentType = mimeMap[ext] || "application/octet-stream";
+// }
+//   console.log("getPresigned called ", fileName, contentType, folder, postId);
+//       if (!fileName || !contentType)
+//         return res.status(400).json({ message: "fileName and contentType required" });
+
+//       if (!postId)
+//         return res.status(400).json({ message: "postId required" });
+
+//       const allowedFolders = ["posts", "products", "assets", "profile", "folderProfile"];
+//       const uploadFolder = allowedFolders.includes(folder) ? folder : "posts";
+
+//       const mediaId = uuidv4();
+//       const ext = fileName.split(".").pop().toLowerCase();
+
+//       const key = `${uploadFolder}/originals/${postId}/${mediaId}.${ext}`;
+
+//       const post = await Post.findById(postId);
+//       if (!post) return res.status(404).json({ message: "Post not found" });
+
+//       const mediaItem = {
+//         id: mediaId,
+//         key,
+//         type: type || (contentType.startsWith("video") ? "video" : "image"),
+//         transform: transform || {},
+//         processingState: "pending",
+//         versions: {},
+//         createdAt: new Date()
+//       };
+//       post.media.push(mediaItem);
+// console.log('presigned url generated successfully');
+   
+//       await post.save();
+
+//  const { signedUrl } = await generatePresignedUpload({
+//   key,
+//   contentType,
+//   expires: 600
+// });
+
+//       return res.json({
+//        uploadUrl: signedUrl,
+//         key,
+//         mediaId,
+//         expiresIn: 600
+//       });
+//     } catch (err) {
+//       console.error("getPresigned error:", err);
+//       return res.status(500).json({ message: "Failed to generate presigned URL" });
+//     }
+//   };
 
   export const createPost = async (req, res) => {
     try {

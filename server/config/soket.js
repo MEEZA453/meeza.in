@@ -1,16 +1,30 @@
-// utils/socket.ts
-import { io, Socket } from "socket.io-client";
+// config/socket.ts
+import { Server } from "socket.io";
 
-let socket = null;
 
-export const getSocket = () => {
-  if (!socket && typeof window !== "undefined") {
-    socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:8080", {
-      // optional: pass auth token for server-side verification
-      // auth: { token: localStorage.getItem('token') }
-      transports: ["websocket"],
-      autoConnect: true,
+
+let io;
+export function initSocket(server) {
+  io = new Server(server, { cors: { origin: process.env.CLIENT_URL } });
+  io.on("connection", (socket) => {
+    console.log("socket connected", socket.id);
+
+    socket.on("joinUserRoom", ({ userId }) => {
+      if (!userId) return;
+      const room = `user:${userId}`;
+      socket.join(room);
     });
-  }
-  return socket;
-};
+
+    socket.on("joinPostRoom", ({ postId }) => {
+      if (!postId) return;
+      socket.join(`post:${postId}`);
+      console.log('secket oined ', postId)
+    });
+
+    socket.on("disconnect", () => {});
+  });
+
+  return io;
+}
+
+export { io };
